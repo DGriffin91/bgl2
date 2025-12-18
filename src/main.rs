@@ -1,5 +1,3 @@
-use std::num::NonZeroU32;
-
 use bevy::{
     ecs::system::SystemState,
     prelude::*,
@@ -16,8 +14,6 @@ type GlProgram = glow::NativeProgram;
 type GlProgram = glow::WebProgramKey;
 #[cfg(target_arch = "wasm32")]
 use winit::platform::web::WindowExtWebSys;
-
-use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
 
 fn main() {
     App::new()
@@ -37,13 +33,11 @@ fn main() {
 fn init(world: &mut World, params: &mut SystemState<Query<(Entity, &mut Window)>>) {
     WINIT_WINDOWS.with_borrow(|winit_windows| {
         let mut windows = params.get_mut(world);
-        let (bevy_window_entity, _bevy_window) = windows.single_mut().unwrap();
+        #[allow(unused_variables)]
+        let (bevy_window_entity, bevy_window) = windows.single_mut().unwrap();
         let Some(winit_window) = winit_windows.get_window(bevy_window_entity) else {
             panic!("No Window Found")
         };
-
-        let raw_display = winit_window.display_handle().unwrap();
-        let raw_window = winit_window.window_handle().unwrap();
 
         #[cfg(not(target_arch = "wasm32"))]
         {
@@ -55,6 +49,11 @@ fn init(world: &mut World, params: &mut SystemState<Query<(Entity, &mut Window)>
                 surface::{GlSurface, SwapInterval},
             };
             use glutin_winit::GlWindow;
+            use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
+            use std::num::NonZeroU32;
+
+            let raw_window = winit_window.window_handle().unwrap();
+            let raw_display = winit_window.display_handle().unwrap();
 
             #[cfg(target_os = "windows")]
             let preference = DisplayApiPreference::Wgl(Some(raw_window.as_raw()));
@@ -85,8 +84,8 @@ fn init(world: &mut World, params: &mut SystemState<Query<(Entity, &mut Window)>
 
             let context_attributes = ContextAttributesBuilder::new()
                 .with_context_api(ContextApi::OpenGl(Some(glutin::context::Version {
-                    major: 3,
-                    minor: 3,
+                    major: 2,
+                    minor: 1,
                 })))
                 .build(Some(raw_window.as_raw()));
 
@@ -126,16 +125,20 @@ fn init(world: &mut World, params: &mut SystemState<Query<(Entity, &mut Window)>
             use wasm_bindgen::JsCast;
             let canvas = winit_window.canvas().unwrap();
 
-            canvas.set_width(bevy_window.physical_size().x as u32);
-            canvas.set_height(bevy_window.physical_size().y as u32);
+            let width = bevy_window.physical_size().x as u32;
+            let height = bevy_window.physical_size().y as u32;
 
-            let webgl2_context = canvas
-                .get_context("webgl2")
+            canvas.set_width(width);
+            canvas.set_height(height);
+
+            let webgl_context = canvas
+                .get_context("webgl")
                 .unwrap()
                 .unwrap()
-                .dyn_into::<web_sys::WebGl2RenderingContext>()
+                .dyn_into::<web_sys::WebGlRenderingContext>()
                 .unwrap();
-            let gl = glow::Context::from_webgl2_context(webgl2_context);
+            let gl = glow::Context::from_webgl1_context(webgl_context);
+            unsafe { gl.viewport(0, 0, width as i32, height as i32) };
             world.insert_non_send_resource(GlContext { gl });
         }
     });
@@ -162,9 +165,8 @@ fn triangle(world: &mut World) {
     let program = unsafe { gl.create_program().expect("Cannot create program") };
 
     let vertex_shader_source = r#"
-layout(location = 0) in vec2 a_position;
-
-out vec2 vert;
+attribute vec2 a_position;
+varying vec2 vert;
 
 void main() {
     vert = a_position;
@@ -173,12 +175,11 @@ void main() {
         "#;
 
     let fragment_shader_source = r#"
-precision highp float;
-in vec2 vert;
-out vec4 outColor;
+
+varying vec2 vert;
 
 void main() {
-    outColor = vec4(vert, 0.0, 1.0);
+    gl_FragColor = vec4(vert, 0.0, 1.0);
 }
     "#;
 
@@ -196,11 +197,11 @@ void main() {
         };
 
         #[cfg(target_arch = "wasm32")]
-        let version = "#version 300 es";
+        let preamble = "precision highp float;";
         #[cfg(not(target_arch = "wasm32"))]
-        let version = "#version 330";
+        let preamble = "#version 120";
 
-        unsafe { gl.shader_source(shader, &format!("{}\n{}", version, shader_source)) };
+        unsafe { gl.shader_source(shader, &format!("{}\n{}", preamble, shader_source)) };
         unsafe { gl.compile_shader(shader) };
         unsafe {
             if !gl.get_shader_compile_status(shader) {
