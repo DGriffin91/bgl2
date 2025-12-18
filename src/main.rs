@@ -50,7 +50,7 @@ varying vec2 vert;
 
 void main() {
 vert = a_position;
-gl_Position = vec4(a_position - vec2(0.5, 0.5), 0.0, 1.0);
+    gl_Position = vec4(a_position - vec2(0.5, 0.5), 0.0, 1.0);
 }
     "#;
 
@@ -58,20 +58,21 @@ gl_Position = vec4(a_position - vec2(0.5, 0.5), 0.0, 1.0);
 varying vec2 vert;
 
 void main() {
-gl_FragColor = vec4(vert, 0.0, 1.0);
+    gl_FragColor = vec4(vert, 0.0, 1.0);
 }
 "#;
 
     let program = ctx.shader(vertex, fragment);
 
-    world.insert_non_send_resource(TriangleProgram { program });
+    world.insert_resource(TriangleProgram { program });
 }
 
+#[derive(Resource)]
 struct TriangleProgram {
     program: GlProgram,
 }
 
-fn update(pgm: NonSend<TriangleProgram>, ctx: NonSend<BevyGlContext>) {
+fn update(pgm: Res<TriangleProgram>, ctx: NonSend<BevyGlContext>) {
     unsafe {
         ctx.gl.use_program(Some(pgm.program));
         ctx.gl.clear_color(0.0, 0.0, 0.0, 1.0);
