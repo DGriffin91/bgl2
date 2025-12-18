@@ -1,4 +1,4 @@
-use bevy::prelude::*;
+use bevy::{platform::collections::HashMap, prelude::*};
 
 use glow::HasContext;
 
@@ -16,6 +16,8 @@ pub struct BevyGlContext {
     pub gl_context: glutin::context::PossiblyCurrentContext,
     #[cfg(not(target_arch = "wasm32"))]
     pub gl_surface: glutin::surface::Surface<glutin::surface::WindowSurface>,
+    pub shader_cache: Vec<GlProgram>,
+    pub shader_cache_map: HashMap<(String, String), usize>,
 }
 
 impl BevyGlContext {
@@ -101,6 +103,8 @@ impl BevyGlContext {
                 gl,
                 gl_context,
                 gl_surface,
+                shader_cache: Default::default(),
+                shader_cache_map: Default::default(),
             }
         }
         #[cfg(target_arch = "wasm32")]
@@ -122,7 +126,35 @@ impl BevyGlContext {
                 .unwrap();
             let gl = glow::Context::from_webgl1_context(webgl_context);
             unsafe { gl.viewport(0, 0, width as i32, height as i32) };
-            BevyGlContext { gl }
+            BevyGlContext {
+                gl,
+                shader_cache: Default::default(),
+                shader_cache_map: Default::default(),
+            }
+        }
+    }
+
+    pub fn shader_cached(&mut self, vertex: &str, fragment: &str) -> usize {
+        // TODO: don't allocate strings
+        let key = (vertex.to_string(), fragment.to_string());
+        if let Some(index) = self.shader_cache_map.get(&key) {
+            *index
+        } else {
+            let shader = self.shader(vertex, fragment);
+            let index = self.shader_cache.len();
+            self.shader_cache.push(shader);
+            index
+        }
+    }
+
+    pub fn use_cached_program(&self, index: usize) {
+        unsafe { self.gl.use_program(Some(self.shader_cache[index])) };
+    }
+
+    pub fn get_attrib_location(&self, shader_index: usize, name: &str) -> Option<u32> {
+        unsafe {
+            self.gl
+                .get_attrib_location(self.shader_cache[shader_index], name)
         }
     }
 

@@ -4,7 +4,7 @@ use bevy::{
     render::{RenderPlugin, settings::WgpuSettings},
     winit::WINIT_WINDOWS,
 };
-use bevy_opengl::{BevyGlContext, GlProgram};
+use bevy_opengl::BevyGlContext;
 use bytemuck::cast_slice;
 use glow::HasContext;
 
@@ -42,7 +42,7 @@ fn init(world: &mut World, params: &mut SystemState<Query<(Entity, &mut Window)>
 }
 
 fn triangle(world: &mut World) {
-    let ctx = world.non_send_resource_mut::<BevyGlContext>();
+    let mut ctx = world.non_send_resource_mut::<BevyGlContext>();
 
     let vertex = r#"
 attribute vec2 a_position;
@@ -62,19 +62,19 @@ void main() {
 }
 "#;
 
-    let program = ctx.shader(vertex, fragment);
+    let program = ctx.shader_cached(vertex, fragment);
 
     world.insert_resource(TriangleProgram { program });
 }
 
 #[derive(Resource)]
 struct TriangleProgram {
-    program: GlProgram,
+    program: usize,
 }
 
 fn update(pgm: Res<TriangleProgram>, ctx: NonSend<BevyGlContext>) {
     unsafe {
-        ctx.gl.use_program(Some(pgm.program));
+        ctx.use_cached_program(pgm.program);
         ctx.gl.clear_color(0.0, 0.0, 0.0, 1.0);
 
         let vbo = ctx.gl.create_buffer().unwrap();
@@ -88,10 +88,7 @@ fn update(pgm: Res<TriangleProgram>, ctx: NonSend<BevyGlContext>) {
         );
 
         let vao = ctx.gl.create_vertex_array().unwrap();
-        let pos_loc = ctx
-            .gl
-            .get_attrib_location(pgm.program, "a_position")
-            .unwrap();
+        let pos_loc = ctx.get_attrib_location(pgm.program, "a_position").unwrap();
         ctx.gl.bind_vertex_array(Some(vao));
         ctx.gl.enable_vertex_attrib_array(pos_loc);
         ctx.gl
