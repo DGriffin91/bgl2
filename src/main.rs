@@ -45,12 +45,6 @@ fn triangle(world: &mut World) {
     let mut ctx = world.non_send_resource_mut::<BevyGlContext>();
     let gl = &mut ctx.gl;
 
-    let vertex_array = unsafe {
-        gl.create_vertex_array()
-            .expect("Cannot create vertex array")
-    };
-    unsafe { gl.bind_vertex_array(Some(vertex_array)) };
-
     let program = unsafe { gl.create_program().expect("Cannot create program") };
 
     let vertex_shader_source = r#"
