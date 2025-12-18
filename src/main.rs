@@ -44,7 +44,12 @@ fn init(world: &mut World, params: &mut SystemState<Query<(Entity, &mut Window)>
         let raw_display = winit_window.display_handle().unwrap();
         let raw_window = winit_window.window_handle().unwrap();
 
+        #[cfg(target_os = "windows")]
+        let preference = DisplayApiPreference::Wgl(Some(raw_window.as_raw()));
+
+        #[cfg(not(target_os = "windows"))]
         let preference = DisplayApiPreference::Egl;
+
         let gl_display =
             unsafe { Display::new(raw_display.as_raw(), preference).expect("Display::new failed") };
 
