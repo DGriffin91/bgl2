@@ -973,6 +973,9 @@ dependencies = [
  "glutin",
  "glutin-winit",
  "raw-window-handle",
+ "wasm-bindgen",
+ "web-sys",
+ "winit",
 ]
 
 [[package]]
