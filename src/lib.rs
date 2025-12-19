@@ -212,8 +212,9 @@ impl BevyGlContext {
         }
     }
 
-    /// This is a no-op on webgl.
+    /// Only calls flush on webgl
     pub fn swap(&self) {
+        unsafe { self.gl.flush() };
         #[cfg(not(target_arch = "wasm32"))]
         glutin::surface::GlSurface::swap_buffers(&self.gl_surface, &self.gl_context).unwrap();
     }
