@@ -13,7 +13,7 @@ pub type GlProgram = glow::WebProgramKey;
 #[cfg(target_arch = "wasm32")]
 use winit::platform::web::WindowExtWebSys;
 
-pub type ShaderIndex = usize;
+pub type ShaderIndex = u32;
 
 pub struct BevyGlContext {
     pub gl: glow::Context,
@@ -145,20 +145,20 @@ impl BevyGlContext {
             *index
         } else {
             let shader = self.shader(vertex, fragment);
-            let index = self.shader_cache.len();
+            let index = self.shader_cache.len() as u32;
             self.shader_cache.push(shader);
             index
         }
     }
 
     pub fn use_cached_program(&self, index: ShaderIndex) {
-        unsafe { self.gl.use_program(Some(self.shader_cache[index])) };
+        unsafe { self.gl.use_program(Some(self.shader_cache[index as usize])) };
     }
 
     pub fn get_attrib_location(&self, shader_index: ShaderIndex, name: &str) -> Option<u32> {
         unsafe {
             self.gl
-                .get_attrib_location(self.shader_cache[shader_index], name)
+                .get_attrib_location(self.shader_cache[shader_index as usize], name)
         }
     }
 
