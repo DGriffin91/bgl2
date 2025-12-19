@@ -18,7 +18,7 @@ fn main() {
             .into(),
             ..default()
         }),))
-        .add_systems(Startup, (init, triangle).chain())
+        .add_systems(Startup, init)
         .add_systems(Update, update)
         .run();
 }
@@ -41,9 +41,7 @@ fn init(world: &mut World, params: &mut SystemState<Query<(Entity, &mut Window)>
     });
 }
 
-fn triangle(world: &mut World) {
-    let mut ctx = world.non_send_resource_mut::<BevyGlContext>();
-
+fn update(mut ctx: NonSendMut<BevyGlContext>) {
     let vertex = r#"
 attribute vec2 a_position;
 varying vec2 vert;
@@ -62,19 +60,10 @@ void main() {
 }
 "#;
 
-    let program = ctx.shader_cached(vertex, fragment);
+    let shader_index = ctx.shader_cached(vertex, fragment);
 
-    world.insert_resource(TriangleProgram { program });
-}
-
-#[derive(Resource)]
-struct TriangleProgram {
-    program: usize,
-}
-
-fn update(pgm: Res<TriangleProgram>, ctx: NonSend<BevyGlContext>) {
     unsafe {
-        ctx.use_cached_program(pgm.program);
+        ctx.use_cached_program(shader_index);
         ctx.gl.clear_color(0.0, 0.0, 0.0, 1.0);
 
         let vbo = ctx.gl.create_buffer().unwrap();
@@ -88,13 +77,15 @@ fn update(pgm: Res<TriangleProgram>, ctx: NonSend<BevyGlContext>) {
         );
 
         let vao = ctx.gl.create_vertex_array().unwrap();
-        let pos_loc = ctx.get_attrib_location(pgm.program, "a_position").unwrap();
+        let pos_loc = ctx.get_attrib_location(shader_index, "a_position").unwrap();
         ctx.gl.bind_vertex_array(Some(vao));
         ctx.gl.enable_vertex_attrib_array(pos_loc);
         ctx.gl
             .vertex_attrib_pointer_f32(pos_loc, 2, glow::FLOAT, false, 8, 0);
 
         ctx.gl.draw_arrays(glow::TRIANGLES, 0, 3);
+
+        ctx.gl.delete_buffer(vbo);
     };
 
     ctx.swap();
