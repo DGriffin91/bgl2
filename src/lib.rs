@@ -1,14 +1,12 @@
+pub mod mesh_util;
+pub mod prepare_mesh;
+
 use std::hash::Hash;
 use std::hash::Hasher;
 
 use bevy::{platform::collections::HashMap, prelude::*};
 
 use glow::HasContext;
-
-#[cfg(not(target_arch = "wasm32"))]
-pub type GlProgram = glow::NativeProgram;
-#[cfg(target_arch = "wasm32")]
-pub type GlProgram = glow::WebProgramKey;
 
 #[cfg(target_arch = "wasm32")]
 use winit::platform::web::WindowExtWebSys;
@@ -21,7 +19,7 @@ pub struct BevyGlContext {
     pub gl_context: glutin::context::PossiblyCurrentContext,
     #[cfg(not(target_arch = "wasm32"))]
     pub gl_surface: glutin::surface::Surface<glutin::surface::WindowSurface>,
-    pub shader_cache: Vec<GlProgram>,
+    pub shader_cache: Vec<glow::Program>,
     pub shader_cache_map: HashMap<u64, ShaderIndex>,
 }
 
@@ -139,12 +137,18 @@ impl BevyGlContext {
         }
     }
 
-    pub fn shader_cached(&mut self, vertex: &str, fragment: &str) -> ShaderIndex {
+    pub fn shader_cached(
+        &mut self,
+        vertex: &str,
+        fragment: &str,
+        // TODO what happens in before_link needs to be part of hash
+        before_link: Option<fn(&glow::Context, glow::Program)>,
+    ) -> ShaderIndex {
         let key = shader_key(vertex, fragment);
         if let Some(index) = self.shader_cache_map.get(&key) {
             *index
         } else {
-            let shader = self.shader(vertex, fragment);
+            let shader = self.shader(vertex, fragment, before_link);
             let index = self.shader_cache.len() as u32;
             self.shader_cache.push(shader);
             index
@@ -162,7 +166,23 @@ impl BevyGlContext {
         }
     }
 
-    pub fn shader(&self, vertex: &str, fragment: &str) -> GlProgram {
+    pub fn get_uniform_location(
+        &self,
+        shader_index: ShaderIndex,
+        name: &str,
+    ) -> Option<glow::UniformLocation> {
+        unsafe {
+            self.gl
+                .get_uniform_location(self.shader_cache[shader_index as usize], name)
+        }
+    }
+
+    pub fn shader(
+        &self,
+        vertex: &str,
+        fragment: &str,
+        before_link: Option<fn(&glow::Context, glow::Program)>,
+    ) -> glow::Program {
         unsafe {
             let program = self.gl.create_program().expect("Cannot create program");
 
@@ -195,6 +215,10 @@ impl BevyGlContext {
 
                 self.gl.attach_shader(program, shader);
                 shaders.push(shader);
+            }
+
+            if let Some(before_link) = before_link {
+                before_link(&self.gl, program);
             }
 
             self.gl.link_program(program);
