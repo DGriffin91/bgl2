@@ -1,3 +1,6 @@
+use std::hash::Hash;
+use std::hash::Hasher;
+
 use bevy::{platform::collections::HashMap, prelude::*};
 
 use glow::HasContext;
@@ -10,6 +13,8 @@ pub type GlProgram = glow::WebProgramKey;
 #[cfg(target_arch = "wasm32")]
 use winit::platform::web::WindowExtWebSys;
 
+pub type ShaderIndex = usize;
+
 pub struct BevyGlContext {
     pub gl: glow::Context,
     #[cfg(not(target_arch = "wasm32"))]
@@ -17,7 +22,7 @@ pub struct BevyGlContext {
     #[cfg(not(target_arch = "wasm32"))]
     pub gl_surface: glutin::surface::Surface<glutin::surface::WindowSurface>,
     pub shader_cache: Vec<GlProgram>,
-    pub shader_cache_map: HashMap<(String, String), usize>,
+    pub shader_cache_map: HashMap<u64, ShaderIndex>,
 }
 
 impl BevyGlContext {
@@ -134,9 +139,8 @@ impl BevyGlContext {
         }
     }
 
-    pub fn shader_cached(&mut self, vertex: &str, fragment: &str) -> usize {
-        // TODO: don't allocate strings
-        let key = (vertex.to_string(), fragment.to_string());
+    pub fn shader_cached(&mut self, vertex: &str, fragment: &str) -> ShaderIndex {
+        let key = shader_key(vertex, fragment);
         if let Some(index) = self.shader_cache_map.get(&key) {
             *index
         } else {
@@ -147,11 +151,11 @@ impl BevyGlContext {
         }
     }
 
-    pub fn use_cached_program(&self, index: usize) {
+    pub fn use_cached_program(&self, index: ShaderIndex) {
         unsafe { self.gl.use_program(Some(self.shader_cache[index])) };
     }
 
-    pub fn get_attrib_location(&self, shader_index: usize, name: &str) -> Option<u32> {
+    pub fn get_attrib_location(&self, shader_index: ShaderIndex, name: &str) -> Option<u32> {
         unsafe {
             self.gl
                 .get_attrib_location(self.shader_cache[shader_index], name)
@@ -213,4 +217,11 @@ impl BevyGlContext {
         #[cfg(not(target_arch = "wasm32"))]
         glutin::surface::GlSurface::swap_buffers(&self.gl_surface, &self.gl_context).unwrap();
     }
+}
+
+pub fn shader_key(vertex: &str, fragment: &str) -> u64 {
+    let mut hasher = std::hash::DefaultHasher::new();
+    vertex.hash(&mut hasher);
+    fragment.hash(&mut hasher);
+    hasher.finish()
 }
