@@ -4,13 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-bevy = { git = "https://github.com/Zeophlite/bevy", branch = "mat-prop4", default-features = false, features = [
-    "default_app",
-    "common_api",
-    "bevy_gltf",
-    "ktx2",
-    "zstd_rust",
-] }
+bevy = "0.17"
 
 bytemuck = "1.24.0"
 glow = "0.16.0"

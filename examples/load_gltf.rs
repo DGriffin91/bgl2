@@ -95,11 +95,11 @@ fn update(
     mut mesh_entities: Query<(Entity, &ViewVisibility, Ref<GlobalTransform>, Ref<Mesh3d>)>,
     camera: Single<(Entity, &Camera, &GlobalTransform, &Projection)>,
     mut ctx: NonSendMut<BevyGlContext>,
-    mut gpu_meshes: ResMut<GPUMeshBufferMap>,
+    gpu_meshes: Res<GPUMeshBufferMap>,
 ) {
-    let (entity, _camera, cam_global_trans, cam_proj) = *camera;
+    let (_entity, _camera, cam_global_trans, cam_proj) = *camera;
 
-    let view_position = cam_global_trans.translation();
+    let _view_position = cam_global_trans.translation();
     let view_to_clip = cam_proj.get_clip_from_view();
     let view_to_world = cam_global_trans.to_matrix();
     let world_to_view = view_to_world.inverse();
@@ -107,7 +107,7 @@ fn update(
     let clip_to_view = view_to_clip.inverse();
 
     let world_to_clip = view_to_clip * world_to_view;
-    let clip_to_world = view_to_world * clip_to_view;
+    let _clip_to_world = view_to_world * clip_to_view;
 
     let vertex = r#"
 attribute vec3 a_position;
@@ -152,7 +152,7 @@ void main() {
         ctx.gl.depth_func(glow::GREATER);
     };
 
-    for (entity, view_vis, transform, mesh) in &mut mesh_entities {
+    for (_entity, view_vis, transform, mesh) in &mut mesh_entities {
         if !view_vis.get() {
             continue;
         }

@@ -66,19 +66,19 @@ pub fn send_standard_meshes_to_gpu(
         let mut empty_uv1 = Vec::new();
         let mut empty_colors = Vec::new();
 
-        let tangents = get_attribute_f32x4(mesh, Mesh::ATTRIBUTE_TANGENT).unwrap_or_else(|| {
+        let _tangents = get_attribute_f32x4(mesh, Mesh::ATTRIBUTE_TANGENT).unwrap_or_else(|| {
             empty_tangents.resize(vertex_count, [f32::INFINITY; 4]);
             &empty_tangents
         });
-        let uv_0 = get_attribute_f32x2(mesh, Mesh::ATTRIBUTE_UV_0).unwrap_or_else(|| {
+        let _uv_0 = get_attribute_f32x2(mesh, Mesh::ATTRIBUTE_UV_0).unwrap_or_else(|| {
             empty_uv0.resize(vertex_count, [0.0; 2]);
             &empty_uv0
         });
-        let uv_1 = get_attribute_f32x2(mesh, Mesh::ATTRIBUTE_UV_1).unwrap_or_else(|| {
+        let _uv_1 = get_attribute_f32x2(mesh, Mesh::ATTRIBUTE_UV_1).unwrap_or_else(|| {
             empty_uv1.resize(vertex_count, [0.0; 2]);
             &empty_uv1
         });
-        let colors = get_attribute_f32x4(mesh, Mesh::ATTRIBUTE_COLOR).unwrap_or_else(|| {
+        let _colors = get_attribute_f32x4(mesh, Mesh::ATTRIBUTE_COLOR).unwrap_or_else(|| {
             empty_colors.resize(vertex_count, [1.0; 4]);
             &empty_colors
         });
