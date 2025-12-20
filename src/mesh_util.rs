@@ -3,19 +3,19 @@ use bevy::{
     prelude::*,
 };
 
-pub fn get_mesh_indices(mesh: &Mesh, index_buffer_data: &mut Vec<u32>) -> Option<u32> {
+pub fn get_mesh_indices(mesh: &Mesh, index_buffer_data: &mut Vec<u16>) -> Option<usize> {
     if let Some(indices) = mesh.indices() {
         match indices {
-            Indices::U16(ind) => {
-                for i in ind.iter() {
-                    index_buffer_data.push(*i as u32);
-                }
-            }
-            Indices::U32(indices) => {
+            Indices::U16(indices) => {
                 index_buffer_data.extend(indices);
             }
+            Indices::U32(indices) => {
+                for i in indices.iter() {
+                    index_buffer_data.push(*i as u16);
+                }
+            }
         };
-        Some(indices.len() as u32)
+        Some(indices.len())
     } else {
         None
     }

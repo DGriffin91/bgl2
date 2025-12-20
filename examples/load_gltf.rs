@@ -160,6 +160,32 @@ void main() {
             let local_to_world = transform.to_matrix();
             let local_to_clip = world_to_clip * local_to_world;
             unsafe {
+                ctx.gl
+                    .bind_buffer(glow::ELEMENT_ARRAY_BUFFER, Some(buffers.index));
+
+                ctx.gl
+                    .bind_buffer(glow::ARRAY_BUFFER, Some(buffers.position));
+                ctx.gl.vertex_attrib_pointer_f32(
+                    0, // only correct because we set .bind_attrib_location(program, 0, "a_position");
+                    3,
+                    glow::FLOAT,
+                    false,
+                    3 * size_of::<f32>() as i32,
+                    0,
+                );
+                ctx.gl.enable_vertex_attrib_array(0);
+
+                ctx.gl.bind_buffer(glow::ARRAY_BUFFER, Some(buffers.normal));
+                ctx.gl.vertex_attrib_pointer_f32(
+                    1, // only correct because we set .bind_attrib_location(program, 1, "a_normals");
+                    3,
+                    glow::FLOAT,
+                    false,
+                    3 * size_of::<f32>() as i32,
+                    0,
+                );
+                ctx.gl.enable_vertex_attrib_array(1);
+
                 ctx.gl.uniform_matrix_4_f32_slice(
                     Some(&mvp_loc),
                     false,
@@ -172,12 +198,10 @@ void main() {
                     &local_to_world.to_cols_array(),
                 );
 
-                ctx.gl.bind_vertex_array(Some(buffers.vertex));
-
                 ctx.gl.draw_elements(
                     glow::TRIANGLES,
                     buffers.index_count as i32,
-                    glow::UNSIGNED_INT,
+                    glow::UNSIGNED_SHORT, // Base ES 2.0 and WebGL 1.0 only support GL_UNSIGNED_BYTE or GL_UNSIGNED_SHORT
                     0,
                 );
                 ctx.gl.bind_vertex_array(None);
