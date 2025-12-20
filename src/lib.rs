@@ -99,9 +99,23 @@ impl BevyGlContext {
                 glow::Context::from_loader_function_cstr(|s| gl_display.get_proc_address(s))
             };
 
-            gl_surface
+            unsafe {
+                let vendor = gl.get_parameter_string(glow::VENDOR);
+                let renderer = gl.get_parameter_string(glow::RENDERER);
+                let version = gl.get_parameter_string(glow::VERSION);
+
+                println!("GL_VENDOR   : {}", vendor);
+                println!("GL_RENDERER : {}", renderer);
+                println!("GL_VERSION  : {}", version);
+            }
+
+            match gl_surface
                 .set_swap_interval(&gl_context, SwapInterval::Wait(NonZeroU32::new(1).unwrap()))
-                .unwrap();
+            {
+                Ok(_) => (),
+                Err(e) => eprintln!("Couldn't set_swap_interval wait: {e}"),
+            };
+
             BevyGlContext {
                 gl,
                 gl_context,

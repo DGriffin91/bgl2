@@ -1,8 +1,10 @@
 use bevy::{
+    a11y::AccessibilityPlugin,
     ecs::system::SystemState,
+    input::InputPlugin,
     prelude::*,
-    render::{RenderPlugin, settings::WgpuSettings},
     winit::WINIT_WINDOWS,
+    winit::{WakeUp, WinitPlugin},
 };
 use bevy_opengl::BevyGlContext;
 use bytemuck::cast_slice;
@@ -10,14 +12,19 @@ use glow::HasContext;
 
 fn main() {
     App::new()
-        .add_plugins((DefaultPlugins.set(RenderPlugin {
-            render_creation: WgpuSettings {
-                backends: None,
-                ..default()
-            }
-            .into(),
-            ..default()
-        }),))
+        .add_plugins((
+            MinimalPlugins,
+            InputPlugin,
+            AssetPlugin::default(),
+            AccessibilityPlugin,
+            WinitPlugin::<WakeUp>::default(),
+            bevy::scene::ScenePlugin,
+            WindowPlugin::default(),
+            ImagePlugin::default_linear(),
+            //bevy::mesh::MeshPlugin,
+            //bevy::camera::CameraPlugin,
+            //bevy::gltf::GltfPlugin::default(),
+        ))
         .add_systems(Startup, init)
         .add_systems(Update, update)
         .run();
