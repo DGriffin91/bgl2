@@ -2,7 +2,7 @@
 
 ## WebGL 1:
 Run locally with [bevy web cli](https://github.com/TheBevyFlock/bevy_cli)
-`bevy run web --release --example load_gltf --open`
+`bevy run --release --example load_gltf web --open`
 
 ## Windows XP:
 Tested with XP Pro SP3 32-bit on:

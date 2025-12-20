@@ -175,16 +175,18 @@ void main() {
                 );
                 ctx.gl.enable_vertex_attrib_array(0);
 
-                ctx.gl.bind_buffer(glow::ARRAY_BUFFER, Some(buffers.normal));
-                ctx.gl.vertex_attrib_pointer_f32(
-                    1, // only correct because we set .bind_attrib_location(program, 1, "a_normals");
-                    3,
-                    glow::FLOAT,
-                    false,
-                    3 * size_of::<f32>() as i32,
-                    0,
-                );
-                ctx.gl.enable_vertex_attrib_array(1);
+                if let Some(normal) = buffers.normal {
+                    ctx.gl.bind_buffer(glow::ARRAY_BUFFER, Some(normal));
+                    ctx.gl.vertex_attrib_pointer_f32(
+                        1, // only correct because we set .bind_attrib_location(program, 1, "a_normals");
+                        3,
+                        glow::FLOAT,
+                        false,
+                        3 * size_of::<f32>() as i32,
+                        0,
+                    );
+                    ctx.gl.enable_vertex_attrib_array(1);
+                }
 
                 ctx.gl.uniform_matrix_4_f32_slice(
                     Some(&mvp_loc),

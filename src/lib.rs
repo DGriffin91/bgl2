@@ -6,6 +6,7 @@ use std::hash::Hasher;
 
 use bevy::{platform::collections::HashMap, prelude::*};
 
+use glow::Buffer;
 use glow::HasContext;
 
 #[cfg(target_arch = "wasm32")]
@@ -247,6 +248,28 @@ impl BevyGlContext {
             }
 
             program
+        }
+    }
+
+    pub fn gen_vbo(&self, data: &[u8], usage: u32) -> Buffer {
+        unsafe {
+            let vbo = self.gl.create_buffer().unwrap();
+            self.gl.bind_buffer(glow::ARRAY_BUFFER, Some(vbo));
+            self.gl
+                .buffer_data_u8_slice(glow::ARRAY_BUFFER, data, usage);
+            self.gl.bind_buffer(glow::ARRAY_BUFFER, None);
+            vbo
+        }
+    }
+
+    pub fn gen_vbo_element(&self, data: &[u8], usage: u32) -> Buffer {
+        unsafe {
+            let vbo = self.gl.create_buffer().unwrap();
+            self.gl.bind_buffer(glow::ELEMENT_ARRAY_BUFFER, Some(vbo));
+            self.gl
+                .buffer_data_u8_slice(glow::ELEMENT_ARRAY_BUFFER, data, usage);
+            self.gl.bind_buffer(glow::ELEMENT_ARRAY_BUFFER, None);
+            vbo
         }
     }
 
