@@ -1,5 +1,6 @@
 use bevy::{platform::collections::HashMap, prelude::*};
 use bytemuck::cast_slice;
+use glow::{Context, HasContext};
 
 use crate::{
     BevyGlContext,
@@ -14,6 +15,21 @@ pub struct GpuMeshBuffers {
     pub uv: Option<glow::Buffer>,
     pub color: Option<glow::Buffer>,
     pub index_count: usize,
+}
+
+impl GpuMeshBuffers {
+    fn delete(&self, gl: &Context) {
+        unsafe {
+            // TODO make reusable pattern. Can we access gl another way? If we do this on drop it would need to be
+            // on the right thread?
+            gl.delete_buffer(self.position);
+            gl.delete_buffer(self.index);
+            self.normal.map(|b| gl.delete_buffer(b));
+            self.tangent.map(|b| gl.delete_buffer(b));
+            self.uv.map(|b| gl.delete_buffer(b));
+            self.color.map(|b| gl.delete_buffer(b));
+        }
+    }
 }
 
 #[derive(Resource, Default)]
@@ -34,8 +50,9 @@ pub fn send_standard_meshes_to_gpu(
             | AssetEvent::Added { id }
             | AssetEvent::Modified { id } => id,
             AssetEvent::Removed { id } => {
-                let _ = gpu_meshes.buffers.remove(id);
-                dbg!("Need to impl delete and overwrite");
+                if let Some(buffers) = gpu_meshes.buffers.remove(id) {
+                    buffers.delete(&ctx.gl);
+                }
                 continue;
             }
             AssetEvent::Unused { id: _ } => continue,
@@ -64,7 +81,7 @@ pub fn send_standard_meshes_to_gpu(
             vertex_count
         };
 
-        gpu_meshes.buffers.insert(
+        if let Some(old_buffer) = gpu_meshes.buffers.insert(
             mesh_h.clone(),
             GpuMeshBuffers {
                 index_count: index_count,
@@ -79,6 +96,8 @@ pub fn send_standard_meshes_to_gpu(
                 color: get_attribute_f32x4(mesh, Mesh::ATTRIBUTE_COLOR)
                     .map(|data| ctx.gen_vbo(cast_slice(data), glow::STATIC_DRAW)),
             },
-        );
+        ) {
+            old_buffer.delete(&ctx.gl);
+        }
     }
 }
