@@ -10,7 +10,7 @@ fn main() {
             bevy::input::InputPlugin,
             AssetPlugin::default(),
             bevy::a11y::AccessibilityPlugin,
-            bevy::winit::WinitPlugin::<bevy::winit::WakeUp>::default(),
+            bevy::winit::WinitPlugin::default(),
             bevy::scene::ScenePlugin,
             WindowPlugin::default(),
             ImagePlugin::default_linear(),
