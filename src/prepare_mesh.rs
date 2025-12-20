@@ -5,7 +5,22 @@ use glow::{Context, HasContext};
 use crate::{
     BevyGlContext,
     mesh_util::{get_attribute_f32x2, get_attribute_f32x3, get_attribute_f32x4, get_mesh_indices},
+    render::RenderSet,
 };
+
+/// Handles uploading bevy mesh assets to the GPU
+pub struct PrepareMeshPlugin;
+
+impl Plugin for PrepareMeshPlugin {
+    fn build(&self, app: &mut App) {
+        app.init_resource::<GPUMeshBufferMap>().add_systems(
+            PostUpdate,
+            (send_standard_meshes_to_gpu)
+                .chain()
+                .in_set(RenderSet::Prepare),
+        );
+    }
+}
 
 pub struct GpuMeshBuffers {
     pub position: glow::Buffer,

@@ -7,7 +7,8 @@ use bevy::{
 };
 use bevy_opengl::{
     BevyGlContext,
-    prepare_mesh::{GPUMeshBufferMap, send_standard_meshes_to_gpu},
+    prepare_mesh::GPUMeshBufferMap,
+    render::{OpenGLRenderPlugin, RenderSet},
 };
 use glow::HasContext;
 
@@ -24,17 +25,19 @@ fn main() {
     //}
 
     App::new()
-        .init_resource::<bevy_opengl::prepare_mesh::GPUMeshBufferMap>()
-        .add_plugins((DefaultPlugins.set(RenderPlugin {
-            render_creation: WgpuSettings {
-                backends: None,
+        .add_plugins((
+            DefaultPlugins.set(RenderPlugin {
+                render_creation: WgpuSettings {
+                    backends: None,
+                    ..default()
+                }
+                .into(),
                 ..default()
-            }
-            .into(),
-            ..default()
-        }),))
+            }),
+            OpenGLRenderPlugin,
+        ))
         .add_systems(Startup, (setup, init))
-        .add_systems(Update, (send_standard_meshes_to_gpu, update))
+        .add_systems(Update, update.in_set(RenderSet::Render))
         .run();
 }
 

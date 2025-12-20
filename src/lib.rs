@@ -1,5 +1,7 @@
 pub mod mesh_util;
+//pub mod prepare_image;
 pub mod prepare_mesh;
+pub mod render;
 
 use std::hash::Hash;
 use std::hash::Hasher;
