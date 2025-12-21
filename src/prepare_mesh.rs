@@ -27,7 +27,8 @@ pub struct GpuMeshBuffers {
     pub index: glow::Buffer,
     pub normal: Option<glow::Buffer>,
     pub tangent: Option<glow::Buffer>,
-    pub uv: Option<glow::Buffer>,
+    pub uv_0: Option<glow::Buffer>,
+    pub uv_1: Option<glow::Buffer>,
     pub color: Option<glow::Buffer>,
     pub index_count: usize,
 }
@@ -41,7 +42,7 @@ impl GpuMeshBuffers {
             gl.delete_buffer(self.index);
             self.normal.map(|b| gl.delete_buffer(b));
             self.tangent.map(|b| gl.delete_buffer(b));
-            self.uv.map(|b| gl.delete_buffer(b));
+            self.uv_0.map(|b| gl.delete_buffer(b));
             self.color.map(|b| gl.delete_buffer(b));
         }
     }
@@ -49,7 +50,7 @@ impl GpuMeshBuffers {
 
 #[derive(Resource, Default)]
 pub struct GPUMeshBufferMap {
-    pub buffers: HashMap<AssetId<Mesh>, GpuMeshBuffers>, // TODO delete old and overwritten
+    pub buffers: HashMap<AssetId<Mesh>, GpuMeshBuffers>,
 }
 
 pub fn send_standard_meshes_to_gpu(
@@ -106,7 +107,9 @@ pub fn send_standard_meshes_to_gpu(
                     .map(|data| ctx.gen_vbo(cast_slice(data), glow::STATIC_DRAW)),
                 tangent: get_attribute_f32x4(mesh, Mesh::ATTRIBUTE_TANGENT)
                     .map(|data| ctx.gen_vbo(cast_slice(data), glow::STATIC_DRAW)),
-                uv: get_attribute_f32x2(mesh, Mesh::ATTRIBUTE_UV_0)
+                uv_0: get_attribute_f32x2(mesh, Mesh::ATTRIBUTE_UV_0)
+                    .map(|data| ctx.gen_vbo(cast_slice(data), glow::STATIC_DRAW)),
+                uv_1: get_attribute_f32x2(mesh, Mesh::ATTRIBUTE_UV_1)
                     .map(|data| ctx.gen_vbo(cast_slice(data), glow::STATIC_DRAW)),
                 color: get_attribute_f32x4(mesh, Mesh::ATTRIBUTE_COLOR)
                     .map(|data| ctx.gen_vbo(cast_slice(data), glow::STATIC_DRAW)),

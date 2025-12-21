@@ -203,13 +203,13 @@ impl BevyGlContext {
             let program = self.gl.create_program().expect("Cannot create program");
 
             let shader_sources = [
-                (glow::VERTEX_SHADER, vertex),
-                (glow::FRAGMENT_SHADER, fragment),
+                ("vertex", glow::VERTEX_SHADER, vertex),
+                ("fragment", glow::FRAGMENT_SHADER, fragment),
             ];
 
             let mut shaders = Vec::with_capacity(shader_sources.len());
 
-            for (shader_type, shader_source) in shader_sources.iter() {
+            for (stage_name, shader_type, shader_source) in shader_sources.iter() {
                 let shader = self
                     .gl
                     .create_shader(*shader_type)
@@ -226,7 +226,10 @@ impl BevyGlContext {
                 self.gl.compile_shader(shader);
 
                 if !self.gl.get_shader_compile_status(shader) {
-                    panic!("{}", self.gl.get_shader_info_log(shader));
+                    panic!(
+                        "{stage_name} shader compilation error: {}",
+                        self.gl.get_shader_info_log(shader)
+                    );
                 }
 
                 self.gl.attach_shader(program, shader);

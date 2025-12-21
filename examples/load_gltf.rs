@@ -124,39 +124,45 @@ fn update(
     let vertex = r#"
 attribute vec3 a_position;
 attribute vec3 a_normal;
-attribute vec2 a_uv;
+attribute vec2 a_uv_0;
+attribute vec2 a_uv_1;
 
 uniform mat4 mvp;
 uniform mat4 local_to_world;
 
 varying vec3 normal;
-varying vec2 uv;
+varying vec2 uv_0;
+varying vec2 uv_1;
 
 void main() {
     gl_Position = mvp * vec4(a_position, 1.0);
     normal = (local_to_world * vec4(a_normal, 0.0)).xyz;
-    uv = a_uv;
+    uv_0 = a_uv_0;
+    uv_1 = a_uv_1;
 }
     "#;
 
     let fragment = r#"
 varying vec3 normal;
-varying vec2 uv;
+varying vec2 uv_0;
+varying vec2 uv_1;
 
 uniform sampler2D color_texture;
 
 void main() {
-    gl_FragColor = texture2D(color_texture, uv);
+    gl_FragColor = texture2D(color_texture, uv_0);
 }
 "#;
 
     let a_position_index = 0;
     let a_normal_index = 1;
-    let a_uv_index = 2;
+    let a_uv_0_index = 2;
+    let a_uv_1_index = 3;
     let shader_index = ctx.shader_cached(vertex, fragment, |context: &Context, program| unsafe {
         context.bind_attrib_location(program, a_position_index, "a_position");
         context.bind_attrib_location(program, a_normal_index, "a_normal");
-        context.bind_attrib_location(program, a_uv_index, "a_uv");
+        context.bind_attrib_location(program, a_uv_0_index, "a_uv_0");
+        context.bind_attrib_location(program, a_uv_1_index, "a_uv_1");
     });
     let mvp_loc = ctx.get_uniform_location(shader_index, "mvp");
     let local_to_world_loc = ctx.get_uniform_location(shader_index, "local_to_world");
@@ -189,39 +195,52 @@ void main() {
                 ctx.gl
                     .bind_buffer(glow::ARRAY_BUFFER, Some(buffers.position));
                 ctx.gl.vertex_attrib_pointer_f32(
-                    0, // only correct because we set .bind_attrib_location(program, 0, "a_position");
+                    a_position_index,
                     3,
                     glow::FLOAT,
                     false,
                     3 * size_of::<f32>() as i32,
                     0,
                 );
-                ctx.gl.enable_vertex_attrib_array(0);
+                ctx.gl.enable_vertex_attrib_array(a_position_index);
 
                 if let Some(normal) = buffers.normal {
                     ctx.gl.bind_buffer(glow::ARRAY_BUFFER, Some(normal));
                     ctx.gl.vertex_attrib_pointer_f32(
-                        1, // only correct because we set .bind_attrib_location(program, 1, "a_normals");
+                        a_normal_index,
                         3,
                         glow::FLOAT,
                         false,
                         3 * size_of::<f32>() as i32,
                         0,
                     );
-                    ctx.gl.enable_vertex_attrib_array(1);
+                    ctx.gl.enable_vertex_attrib_array(a_normal_index);
                 }
 
-                if let Some(uv) = buffers.uv {
-                    ctx.gl.bind_buffer(glow::ARRAY_BUFFER, Some(uv));
+                if let Some(uv_0) = buffers.uv_0 {
+                    ctx.gl.bind_buffer(glow::ARRAY_BUFFER, Some(uv_0));
                     ctx.gl.vertex_attrib_pointer_f32(
-                        2, // only correct because we set .bind_attrib_location(program, 2, "a_uv");
+                        a_uv_0_index,
                         2,
                         glow::FLOAT,
                         false,
                         2 * size_of::<f32>() as i32,
                         0,
                     );
-                    ctx.gl.enable_vertex_attrib_array(2);
+                    ctx.gl.enable_vertex_attrib_array(a_uv_0_index);
+                }
+
+                if let Some(uv_1) = buffers.uv_1 {
+                    ctx.gl.bind_buffer(glow::ARRAY_BUFFER, Some(uv_1));
+                    ctx.gl.vertex_attrib_pointer_f32(
+                        a_uv_1_index,
+                        2,
+                        glow::FLOAT,
+                        false,
+                        2 * size_of::<f32>() as i32,
+                        0,
+                    );
+                    ctx.gl.enable_vertex_attrib_array(a_uv_1_index);
                 }
 
                 if let Some(mvp_loc) = mvp_loc {
