@@ -4,6 +4,17 @@ use bytemuck::cast_slice;
 use glow::HasContext;
 
 fn main() {
+    //unsafe {
+    //    std::env::set_var(
+    //        "__EGL_VENDOR_LIBRARY_FILENAMES",
+    //        "/usr/share/glvnd/egl_vendor.d/50_mesa.json",
+    //    );
+    //    std::env::set_var("LIBGL_ALWAYS_SOFTWARE", "1");
+    //    std::env::set_var("MESA_LOADER_DRIVER_OVERRIDE", "llvmpipe");
+    //    //std::env::set_var("MESA_GL_VERSION_OVERRIDE", "2.1");
+    //    //std::env::set_var("MESA_GLSL_VERSION_OVERRIDE", "120");
+    //}
+
     App::new()
         .add_plugins((
             MinimalPlugins,
@@ -41,7 +52,7 @@ fn init(world: &mut World, params: &mut SystemState<Query<(Entity, &mut Window)>
     });
 }
 
-fn update(mut ctx: NonSendMut<BevyGlContext>) {
+fn update(mut ctx: If<NonSendMut<BevyGlContext>>) {
     let vertex = r#"
 attribute vec2 a_position;
 varying vec2 vert;
@@ -65,20 +76,19 @@ void main() {
     unsafe {
         ctx.use_cached_program(shader_index);
         ctx.gl.clear_color(0.0, 0.0, 0.0, 1.0);
+        ctx.gl.clear(glow::COLOR_BUFFER_BIT);
 
         let vbo = ctx.gl.create_buffer().unwrap();
         let triangle_vertices = [0.5f32, 1.0, 0.0, 0.0, 1.0, 0.0];
         ctx.gl.bind_buffer(glow::ARRAY_BUFFER, Some(vbo));
-        ctx.gl.clear(glow::COLOR_BUFFER_BIT);
         ctx.gl.buffer_data_u8_slice(
             glow::ARRAY_BUFFER,
             cast_slice(&triangle_vertices),
             glow::STATIC_DRAW,
         );
 
-        let vao = ctx.gl.create_vertex_array().unwrap();
         let pos_loc = ctx.get_attrib_location(shader_index, "a_position").unwrap();
-        ctx.gl.bind_vertex_array(Some(vao));
+
         ctx.gl.enable_vertex_attrib_array(pos_loc);
         ctx.gl
             .vertex_attrib_pointer_f32(pos_loc, 2, glow::FLOAT, false, 8, 0);

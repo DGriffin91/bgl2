@@ -23,11 +23,35 @@ pub type ShaderIndex = u32;
 pub struct BevyGlContext {
     pub gl: glow::Context,
     #[cfg(not(target_arch = "wasm32"))]
-    pub gl_context: glutin::context::PossiblyCurrentContext,
+    pub gl_context: Option<glutin::context::PossiblyCurrentContext>,
     #[cfg(not(target_arch = "wasm32"))]
-    pub gl_surface: glutin::surface::Surface<glutin::surface::WindowSurface>,
+    pub gl_surface: Option<glutin::surface::Surface<glutin::surface::WindowSurface>>,
+    #[cfg(not(target_arch = "wasm32"))]
+    pub gl_display: Option<glutin::display::Display>,
     pub shader_cache: Vec<glow::Program>,
     pub shader_cache_map: HashMap<u64, ShaderIndex>,
+}
+
+impl Drop for BevyGlContext {
+    fn drop(&mut self) {
+        unsafe {
+            for program in &self.shader_cache {
+                self.gl.delete_program(*program)
+            }
+
+            // TODO keep buffers in BevyGlContext and drop those too?
+
+            #[cfg(not(target_arch = "wasm32"))]
+            {
+                drop(self.gl_surface.take());
+                drop(self.gl_display.take());
+                glutin::prelude::PossiblyCurrentGlContext::make_not_current(
+                    self.gl_context.take().unwrap(),
+                )
+                .unwrap();
+            }
+        };
+    }
 }
 
 impl BevyGlContext {
@@ -125,8 +149,9 @@ impl BevyGlContext {
 
             BevyGlContext {
                 gl,
-                gl_context,
-                gl_surface,
+                gl_context: Some(gl_context),
+                gl_surface: Some(gl_surface),
+                gl_display: Some(gl_display),
                 shader_cache: Default::default(),
                 shader_cache_map: Default::default(),
             }
@@ -383,7 +408,10 @@ impl BevyGlContext {
     pub fn swap(&self) {
         unsafe { self.gl.flush() };
         #[cfg(not(target_arch = "wasm32"))]
-        glutin::surface::GlSurface::swap_buffers(&self.gl_surface, &self.gl_context).unwrap();
+        let _ = glutin::surface::GlSurface::swap_buffers(
+            self.gl_surface.as_ref().unwrap(),
+            self.gl_context.as_ref().unwrap(),
+        );
     }
 }
 
