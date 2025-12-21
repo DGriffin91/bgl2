@@ -6,7 +6,7 @@ use bevy::{
     winit::WINIT_WINDOWS,
 };
 use bevy_opengl::{
-    BevyGlContext,
+    AttribType, BevyGlContext,
     prepare_image::GpuImages,
     prepare_mesh::GPUMeshBufferMap,
     render::{OpenGLRenderPlugin, RenderSet},
@@ -192,55 +192,18 @@ void main() {
                 ctx.gl
                     .bind_buffer(glow::ELEMENT_ARRAY_BUFFER, Some(buffers.index));
 
-                ctx.gl
-                    .bind_buffer(glow::ARRAY_BUFFER, Some(buffers.position));
-                ctx.gl.vertex_attrib_pointer_f32(
-                    a_position_index,
-                    3,
-                    glow::FLOAT,
-                    false,
-                    3 * size_of::<f32>() as i32,
-                    0,
-                );
-                ctx.gl.enable_vertex_attrib_array(a_position_index);
+                ctx.bind_vertex_attrib(a_position_index, 3, AttribType::Float, buffers.position);
 
                 if let Some(normal) = buffers.normal {
-                    ctx.gl.bind_buffer(glow::ARRAY_BUFFER, Some(normal));
-                    ctx.gl.vertex_attrib_pointer_f32(
-                        a_normal_index,
-                        3,
-                        glow::FLOAT,
-                        false,
-                        3 * size_of::<f32>() as i32,
-                        0,
-                    );
-                    ctx.gl.enable_vertex_attrib_array(a_normal_index);
+                    ctx.bind_vertex_attrib(a_normal_index, 3, AttribType::Float, normal);
                 }
 
                 if let Some(uv_0) = buffers.uv_0 {
-                    ctx.gl.bind_buffer(glow::ARRAY_BUFFER, Some(uv_0));
-                    ctx.gl.vertex_attrib_pointer_f32(
-                        a_uv_0_index,
-                        2,
-                        glow::FLOAT,
-                        false,
-                        2 * size_of::<f32>() as i32,
-                        0,
-                    );
-                    ctx.gl.enable_vertex_attrib_array(a_uv_0_index);
+                    ctx.bind_vertex_attrib(a_uv_0_index, 2, AttribType::Float, uv_0);
                 }
 
                 if let Some(uv_1) = buffers.uv_1 {
-                    ctx.gl.bind_buffer(glow::ARRAY_BUFFER, Some(uv_1));
-                    ctx.gl.vertex_attrib_pointer_f32(
-                        a_uv_1_index,
-                        2,
-                        glow::FLOAT,
-                        false,
-                        2 * size_of::<f32>() as i32,
-                        0,
-                    );
-                    ctx.gl.enable_vertex_attrib_array(a_uv_1_index);
+                    ctx.bind_vertex_attrib(a_uv_1_index, 2, AttribType::Float, uv_1);
                 }
 
                 if let Some(mvp_loc) = mvp_loc {

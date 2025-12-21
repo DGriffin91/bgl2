@@ -275,11 +275,67 @@ impl BevyGlContext {
         }
     }
 
+    pub fn bind_vertex_attrib(
+        &self,
+        index: u32,
+        element_count: u32,
+        ty: AttribType,
+        buffer: Buffer,
+    ) {
+        unsafe {
+            self.gl.bind_buffer(glow::ARRAY_BUFFER, Some(buffer));
+            self.gl.vertex_attrib_pointer_f32(
+                index,
+                element_count as i32,
+                ty.gl_type(),
+                false,
+                element_count as i32 * ty.gl_type_bytes() as i32,
+                0,
+            );
+            self.gl.enable_vertex_attrib_array(index);
+        }
+    }
+
     /// Only calls flush on webgl
     pub fn swap(&self) {
         unsafe { self.gl.flush() };
         #[cfg(not(target_arch = "wasm32"))]
         glutin::surface::GlSurface::swap_buffers(&self.gl_surface, &self.gl_context).unwrap();
+    }
+}
+
+#[derive(Copy, Clone)]
+pub enum AttribType {
+    /// i8
+    Byte,
+    /// u8
+    UnsignedByte,
+    /// i16
+    Short,
+    /// u16
+    UnsignedShort,
+    /// f32
+    Float,
+}
+
+impl AttribType {
+    pub fn gl_type(&self) -> u32 {
+        match &self {
+            AttribType::Byte => glow::BYTE,
+            AttribType::UnsignedByte => glow::UNSIGNED_BYTE,
+            AttribType::Short => glow::SHORT,
+            AttribType::UnsignedShort => glow::UNSIGNED_SHORT,
+            AttribType::Float => glow::FLOAT,
+        }
+    }
+    pub fn gl_type_bytes(&self) -> u32 {
+        match &self {
+            AttribType::Byte => 1,
+            AttribType::UnsignedByte => 1,
+            AttribType::Short => 2,
+            AttribType::UnsignedShort => 2,
+            AttribType::Float => 4,
+        }
     }
 }
 
