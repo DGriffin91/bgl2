@@ -7,10 +7,11 @@ use bevy::{
 };
 use bevy_opengl::{
     BevyGlContext,
+    prepare_image::GpuImages,
     prepare_mesh::GPUMeshBufferMap,
     render::{OpenGLRenderPlugin, RenderSet},
 };
-use glow::HasContext;
+use glow::{Context, HasContext};
 
 fn main() {
     //unsafe {
@@ -95,10 +96,18 @@ fn init(world: &mut World, params: &mut SystemState<Query<(Entity, &mut Window)>
 }
 
 fn update(
-    mut mesh_entities: Query<(Entity, &ViewVisibility, Ref<GlobalTransform>, Ref<Mesh3d>)>,
+    mut mesh_entities: Query<(
+        Entity,
+        &ViewVisibility,
+        Ref<GlobalTransform>,
+        Ref<Mesh3d>,
+        &MeshMaterial3d<StandardMaterial>,
+    )>,
     camera: Single<(Entity, &Camera, &GlobalTransform, &Projection)>,
     mut ctx: NonSendMut<BevyGlContext>,
     gpu_meshes: Res<GPUMeshBufferMap>,
+    materials: Res<Assets<StandardMaterial>>,
+    gpu_images: Res<GpuImages>,
 ) {
     let (_entity, _camera, cam_global_trans, cam_proj) = *camera;
 
@@ -115,35 +124,43 @@ fn update(
     let vertex = r#"
 attribute vec3 a_position;
 attribute vec3 a_normal;
+attribute vec2 a_uv;
+
 uniform mat4 mvp;
 uniform mat4 local_to_world;
+
 varying vec3 normal;
+varying vec2 uv;
 
 void main() {
     gl_Position = mvp * vec4(a_position, 1.0);
     normal = (local_to_world * vec4(a_normal, 0.0)).xyz;
+    uv = a_uv;
 }
     "#;
 
     let fragment = r#"
 varying vec3 normal;
+varying vec2 uv;
+
+uniform sampler2D color_texture;
+
 void main() {
-    gl_FragColor = vec4(abs(normal), 1.0);
+    gl_FragColor = texture2D(color_texture, uv);
 }
 "#;
 
-    let shader_index = ctx.shader_cached(
-        vertex,
-        fragment,
-        Some(|context, program| unsafe {
-            context.bind_attrib_location(program, 0, "a_position");
-            context.bind_attrib_location(program, 1, "a_normal");
-        }),
-    );
-    let mvp_loc = ctx.get_uniform_location(shader_index, "mvp").unwrap();
-    let local_to_world_loc = ctx
-        .get_uniform_location(shader_index, "local_to_world")
-        .unwrap();
+    let a_position_index = 0;
+    let a_normal_index = 1;
+    let a_uv_index = 2;
+    let shader_index = ctx.shader_cached(vertex, fragment, |context: &Context, program| unsafe {
+        context.bind_attrib_location(program, a_position_index, "a_position");
+        context.bind_attrib_location(program, a_normal_index, "a_normal");
+        context.bind_attrib_location(program, a_uv_index, "a_uv");
+    });
+    let mvp_loc = ctx.get_uniform_location(shader_index, "mvp");
+    let local_to_world_loc = ctx.get_uniform_location(shader_index, "local_to_world");
+    let color_texture_loc = ctx.get_uniform_location(shader_index, "color_texture");
 
     ctx.use_cached_program(shader_index);
     unsafe {
@@ -155,10 +172,13 @@ void main() {
         ctx.gl.depth_func(glow::GREATER);
     };
 
-    for (_entity, view_vis, transform, mesh) in &mut mesh_entities {
+    for (_entity, view_vis, transform, mesh, material_h) in &mut mesh_entities {
         if !view_vis.get() {
             continue;
         }
+        let Some(material) = materials.get(material_h) else {
+            continue;
+        };
         if let Some(buffers) = gpu_meshes.buffers.get(&mesh.id()) {
             let local_to_world = transform.to_matrix();
             let local_to_clip = world_to_clip * local_to_world;
@@ -191,17 +211,46 @@ void main() {
                     ctx.gl.enable_vertex_attrib_array(1);
                 }
 
-                ctx.gl.uniform_matrix_4_f32_slice(
-                    Some(&mvp_loc),
-                    false,
-                    &local_to_clip.to_cols_array(),
-                );
+                if let Some(uv) = buffers.uv {
+                    ctx.gl.bind_buffer(glow::ARRAY_BUFFER, Some(uv));
+                    ctx.gl.vertex_attrib_pointer_f32(
+                        2, // only correct because we set .bind_attrib_location(program, 2, "a_uv");
+                        2,
+                        glow::FLOAT,
+                        false,
+                        2 * size_of::<f32>() as i32,
+                        0,
+                    );
+                    ctx.gl.enable_vertex_attrib_array(2);
+                }
 
-                ctx.gl.uniform_matrix_4_f32_slice(
-                    Some(&local_to_world_loc),
-                    false,
-                    &local_to_world.to_cols_array(),
-                );
+                if let Some(mvp_loc) = mvp_loc {
+                    ctx.gl.uniform_matrix_4_f32_slice(
+                        Some(&mvp_loc),
+                        false,
+                        &local_to_clip.to_cols_array(),
+                    );
+                }
+
+                if let Some(local_to_world_loc) = local_to_world_loc {
+                    ctx.gl.uniform_matrix_4_f32_slice(
+                        Some(&local_to_world_loc),
+                        false,
+                        &local_to_world.to_cols_array(),
+                    );
+                }
+
+                // TODO fallback texture
+                if let Some(color_texture_loc) = color_texture_loc {
+                    if let Some(ref image_h) = material.base_color_texture {
+                        if let Some(index) = gpu_images.mapping.get(&image_h.id()) {
+                            let texture = gpu_images.images[*index as usize];
+                            ctx.gl.active_texture(glow::TEXTURE0);
+                            ctx.gl.bind_texture(glow::TEXTURE_2D, Some(texture));
+                            ctx.gl.uniform_1_i32(Some(&color_texture_loc), 0);
+                        }
+                    }
+                }
 
                 ctx.gl.draw_elements(
                     glow::TRIANGLES,

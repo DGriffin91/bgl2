@@ -60,7 +60,7 @@ void main() {
 }
 "#;
 
-    let shader_index = ctx.shader_cached(vertex, fragment, None);
+    let shader_index = ctx.shader_cached(vertex, fragment, |_, _| {});
 
     unsafe {
         ctx.use_cached_program(shader_index);

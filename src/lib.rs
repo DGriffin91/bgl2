@@ -1,5 +1,5 @@
 pub mod mesh_util;
-//pub mod prepare_image;
+pub mod prepare_image;
 pub mod prepare_mesh;
 pub mod render;
 
@@ -154,24 +154,6 @@ impl BevyGlContext {
         }
     }
 
-    pub fn shader_cached(
-        &mut self,
-        vertex: &str,
-        fragment: &str,
-        // TODO what happens in before_link needs to be part of hash
-        before_link: Option<fn(&glow::Context, glow::Program)>,
-    ) -> ShaderIndex {
-        let key = shader_key(vertex, fragment);
-        if let Some(index) = self.shader_cache_map.get(&key) {
-            *index
-        } else {
-            let shader = self.shader(vertex, fragment, before_link);
-            let index = self.shader_cache.len() as u32;
-            self.shader_cache.push(shader);
-            index
-        }
-    }
-
     pub fn use_cached_program(&self, index: ShaderIndex) {
         unsafe { self.gl.use_program(Some(self.shader_cache[index as usize])) };
     }
@@ -194,11 +176,28 @@ impl BevyGlContext {
         }
     }
 
-    pub fn shader(
+    pub fn shader_cached<F: Fn(&glow::Context, glow::Program)>(
+        &mut self,
+        vertex: &str,
+        fragment: &str,
+        before_link: F,
+    ) -> ShaderIndex {
+        let key = shader_key(vertex, fragment);
+        if let Some(index) = self.shader_cache_map.get(&key) {
+            *index
+        } else {
+            let shader = self.shader(vertex, fragment, before_link);
+            let index = self.shader_cache.len() as u32;
+            self.shader_cache.push(shader);
+            index
+        }
+    }
+
+    pub fn shader<F: Fn(&glow::Context, glow::Program)>(
         &self,
         vertex: &str,
         fragment: &str,
-        before_link: Option<fn(&glow::Context, glow::Program)>,
+        before_link: F,
     ) -> glow::Program {
         unsafe {
             let program = self.gl.create_program().expect("Cannot create program");
@@ -234,9 +233,7 @@ impl BevyGlContext {
                 shaders.push(shader);
             }
 
-            if let Some(before_link) = before_link {
-                before_link(&self.gl, program);
-            }
+            before_link(&self.gl, program);
 
             self.gl.link_program(program);
 

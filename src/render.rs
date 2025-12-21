@@ -1,6 +1,6 @@
-use bevy::{mesh::MeshPlugin, prelude::*};
+use bevy::prelude::*;
 
-use crate::prepare_mesh::PrepareMeshPlugin;
+use crate::{prepare_image::PrepareImagePlugin, prepare_mesh::PrepareMeshPlugin};
 
 #[derive(Debug, Hash, PartialEq, Eq, Clone, SystemSet)]
 pub enum RenderSet {
@@ -17,7 +17,7 @@ pub struct OpenGLRenderPlugin;
 
 impl Plugin for OpenGLRenderPlugin {
     fn build(&self, app: &mut App) {
-        app.add_plugins(PrepareMeshPlugin);
+        app.add_plugins((PrepareMeshPlugin, PrepareImagePlugin));
 
         // TODO reference: https://github.com/bevyengine/bevy/pull/22144
         app.configure_sets(Startup, (RenderSet::Init, RenderSet::Pipeline));
