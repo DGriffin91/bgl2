@@ -6,10 +6,11 @@ use bevy::{
     winit::WINIT_WINDOWS,
 };
 use bevy_opengl::{
-    AttribType, BevyGlContext,
+    BevyGlContext, if_loc,
     prepare_image::GpuImages,
     prepare_mesh::GPUMeshBufferMap,
     render::{OpenGLRenderPlugin, RenderSet},
+    unifrom_slot_builder::UniformSlotBuilder,
 };
 use glow::HasContext;
 
@@ -122,6 +123,7 @@ fn update(
     let _clip_to_world = view_to_world * clip_to_view;
 
     let vertex = r#"
+attribute vec4 Vertex_Tangent;
 attribute vec3 Vertex_Position;
 attribute vec3 Vertex_Normal;
 attribute vec2 Vertex_Uv;
@@ -130,6 +132,7 @@ attribute vec2 Vertex_Uv_1;
 uniform mat4 mvp;
 uniform mat4 local_to_world;
 
+varying vec4 tangent;
 varying vec3 normal;
 varying vec2 uv_0;
 varying vec2 uv_1;
@@ -139,25 +142,70 @@ void main() {
     normal = (local_to_world * vec4(Vertex_Normal, 0.0)).xyz;
     uv_0 = Vertex_Uv;
     uv_1 = Vertex_Uv_1;
+    tangent = Vertex_Tangent;
 }
     "#;
 
     let fragment = r#"
+varying vec4 tangent;
 varying vec3 normal;
 varying vec2 uv_0;
 varying vec2 uv_1;
 
+uniform vec4 base_color;
+
+uniform bool double_sided;
+uniform bool flip_normal_map_y;
+uniform int flags;
+
 uniform sampler2D color_texture;
+uniform sampler2D normal_texture;
+
+
+// http://www.mikktspace.com/
+vec3 apply_normal_mapping(vec3 ws_normal, vec4 ws_tangent, vec2 uv) {
+    vec3 N = ws_normal;
+    vec3 T = ws_tangent.xyz;
+    vec3 B = ws_tangent.w * cross(N, T);
+    vec3 Nt = texture2D(normal_texture, uv).rgb * 2.0 - 1.0; // Only supports 3-component normal maps
+    if (flip_normal_map_y) {
+        Nt.y = -Nt.y;
+    }
+    if (double_sided && !gl_FrontFacing) {
+        Nt = -Nt;
+    }
+    N = Nt.x * T + Nt.y * B + Nt.z * N;
+    return normalize(N);
+}
 
 void main() {
-    gl_FragColor = texture2D(color_texture, uv_0);
+    vec3 light_dir = normalize(vec3(-0.2, 0.2, 1.0));
+    vec4 color = base_color * texture2D(color_texture, uv_0);
+    vec3 normal = apply_normal_mapping(normal, tangent, uv_0);
+    float light = max(dot(light_dir, normal), 0.0);
+    gl_FragColor = vec4(color.rgb * light, color.a);
 }
 "#;
 
     let shader_index = ctx.shader_cached(vertex, fragment, |_, _| {});
     let mvp_loc = ctx.get_uniform_location(shader_index, "mvp");
     let local_to_world_loc = ctx.get_uniform_location(shader_index, "local_to_world");
-    let color_texture_loc = ctx.get_uniform_location(shader_index, "color_texture");
+
+    let mut material_builder =
+        UniformSlotBuilder::<StandardMaterial>::new(&ctx, &gpu_images, shader_index);
+
+    material_builder.value("flip_normal_map_y", |ctx, material, loc| {
+        ctx.uniform_bool(&loc, material.flip_normal_map_y)
+    });
+    material_builder.value("double_sided", |ctx, material, loc| {
+        ctx.uniform_bool(&loc, material.double_sided)
+    });
+    material_builder.value("base_color", |ctx, material, loc| {
+        ctx.uniform_vec4(&loc, material.base_color.to_linear().to_f32_array().into())
+    });
+
+    material_builder.texture("color_texture", |material| &material.base_color_texture);
+    material_builder.texture("normal_texture", |material| &material.normal_map_texture);
 
     ctx.use_cached_program(shader_index);
     unsafe {
@@ -182,48 +230,18 @@ void main() {
             unsafe {
                 ctx.gl
                     .bind_buffer(glow::ELEMENT_ARRAY_BUFFER, Some(buffers.index));
+            };
 
-                for (att, buffer) in &buffers.buffers {
-                    // TODO use caching to avoid looking up from the name here
-                    if let Some(loc) = ctx.get_attrib_location(shader_index, att.name) {
-                        let attrib_type = AttribType::from_bevy_vertex_format(att.format);
-                        ctx.bind_vertex_attrib(
-                            loc,
-                            att.format.size() as u32 / attrib_type.gl_type_bytes(),
-                            attrib_type,
-                            *buffer,
-                        );
-                    }
-                }
+            buffers.bind(&ctx, shader_index);
 
-                if let Some(ref mvp_loc) = mvp_loc {
-                    ctx.gl.uniform_matrix_4_f32_slice(
-                        Some(&mvp_loc),
-                        false,
-                        &local_to_clip.to_cols_array(),
-                    );
-                }
+            if_loc(&mvp_loc, |loc| ctx.uniform_mat4(&loc, &local_to_clip));
+            if_loc(&local_to_world_loc, |loc| {
+                ctx.uniform_mat4(&loc, &local_to_world)
+            });
 
-                if let Some(ref local_to_world_loc) = local_to_world_loc {
-                    ctx.gl.uniform_matrix_4_f32_slice(
-                        Some(&local_to_world_loc),
-                        false,
-                        &local_to_world.to_cols_array(),
-                    );
-                }
+            material_builder.run(material);
 
-                // TODO fallback texture
-                if let Some(ref color_texture_loc) = color_texture_loc {
-                    if let Some(ref image_h) = material.base_color_texture {
-                        if let Some(index) = gpu_images.mapping.get(&image_h.id()) {
-                            let texture = gpu_images.images[*index as usize];
-                            ctx.gl.active_texture(glow::TEXTURE0);
-                            ctx.gl.bind_texture(glow::TEXTURE_2D, Some(texture));
-                            ctx.gl.uniform_1_i32(Some(&color_texture_loc), 0);
-                        }
-                    }
-                }
-
+            unsafe {
                 ctx.gl.draw_elements(
                     glow::TRIANGLES,
                     buffers.index_count as i32,

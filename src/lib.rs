@@ -2,6 +2,7 @@ pub mod mesh_util;
 pub mod prepare_image;
 pub mod prepare_mesh;
 pub mod render;
+pub mod unifrom_slot_builder;
 
 use std::hash::Hash;
 use std::hash::Hasher;
@@ -13,6 +14,7 @@ use glow::ActiveUniform;
 use glow::Buffer;
 use glow::HasContext;
 
+use glow::UniformLocation;
 #[cfg(target_arch = "wasm32")]
 use winit::platform::web::WindowExtWebSys;
 
@@ -334,6 +336,49 @@ impl BevyGlContext {
         }
     }
 
+    pub fn uniform_vec4(&self, location: &UniformLocation, data: Vec4) {
+        unsafe {
+            self.gl
+                .uniform_4_f32_slice(Some(&location), &data.to_array())
+        };
+    }
+
+    pub fn uniform_vec3(&self, location: &UniformLocation, data: Vec3) {
+        unsafe {
+            self.gl
+                .uniform_3_f32_slice(Some(&location), &data.to_array())
+        };
+    }
+
+    pub fn uniform_vec2(&self, location: &UniformLocation, data: Vec2) {
+        unsafe {
+            self.gl
+                .uniform_2_f32_slice(Some(&location), &data.to_array())
+        };
+    }
+
+    pub fn uniform_f32(&self, location: &UniformLocation, data: f32) {
+        unsafe { self.gl.uniform_1_f32(Some(&location), data) };
+    }
+
+    pub fn uniform_i32(&self, location: &UniformLocation, data: i32) {
+        unsafe { self.gl.uniform_1_i32(Some(&location), data) };
+    }
+
+    pub fn uniform_bool(&self, location: &UniformLocation, data: bool) {
+        unsafe {
+            self.gl
+                .uniform_1_i32(Some(&location), if data { 1 } else { 0 })
+        };
+    }
+
+    pub fn uniform_mat4(&self, location: &UniformLocation, data: &Mat4) {
+        unsafe {
+            self.gl
+                .uniform_matrix_4_f32_slice(Some(&location), false, &data.to_cols_array())
+        };
+    }
+
     /// Only calls flush on webgl
     pub fn swap(&self) {
         unsafe { self.gl.flush() };
@@ -435,4 +480,10 @@ pub fn shader_key(vertex: &str, fragment: &str) -> u64 {
     vertex.hash(&mut hasher);
     fragment.hash(&mut hasher);
     hasher.finish()
+}
+
+pub fn if_loc<F: Fn(&UniformLocation)>(loc: &Option<UniformLocation>, f: F) {
+    if let Some(loc) = loc {
+        f(loc)
+    }
 }

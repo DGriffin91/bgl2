@@ -3,7 +3,7 @@ use bytemuck::cast_slice;
 use glow::{Context, HasContext};
 
 use crate::{
-    BevyGlContext,
+    AttribType, BevyGlContext,
     mesh_util::{get_attribute_f32x3, get_mesh_indices},
     render::RenderSet,
 };
@@ -36,6 +36,21 @@ impl GpuMeshBuffers {
             gl.delete_buffer(self.index);
             for (_, b) in &self.buffers {
                 gl.delete_buffer(*b)
+            }
+        }
+    }
+
+    pub fn bind(&self, ctx: &BevyGlContext, shader_index: u32) {
+        for (att, buffer) in &self.buffers {
+            // TODO use caching to avoid looking up from the name here
+            if let Some(loc) = ctx.get_attrib_location(shader_index, att.name) {
+                let attrib_type = AttribType::from_bevy_vertex_format(att.format);
+                ctx.bind_vertex_attrib(
+                    loc,
+                    att.format.size() as u32 / attrib_type.gl_type_bytes(),
+                    attrib_type,
+                    *buffer,
+                );
             }
         }
     }
