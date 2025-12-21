@@ -375,6 +375,59 @@ impl AttribType {
             AttribType::Float => 4,
         }
     }
+
+    /// Unsupported types are replaced with the closest thing that is the same size in bytes.
+    /// Ex: VertexFormat::Unorm8 => AttribType::UnsignedByte
+    pub fn from_bevy_vertex_format(format: bevy::mesh::VertexFormat) -> Self {
+        use bevy::mesh::VertexFormat;
+        match format {
+            VertexFormat::Uint8 => AttribType::UnsignedByte,
+            VertexFormat::Uint8x2 => AttribType::UnsignedByte,
+            VertexFormat::Uint8x4 => AttribType::UnsignedByte,
+            VertexFormat::Sint8 => AttribType::Byte,
+            VertexFormat::Sint8x2 => AttribType::Byte,
+            VertexFormat::Sint8x4 => AttribType::Byte,
+            VertexFormat::Unorm8 => AttribType::UnsignedByte,
+            VertexFormat::Unorm8x2 => AttribType::UnsignedByte,
+            VertexFormat::Unorm8x4 => AttribType::UnsignedByte,
+            VertexFormat::Snorm8 => AttribType::Byte,
+            VertexFormat::Snorm8x2 => AttribType::Byte,
+            VertexFormat::Snorm8x4 => AttribType::Byte,
+            VertexFormat::Uint16 => AttribType::UnsignedShort,
+            VertexFormat::Uint16x2 => AttribType::UnsignedShort,
+            VertexFormat::Uint16x4 => AttribType::UnsignedShort,
+            VertexFormat::Sint16 => AttribType::Short,
+            VertexFormat::Sint16x2 => AttribType::Short,
+            VertexFormat::Sint16x4 => AttribType::Short,
+            VertexFormat::Unorm16 => AttribType::UnsignedShort,
+            VertexFormat::Unorm16x2 => AttribType::UnsignedShort,
+            VertexFormat::Unorm16x4 => AttribType::UnsignedShort,
+            VertexFormat::Snorm16 => AttribType::Short,
+            VertexFormat::Snorm16x2 => AttribType::Short,
+            VertexFormat::Snorm16x4 => AttribType::Short,
+            VertexFormat::Float16 => AttribType::UnsignedShort,
+            VertexFormat::Float16x2 => AttribType::UnsignedShort,
+            VertexFormat::Float16x4 => AttribType::UnsignedShort,
+            VertexFormat::Float32 => AttribType::Float,
+            VertexFormat::Float32x2 => AttribType::Float,
+            VertexFormat::Float32x3 => AttribType::Float,
+            VertexFormat::Float32x4 => AttribType::Float,
+            VertexFormat::Uint32 => AttribType::Float,
+            VertexFormat::Uint32x2 => AttribType::Float,
+            VertexFormat::Uint32x3 => AttribType::Float,
+            VertexFormat::Uint32x4 => AttribType::Float,
+            VertexFormat::Sint32 => AttribType::Float,
+            VertexFormat::Sint32x2 => AttribType::Float,
+            VertexFormat::Sint32x3 => AttribType::Float,
+            VertexFormat::Sint32x4 => AttribType::Float,
+            VertexFormat::Float64 => unimplemented!(),
+            VertexFormat::Float64x2 => unimplemented!(),
+            VertexFormat::Float64x3 => unimplemented!(),
+            VertexFormat::Float64x4 => unimplemented!(),
+            VertexFormat::Unorm10_10_10_2 => unimplemented!(),
+            VertexFormat::Unorm8x4Bgra => unimplemented!(),
+        }
+    }
 }
 
 pub fn shader_key(vertex: &str, fragment: &str) -> u64 {

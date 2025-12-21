@@ -11,7 +11,7 @@ use bevy_opengl::{
     prepare_mesh::GPUMeshBufferMap,
     render::{OpenGLRenderPlugin, RenderSet},
 };
-use glow::{Context, HasContext};
+use glow::HasContext;
 
 fn main() {
     //unsafe {
@@ -122,10 +122,10 @@ fn update(
     let _clip_to_world = view_to_world * clip_to_view;
 
     let vertex = r#"
-attribute vec3 a_position;
-attribute vec3 a_normal;
-attribute vec2 a_uv_0;
-attribute vec2 a_uv_1;
+attribute vec3 Vertex_Position;
+attribute vec3 Vertex_Normal;
+attribute vec2 Vertex_Uv;
+attribute vec2 Vertex_Uv_1;
 
 uniform mat4 mvp;
 uniform mat4 local_to_world;
@@ -135,10 +135,10 @@ varying vec2 uv_0;
 varying vec2 uv_1;
 
 void main() {
-    gl_Position = mvp * vec4(a_position, 1.0);
-    normal = (local_to_world * vec4(a_normal, 0.0)).xyz;
-    uv_0 = a_uv_0;
-    uv_1 = a_uv_1;
+    gl_Position = mvp * vec4(Vertex_Position, 1.0);
+    normal = (local_to_world * vec4(Vertex_Normal, 0.0)).xyz;
+    uv_0 = Vertex_Uv;
+    uv_1 = Vertex_Uv_1;
 }
     "#;
 
@@ -154,16 +154,7 @@ void main() {
 }
 "#;
 
-    let a_position_index = 0;
-    let a_normal_index = 1;
-    let a_uv_0_index = 2;
-    let a_uv_1_index = 3;
-    let shader_index = ctx.shader_cached(vertex, fragment, |context: &Context, program| unsafe {
-        context.bind_attrib_location(program, a_position_index, "a_position");
-        context.bind_attrib_location(program, a_normal_index, "a_normal");
-        context.bind_attrib_location(program, a_uv_0_index, "a_uv_0");
-        context.bind_attrib_location(program, a_uv_1_index, "a_uv_1");
-    });
+    let shader_index = ctx.shader_cached(vertex, fragment, |_, _| {});
     let mvp_loc = ctx.get_uniform_location(shader_index, "mvp");
     let local_to_world_loc = ctx.get_uniform_location(shader_index, "local_to_world");
     let color_texture_loc = ctx.get_uniform_location(shader_index, "color_texture");
@@ -192,18 +183,17 @@ void main() {
                 ctx.gl
                     .bind_buffer(glow::ELEMENT_ARRAY_BUFFER, Some(buffers.index));
 
-                ctx.bind_vertex_attrib(a_position_index, 3, AttribType::Float, buffers.position);
-
-                if let Some(normal) = buffers.normal {
-                    ctx.bind_vertex_attrib(a_normal_index, 3, AttribType::Float, normal);
-                }
-
-                if let Some(uv_0) = buffers.uv_0 {
-                    ctx.bind_vertex_attrib(a_uv_0_index, 2, AttribType::Float, uv_0);
-                }
-
-                if let Some(uv_1) = buffers.uv_1 {
-                    ctx.bind_vertex_attrib(a_uv_1_index, 2, AttribType::Float, uv_1);
+                for (att, buffer) in &buffers.buffers {
+                    // TODO use caching to avoid looking up from the name here
+                    if let Some(loc) = ctx.get_attrib_location(shader_index, att.name) {
+                        let attrib_type = AttribType::from_bevy_vertex_format(att.format);
+                        ctx.bind_vertex_attrib(
+                            loc,
+                            att.format.size() as u32 / attrib_type.gl_type_bytes(),
+                            attrib_type,
+                            *buffer,
+                        );
+                    }
                 }
 
                 if let Some(ref mvp_loc) = mvp_loc {

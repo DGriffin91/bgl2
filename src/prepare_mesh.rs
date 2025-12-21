@@ -1,10 +1,10 @@
-use bevy::{platform::collections::HashMap, prelude::*};
+use bevy::{mesh::MeshVertexAttribute, platform::collections::HashMap, prelude::*};
 use bytemuck::cast_slice;
 use glow::{Context, HasContext};
 
 use crate::{
     BevyGlContext,
-    mesh_util::{get_attribute_f32x2, get_attribute_f32x3, get_attribute_f32x4, get_mesh_indices},
+    mesh_util::{get_attribute_f32x3, get_mesh_indices},
     render::RenderSet,
 };
 
@@ -23,13 +23,8 @@ impl Plugin for PrepareMeshPlugin {
 }
 
 pub struct GpuMeshBuffers {
-    pub position: glow::Buffer,
+    pub buffers: Vec<(MeshVertexAttribute, glow::Buffer)>,
     pub index: glow::Buffer,
-    pub normal: Option<glow::Buffer>,
-    pub tangent: Option<glow::Buffer>,
-    pub uv_0: Option<glow::Buffer>,
-    pub uv_1: Option<glow::Buffer>,
-    pub color: Option<glow::Buffer>,
     pub index_count: usize,
 }
 
@@ -38,12 +33,10 @@ impl GpuMeshBuffers {
         unsafe {
             // TODO make reusable pattern. Can we access gl another way? If we do this on drop it would need to be
             // on the right thread?
-            gl.delete_buffer(self.position);
             gl.delete_buffer(self.index);
-            self.normal.map(|b| gl.delete_buffer(b));
-            self.tangent.map(|b| gl.delete_buffer(b));
-            self.uv_0.map(|b| gl.delete_buffer(b));
-            self.color.map(|b| gl.delete_buffer(b));
+            for (_, b) in &self.buffers {
+                gl.delete_buffer(*b)
+            }
         }
     }
 }
@@ -97,22 +90,23 @@ pub fn send_standard_meshes_to_gpu(
             vertex_count
         };
 
+        let buffers = mesh
+            .attributes()
+            .map(|(mesh_attribute, data)| {
+                // TODO convert unsupported data types (like f16 to f32)
+                (
+                    *mesh_attribute,
+                    ctx.gen_vbo(data.get_bytes(), glow::STATIC_DRAW),
+                )
+            })
+            .collect();
+
         if let Some(old_buffer) = gpu_meshes.buffers.insert(
             mesh_h.clone(),
             GpuMeshBuffers {
+                buffers,
                 index_count: index_count,
-                position: ctx.gen_vbo(cast_slice(&positions), glow::STATIC_DRAW),
                 index: ctx.gen_vbo_element(cast_slice(&index_buffer_data), glow::STATIC_DRAW),
-                normal: get_attribute_f32x3(mesh, Mesh::ATTRIBUTE_NORMAL)
-                    .map(|data| ctx.gen_vbo(cast_slice(data), glow::STATIC_DRAW)),
-                tangent: get_attribute_f32x4(mesh, Mesh::ATTRIBUTE_TANGENT)
-                    .map(|data| ctx.gen_vbo(cast_slice(data), glow::STATIC_DRAW)),
-                uv_0: get_attribute_f32x2(mesh, Mesh::ATTRIBUTE_UV_0)
-                    .map(|data| ctx.gen_vbo(cast_slice(data), glow::STATIC_DRAW)),
-                uv_1: get_attribute_f32x2(mesh, Mesh::ATTRIBUTE_UV_1)
-                    .map(|data| ctx.gen_vbo(cast_slice(data), glow::STATIC_DRAW)),
-                color: get_attribute_f32x4(mesh, Mesh::ATTRIBUTE_COLOR)
-                    .map(|data| ctx.gen_vbo(cast_slice(data), glow::STATIC_DRAW)),
             },
         ) {
             old_buffer.delete(&ctx.gl);
