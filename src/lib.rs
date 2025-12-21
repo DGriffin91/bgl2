@@ -8,6 +8,8 @@ use std::hash::Hasher;
 
 use bevy::{platform::collections::HashMap, prelude::*};
 
+use glow::ActiveAttribute;
+use glow::ActiveUniform;
 use glow::Buffer;
 use glow::HasContext;
 
@@ -162,6 +164,42 @@ impl BevyGlContext {
         unsafe {
             self.gl
                 .get_attrib_location(self.shader_cache[shader_index as usize], name)
+        }
+    }
+
+    pub fn get_attribute_count(&self, shader_index: ShaderIndex) -> u32 {
+        unsafe {
+            self.gl
+                .get_active_attributes(self.shader_cache[shader_index as usize])
+        }
+    }
+
+    pub fn get_attribute(
+        &self,
+        shader_index: ShaderIndex,
+        attribute_index: u32,
+    ) -> Option<ActiveAttribute> {
+        unsafe {
+            self.gl
+                .get_active_attribute(self.shader_cache[shader_index as usize], attribute_index)
+        }
+    }
+
+    pub fn get_uniform_count(&self, shader_index: ShaderIndex) -> u32 {
+        unsafe {
+            self.gl
+                .get_active_uniforms(self.shader_cache[shader_index as usize])
+        }
+    }
+
+    pub fn get_uniform(
+        &self,
+        shader_index: ShaderIndex,
+        uniform_index: u32,
+    ) -> Option<ActiveUniform> {
+        unsafe {
+            self.gl
+                .get_active_uniform(self.shader_cache[shader_index as usize], uniform_index)
         }
     }
 

@@ -68,13 +68,13 @@ pub fn send_images_to_gpu(
                 let texture = ctx.gl.create_texture().unwrap();
                 ctx.gl.bind_texture(glow::TEXTURE_2D, Some(texture));
                 // TODO actually set correct params/format/mips
-                ctx.gl.texture_parameter_i32(
-                    texture,
+                ctx.gl.tex_parameter_i32(
+                    glow::TEXTURE_2D,
                     glow::TEXTURE_MIN_FILTER,
                     glow::LINEAR as i32,
                 );
-                ctx.gl.texture_parameter_i32(
-                    texture,
+                ctx.gl.tex_parameter_i32(
+                    glow::TEXTURE_2D,
                     glow::TEXTURE_MAG_FILTER,
                     glow::LINEAR as i32,
                 );

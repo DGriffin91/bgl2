@@ -206,7 +206,7 @@ void main() {
                     ctx.bind_vertex_attrib(a_uv_1_index, 2, AttribType::Float, uv_1);
                 }
 
-                if let Some(mvp_loc) = mvp_loc {
+                if let Some(ref mvp_loc) = mvp_loc {
                     ctx.gl.uniform_matrix_4_f32_slice(
                         Some(&mvp_loc),
                         false,
@@ -214,7 +214,7 @@ void main() {
                     );
                 }
 
-                if let Some(local_to_world_loc) = local_to_world_loc {
+                if let Some(ref local_to_world_loc) = local_to_world_loc {
                     ctx.gl.uniform_matrix_4_f32_slice(
                         Some(&local_to_world_loc),
                         false,
@@ -223,7 +223,7 @@ void main() {
                 }
 
                 // TODO fallback texture
-                if let Some(color_texture_loc) = color_texture_loc {
+                if let Some(ref color_texture_loc) = color_texture_loc {
                     if let Some(ref image_h) = material.base_color_texture {
                         if let Some(index) = gpu_images.mapping.get(&image_h.id()) {
                             let texture = gpu_images.images[*index as usize];
