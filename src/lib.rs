@@ -116,9 +116,9 @@ impl BevyGlContext {
                 println!("GL_VERSION  : {}", version);
             }
 
-            match gl_surface
-                .set_swap_interval(&gl_context, SwapInterval::Wait(NonZeroU32::new(1).unwrap()))
-            {
+            // TODO make vsync configurable
+            // gl_surface.set_swap_interval(&gl_context, SwapInterval::Wait(NonZeroU32::new(1).unwrap()))
+            match gl_surface.set_swap_interval(&gl_context, SwapInterval::DontWait) {
                 Ok(_) => (),
                 Err(e) => eprintln!("Couldn't set_swap_interval wait: {e}"),
             };

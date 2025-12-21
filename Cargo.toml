@@ -29,3 +29,6 @@ web-sys = { version = "0.3", features = [
     "Window",
 ] }
 wasm-bindgen = { version = "0.2" }
+
+[dev-dependencies]
+bevy_basic_camera = { git = "https://github.com/DGriffin91/bevy_basic_camera", branch = "bevy18" }

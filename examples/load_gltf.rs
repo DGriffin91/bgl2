@@ -1,10 +1,13 @@
 use bevy::{
+    asset::UnapprovedPathMode,
+    diagnostic::{FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin},
     ecs::system::SystemState,
     light::CascadeShadowConfigBuilder,
     prelude::*,
     render::{RenderPlugin, settings::WgpuSettings},
     winit::WINIT_WINDOWS,
 };
+use bevy_basic_camera::{CameraController, CameraControllerPlugin};
 use bevy_opengl::{
     BevyGlContext, if_loc,
     prepare_image::GpuImages,
@@ -28,15 +31,24 @@ fn main() {
 
     App::new()
         .add_plugins((
-            DefaultPlugins.set(RenderPlugin {
-                render_creation: WgpuSettings {
-                    backends: None,
+            DefaultPlugins
+                .set(RenderPlugin {
+                    render_creation: WgpuSettings {
+                        backends: None,
+                        ..default()
+                    }
+                    .into(),
                     ..default()
-                }
-                .into(),
-                ..default()
-            }),
+                })
+                .set(AssetPlugin {
+                    // Allow scenes to be loaded from anywhere on disk
+                    unapproved_path_mode: UnapprovedPathMode::Allow,
+                    ..default()
+                }),
             OpenGLRenderPlugin,
+            CameraControllerPlugin,
+            LogDiagnosticsPlugin::default(),
+            FrameTimeDiagnosticsPlugin::default(),
         ))
         .add_systems(Startup, (setup, init))
         .add_systems(Update, update.in_set(RenderSet::Render))
@@ -54,7 +66,22 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
             intensity: 250.0,
             ..default()
         },
+        CameraController {
+            orbit_mode: true,
+            orbit_focus: Vec3::new(0.0, 0.3, 0.0),
+            ..default()
+        },
     ));
+
+    //commands.spawn(SceneRoot(asset_server.load(
+    //    "../../../bevy/bistro/bevy_main/assets/bistro_exterior/BistroExterior.gltf#Scene0",
+    //)));
+    //commands.spawn((
+    //    SceneRoot(asset_server.load(
+    //        "../../../bevy/bistro/bevy_main/assets/bistro_interior_wine/BistroInterior_Wine.gltf#Scene0",
+    //    )),
+    //    Transform::from_xyz(0.0, 0.3, -0.2),
+    //));
 
     commands.spawn((
         DirectionalLight {
@@ -112,7 +139,7 @@ fn update(
 ) {
     let (_entity, _camera, cam_global_trans, cam_proj) = *camera;
 
-    let _view_position = cam_global_trans.translation();
+    let view_position = cam_global_trans.translation();
     let view_to_clip = cam_proj.get_clip_from_view();
     let view_to_world = cam_global_trans.to_matrix();
     let world_to_view = view_to_world.inverse();
@@ -131,7 +158,9 @@ attribute vec2 Vertex_Uv_1;
 
 uniform mat4 mvp;
 uniform mat4 local_to_world;
+uniform mat4 view_to_world;
 
+varying vec3 ws_position;
 varying vec4 tangent;
 varying vec3 normal;
 varying vec2 uv_0;
@@ -140,6 +169,7 @@ varying vec2 uv_1;
 void main() {
     gl_Position = mvp * vec4(Vertex_Position, 1.0);
     normal = (local_to_world * vec4(Vertex_Normal, 0.0)).xyz;
+    ws_position = (local_to_world * vec4(Vertex_Position, 1.0)).xyz;
     uv_0 = Vertex_Uv;
     uv_1 = Vertex_Uv_1;
     tangent = Vertex_Tangent;
@@ -147,12 +177,16 @@ void main() {
     "#;
 
     let fragment = r#"
+varying vec3 ws_position;
 varying vec4 tangent;
 varying vec3 normal;
 varying vec2 uv_0;
 varying vec2 uv_1;
 
+uniform vec3 view_position;
+
 uniform vec4 base_color;
+uniform float perceptual_roughness;
 
 uniform bool double_sided;
 uniform bool flip_normal_map_y;
@@ -160,7 +194,7 @@ uniform int flags;
 
 uniform sampler2D color_texture;
 uniform sampler2D normal_texture;
-
+uniform sampler2D metallic_roughness_texture;
 
 // http://www.mikktspace.com/
 vec3 apply_normal_mapping(vec3 ws_normal, vec4 ws_tangent, vec2 uv) {
@@ -179,15 +213,37 @@ vec3 apply_normal_mapping(vec3 ws_normal, vec4 ws_tangent, vec2 uv) {
 }
 
 void main() {
-    vec3 light_dir = normalize(vec3(-0.2, 0.2, 1.0));
+    vec3 light_dir = normalize(vec3(-0.2, 0.5, 1.0));
+    vec3 light_color = vec3(1.0, 1.0, 1.0);
+    float specular_intensity = 0.5;
+
+    vec3 V = normalize(ws_position - view_position);
+    vec3 view_dir = normalize(view_position - ws_position);
+
+    vec4 metallic_roughness = texture2D(metallic_roughness_texture, uv_0);
+    float roughness = metallic_roughness.b * perceptual_roughness;
+    roughness *= roughness;
+
     vec4 color = base_color * texture2D(color_texture, uv_0);
     vec3 normal = apply_normal_mapping(normal, tangent, uv_0);
-    float light = max(dot(light_dir, normal), 0.0);
-    gl_FragColor = vec4(color.rgb * light, color.a);
+
+    // https://en.wikipedia.org/wiki/Blinn%E2%80%93Phong_reflection_model
+    float lambert = dot(light_dir, normal);
+
+    vec3 half_dir = normalize(light_dir + view_dir);
+    float spec_angle = max(dot(half_dir, normal), 0.0);
+    float shininess = mix(1.0, 32.0, (1.0 - roughness));
+    float specular = pow(spec_angle, shininess);
+    specular = specular * pow(min(lambert + 1.0, 1.0), 4.0); // Fade out spec TODO improve
+
+    lambert = max(lambert, 0.0);
+    gl_FragColor = vec4(color.rgb * lambert * light_color + specular * light_color * specular_intensity, color.a);
 }
 "#;
 
     let shader_index = ctx.shader_cached(vertex, fragment, |_, _| {});
+    ctx.use_cached_program(shader_index);
+
     let mvp_loc = ctx.get_uniform_location(shader_index, "mvp");
     let local_to_world_loc = ctx.get_uniform_location(shader_index, "local_to_world");
 
@@ -203,11 +259,23 @@ void main() {
     material_builder.value("base_color", |ctx, material, loc| {
         ctx.uniform_vec4(&loc, material.base_color.to_linear().to_f32_array().into())
     });
+    material_builder.value("perceptual_roughness", |ctx, material, loc| {
+        ctx.uniform_f32(&loc, material.perceptual_roughness)
+    });
 
     material_builder.texture("color_texture", |material| &material.base_color_texture);
     material_builder.texture("normal_texture", |material| &material.normal_map_texture);
+    material_builder.texture("metallic_roughness_texture", |material| {
+        &material.metallic_roughness_texture
+    });
 
-    ctx.use_cached_program(shader_index);
+    if let Some(loc) = ctx.get_uniform_location(shader_index, "view_to_world") {
+        ctx.uniform_mat4(&loc, &view_to_world)
+    }
+    if let Some(loc) = ctx.get_uniform_location(shader_index, "view_position") {
+        ctx.uniform_vec3(&loc, view_position)
+    }
+
     unsafe {
         ctx.gl.clear_color(0.0, 0.0, 0.0, 1.0);
         ctx.gl.clear_depth_f32(0.0);

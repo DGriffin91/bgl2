@@ -92,9 +92,11 @@ pub fn send_standard_meshes_to_gpu(
         let vertex_count = positions.len();
 
         if vertex_count >= u16::MAX as usize {
-            panic!(
+            warn!(
                 "Too many vertices. Base OpenGL ES 2.0 and WebGL 1.0 only support GL_UNSIGNED_BYTE or GL_UNSIGNED_SHORT"
-            )
+            );
+            // TODO: could split up mesh data and then issue multiple calls
+            continue;
         }
 
         let index_count = if let Some(index_count) = get_mesh_indices(mesh, &mut index_buffer_data)
