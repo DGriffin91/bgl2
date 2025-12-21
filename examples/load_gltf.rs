@@ -51,7 +51,7 @@ fn main() {
             FrameTimeDiagnosticsPlugin::default(),
         ))
         .add_systems(Startup, (setup, init))
-        .add_systems(Update, update.in_set(RenderSet::Render))
+        .add_systems(PostUpdate, update.in_set(RenderSet::Render))
         .run();
 }
 
@@ -73,15 +73,15 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
         },
     ));
 
-    //commands.spawn(SceneRoot(asset_server.load(
-    //    "../../../bevy/bistro/bevy_main/assets/bistro_exterior/BistroExterior.gltf#Scene0",
-    //)));
-    //commands.spawn((
-    //    SceneRoot(asset_server.load(
-    //        "../../../bevy/bistro/bevy_main/assets/bistro_interior_wine/BistroInterior_Wine.gltf#Scene0",
-    //    )),
-    //    Transform::from_xyz(0.0, 0.3, -0.2),
-    //));
+    commands.spawn(SceneRoot(asset_server.load(
+        "../../../bevy/bistro/bevy_main/assets/bistro_exterior/BistroExterior.gltf#Scene0",
+    )));
+    commands.spawn((
+        SceneRoot(asset_server.load(
+            "../../../bevy/bistro/bevy_main/assets/bistro_interior_wine/BistroInterior_Wine.gltf#Scene0",
+        )),
+        Transform::from_xyz(0.0, 0.3, -0.2),
+    ));
 
     commands.spawn((
         DirectionalLight {
@@ -225,6 +225,11 @@ void main() {
     roughness *= roughness;
 
     vec4 color = base_color * texture2D(color_texture, uv_0);
+
+    if(color.a < 0.5) {
+        discard;
+    }
+
     vec3 normal = apply_normal_mapping(normal, tangent, uv_0);
 
     // https://en.wikipedia.org/wiki/Blinn%E2%80%93Phong_reflection_model
@@ -277,48 +282,79 @@ void main() {
     }
 
     unsafe {
+        ctx.gl.depth_mask(true);
         ctx.gl.clear_color(0.0, 0.0, 0.0, 1.0);
         ctx.gl.clear_depth_f32(0.0);
         ctx.gl
             .clear(glow::COLOR_BUFFER_BIT | glow::DEPTH_BUFFER_BIT);
-        ctx.gl.enable(glow::DEPTH_TEST);
-        ctx.gl.depth_func(glow::GREATER);
     };
 
-    for (_entity, view_vis, transform, mesh, material_h) in &mut mesh_entities {
-        if !view_vis.get() {
-            continue;
-        }
-        let Some(material) = materials.get(material_h) else {
-            continue;
-        };
-        if let Some(buffers) = gpu_meshes.buffers.get(&mesh.id()) {
-            let local_to_world = transform.to_matrix();
-            let local_to_clip = world_to_clip * local_to_world;
+    for alpha_blend in [false, true] {
+        if alpha_blend {
             unsafe {
+                ctx.gl.enable(glow::DEPTH_TEST);
+                ctx.gl.enable(glow::BLEND);
+                ctx.gl.depth_func(glow::GREATER);
+                ctx.gl.depth_mask(false);
                 ctx.gl
-                    .bind_buffer(glow::ELEMENT_ARRAY_BUFFER, Some(buffers.index));
-            };
-
-            buffers.bind(&ctx, shader_index);
-
-            if_loc(&mvp_loc, |loc| ctx.uniform_mat4(&loc, &local_to_clip));
-            if_loc(&local_to_world_loc, |loc| {
-                ctx.uniform_mat4(&loc, &local_to_world)
-            });
-
-            material_builder.run(material);
-
+                    .blend_func(glow::SRC_ALPHA, glow::ONE_MINUS_SRC_ALPHA);
+            }
+        } else {
             unsafe {
-                ctx.gl.draw_elements(
-                    glow::TRIANGLES,
-                    buffers.index_count as i32,
-                    glow::UNSIGNED_SHORT, // Base ES 2.0 and WebGL 1.0 only support GL_UNSIGNED_BYTE or GL_UNSIGNED_SHORT
-                    0,
-                );
-                ctx.gl.bind_vertex_array(None);
+                ctx.gl.enable(glow::DEPTH_TEST);
+                ctx.gl.disable(glow::BLEND);
+                ctx.gl.depth_func(glow::GREATER);
+                ctx.gl.depth_mask(true);
+                ctx.gl.blend_func(glow::ZERO, glow::ONE);
+            }
+        }
+
+        for (_entity, view_vis, transform, mesh, material_h) in &mut mesh_entities {
+            if !view_vis.get() {
+                continue;
+            }
+            let Some(material) = materials.get(material_h) else {
+                continue;
             };
+            let material_blend = match material.alpha_mode {
+                AlphaMode::Opaque => false,
+                AlphaMode::Mask(_) => false,
+                AlphaMode::Blend => true,
+                AlphaMode::Premultiplied => true,
+                AlphaMode::AlphaToCoverage => true,
+                AlphaMode::Add => true,
+                AlphaMode::Multiply => true,
+            };
+            if material_blend != alpha_blend {
+                continue;
+            }
+            if let Some(buffers) = gpu_meshes.buffers.get(&mesh.id()) {
+                let local_to_world = transform.to_matrix();
+                let local_to_clip = world_to_clip * local_to_world;
+                unsafe {
+                    ctx.gl
+                        .bind_buffer(glow::ELEMENT_ARRAY_BUFFER, Some(buffers.index));
+                };
+
+                buffers.bind(&ctx, shader_index);
+
+                if_loc(&mvp_loc, |loc| ctx.uniform_mat4(&loc, &local_to_clip));
+                if_loc(&local_to_world_loc, |loc| {
+                    ctx.uniform_mat4(&loc, &local_to_world)
+                });
+
+                material_builder.run(material);
+
+                unsafe {
+                    ctx.gl.draw_elements(
+                        glow::TRIANGLES,
+                        buffers.index_count as i32,
+                        glow::UNSIGNED_SHORT, // Base ES 2.0 and WebGL 1.0 only support GL_UNSIGNED_BYTE or GL_UNSIGNED_SHORT
+                        0,
+                    );
+                    ctx.gl.bind_vertex_array(None);
+                };
+            }
         }
     }
-    ctx.swap();
 }

@@ -30,7 +30,7 @@ fn main() {
             //bevy::gltf::GltfPlugin::default(),
         ))
         .add_systems(Startup, init)
-        .add_systems(Update, update)
+        .add_systems(PostUpdate, update)
         .run();
 }
 

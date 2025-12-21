@@ -59,6 +59,15 @@ impl BevyGlContext {
         #[allow(unused_variables)] bevy_window: &Window,
         winit_window: &bevy::window::WindowWrapper<winit::window::Window>,
     ) -> BevyGlContext {
+        let vsync = match bevy_window.present_mode {
+            bevy::window::PresentMode::AutoVsync => true,
+            bevy::window::PresentMode::AutoNoVsync => false,
+            bevy::window::PresentMode::Fifo => true,
+            bevy::window::PresentMode::FifoRelaxed => true,
+            bevy::window::PresentMode::Immediate => false,
+            bevy::window::PresentMode::Mailbox => false,
+        };
+
         #[cfg(not(target_arch = "wasm32"))]
         {
             use glutin::{
@@ -140,12 +149,21 @@ impl BevyGlContext {
                 println!("GL_VERSION  : {}", version);
             }
 
-            // TODO make vsync configurable
-            // gl_surface.set_swap_interval(&gl_context, SwapInterval::Wait(NonZeroU32::new(1).unwrap()))
-            match gl_surface.set_swap_interval(&gl_context, SwapInterval::DontWait) {
+            let interval = if vsync {
+                SwapInterval::Wait(NonZeroU32::new(1).unwrap())
+            } else {
+                SwapInterval::DontWait
+            };
+
+            match gl_surface.set_swap_interval(&gl_context, interval) {
                 Ok(_) => (),
                 Err(e) => eprintln!("Couldn't set_swap_interval wait: {e}"),
             };
+
+            let width = bevy_window.physical_size().x as u32;
+            let height = bevy_window.physical_size().y as u32;
+
+            unsafe { gl.viewport(0, 0, width as i32, height as i32) };
 
             BevyGlContext {
                 gl,
