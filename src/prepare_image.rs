@@ -27,6 +27,7 @@ pub struct GpuImages {
     pub images: Vec<glow::Texture>,
     pub mapping: HashMap<AssetId<Image>, u32>,
     pub updated_this_frame: bool,
+    pub placeholder: Option<glow::Texture>,
 }
 
 pub fn send_images_to_gpu(
@@ -54,6 +55,25 @@ pub fn send_images_to_gpu(
 
     if updated.is_empty() {
         return;
+    }
+
+    if gpu_images.placeholder.is_none() {
+        unsafe {
+            let texture = ctx.gl.create_texture().unwrap();
+            ctx.gl.bind_texture(glow::TEXTURE_2D, Some(texture));
+            ctx.gl.tex_image_2d(
+                glow::TEXTURE_2D,
+                0,
+                glow::RGBA as i32,
+                1,
+                1,
+                0,
+                glow::RGBA,
+                glow::UNSIGNED_BYTE,
+                PixelUnpackData::Slice(Some(&[255, 255, 255, 255])),
+            );
+            gpu_images.placeholder = Some(texture);
+        }
     }
 
     gpu_images.updated_this_frame = true;

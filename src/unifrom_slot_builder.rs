@@ -51,17 +51,17 @@ impl<'a, T> UniformSlotBuilder<'a, T> {
             f(&self.ctx, material, location)
         }
         for (i, (location, f)) in self.texture_slots.iter().enumerate() {
+            let mut texture = self.gpu_images.placeholder.unwrap();
             if let Some(image_h) = f(material) {
                 if let Some(index) = self.gpu_images.mapping.get(&image_h.id()) {
-                    let texture = self.gpu_images.images[*index as usize];
-                    unsafe {
-                        // TODO needs to use info from the texture to actually setup correctly
-                        // TODO fallback texture
-                        self.ctx.gl.active_texture(glow::TEXTURE0 + i as u32);
-                        self.ctx.gl.bind_texture(glow::TEXTURE_2D, Some(texture));
-                        self.ctx.gl.uniform_1_i32(Some(&location), i as i32);
-                    }
+                    texture = self.gpu_images.images[*index as usize];
                 }
+            }
+            unsafe {
+                // TODO needs to use info from the texture to actually setup correctly
+                self.ctx.gl.active_texture(glow::TEXTURE0 + i as u32);
+                self.ctx.gl.bind_texture(glow::TEXTURE_2D, Some(texture));
+                self.ctx.gl.uniform_1_i32(Some(&location), i as i32);
             }
         }
     }
