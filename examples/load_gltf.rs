@@ -5,7 +5,8 @@ use bevy::{
     light::CascadeShadowConfigBuilder,
     prelude::*,
     render::{RenderPlugin, settings::WgpuSettings},
-    winit::WINIT_WINDOWS,
+    window::PresentMode,
+    winit::{UpdateMode, WINIT_WINDOWS, WinitSettings},
 };
 use bevy_basic_camera::{CameraController, CameraControllerPlugin};
 use bevy_opengl::{
@@ -30,6 +31,10 @@ fn main() {
     //}
 
     App::new()
+        .insert_resource(WinitSettings {
+            focused_mode: UpdateMode::Continuous,
+            unfocused_mode: UpdateMode::Continuous,
+        })
         .add_plugins((
             DefaultPlugins
                 .set(RenderPlugin {
@@ -43,6 +48,13 @@ fn main() {
                 .set(AssetPlugin {
                     // Allow scenes to be loaded from anywhere on disk
                     unapproved_path_mode: UnapprovedPathMode::Allow,
+                    ..default()
+                })
+                .set(WindowPlugin {
+                    primary_window: Some(Window {
+                        present_mode: PresentMode::Immediate,
+                        ..default()
+                    }),
                     ..default()
                 }),
             OpenGLRenderPlugin,
