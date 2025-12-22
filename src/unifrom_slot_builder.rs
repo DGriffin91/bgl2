@@ -66,8 +66,8 @@ impl<'a, T> UniformSlotBuilder<'a, T> {
         for (i, (location, f)) in self.texture_slots.iter().enumerate() {
             let mut texture = self.gpu_images.placeholder.unwrap();
             if let Some(image_h) = f(material) {
-                if let Some(index) = self.gpu_images.mapping.get(&image_h.id()) {
-                    texture = self.gpu_images.images[*index as usize];
+                if let Some(t) = self.gpu_images.mapping.get(&image_h.id()) {
+                    texture = *t;
                 }
             }
             unsafe {

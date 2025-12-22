@@ -9,6 +9,7 @@ use bevy::{
     winit::{UpdateMode, WINIT_WINDOWS, WinitSettings},
 };
 use bevy_basic_camera::{CameraController, CameraControllerPlugin};
+use bevy_mod_mipmap_generator::{MipmapGeneratorPlugin, generate_mipmaps};
 use bevy_opengl::{
     BevyGlContext,
     prepare_image::GpuImages,
@@ -62,6 +63,8 @@ fn main() {
             LogDiagnosticsPlugin::default(),
             FrameTimeDiagnosticsPlugin::default(),
         ))
+        .add_plugins(MipmapGeneratorPlugin)
+        .add_systems(Update, generate_mipmaps::<StandardMaterial>)
         .add_systems(Startup, (setup, init))
         .add_systems(PostUpdate, update.in_set(RenderSet::Render))
         .run();
@@ -85,13 +88,11 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
         },
     ));
 
-    commands.spawn(SceneRoot(asset_server.load(
-        "../../../bevy/bistro/bevy_main/assets/bistro_exterior/BistroExterior.gltf#Scene0",
-    )));
+    commands.spawn(SceneRoot(
+        asset_server.load("models/bistro_exterior/BistroExterior.gltf#Scene0"),
+    ));
     commands.spawn((
-        SceneRoot(asset_server.load(
-            "../../../bevy/bistro/bevy_main/assets/bistro_interior_wine/BistroInterior_Wine.gltf#Scene0",
-        )),
+        SceneRoot(asset_server.load("models/bistro_interior_wine/BistroInterior_Wine.gltf#Scene0")),
         Transform::from_xyz(0.0, 0.3, -0.2),
     ));
 
@@ -114,6 +115,7 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
     commands.spawn(SceneRoot(asset_server.load(
         GltfAssetLabel::Scene(0).from_asset("models/FlightHelmet/FlightHelmet.gltf"),
     )));
+    commands.spawn(SceneRoot(asset_server.load("models/Wood/wood.gltf#Scene0")));
 }
 
 fn init(world: &mut World, params: &mut SystemState<Query<(Entity, &mut Window)>>) {
