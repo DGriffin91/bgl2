@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use bevy::{mesh::MeshVertexAttribute, platform::collections::HashMap, prelude::*};
 use bytemuck::cast_slice;
 use glow::{Context, HasContext};
@@ -13,12 +15,13 @@ pub struct PrepareMeshPlugin;
 
 impl Plugin for PrepareMeshPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<GPUMeshBufferMap>().add_systems(
-            PostUpdate,
-            (send_standard_meshes_to_gpu)
-                .chain()
-                .in_set(RenderSet::Prepare),
-        );
+        app.init_non_send_resource::<GPUMeshBufferMap>()
+            .add_systems(
+                PostUpdate,
+                (send_standard_meshes_to_gpu)
+                    .chain()
+                    .in_set(RenderSet::Prepare),
+            );
     }
 }
 
@@ -32,8 +35,6 @@ pub struct GpuMeshBuffers {
 impl GpuMeshBuffers {
     fn delete(&self, gl: &Context) {
         unsafe {
-            // TODO make reusable pattern. Can we access gl another way? If we do this on drop it would need to be
-            // on the right thread?
             gl.delete_buffer(self.index);
             for (_, b) in &self.buffers {
                 gl.delete_buffer(*b)
@@ -57,19 +58,32 @@ impl GpuMeshBuffers {
     }
 }
 
-#[derive(Resource, Default)]
+#[derive(Default)]
 pub struct GPUMeshBufferMap {
     pub buffers: HashMap<AssetId<Mesh>, GpuMeshBuffers>,
+    pub gl: Option<Rc<glow::Context>>,
+}
+
+impl Drop for GPUMeshBufferMap {
+    fn drop(&mut self) {
+        for (_, buffer) in &self.buffers {
+            buffer.delete(self.gl.as_ref().unwrap());
+        }
+    }
 }
 
 pub fn send_standard_meshes_to_gpu(
     meshes: Res<Assets<Mesh>>,
-    mut gpu_meshes: ResMut<GPUMeshBufferMap>,
+    mut gpu_meshes: NonSendMut<GPUMeshBufferMap>,
     mut mesh_events: MessageReader<AssetEvent<Mesh>>,
     mut index_buffer_data_u16: Local<Vec<u16>>,
     mut index_buffer_data_u32: Local<Vec<u32>>,
     ctx: If<NonSend<BevyGlContext>>,
 ) {
+    if gpu_meshes.gl.is_none() {
+        gpu_meshes.gl = Some(ctx.gl.clone());
+    }
+
     for event in mesh_events.read() {
         let mesh_h = match event {
             AssetEvent::LoadedWithDependencies { id }

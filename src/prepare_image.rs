@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use bevy::{
     image::{CompressedImageFormatSupport, CompressedImageFormats},
     platform::collections::{HashMap, HashSet},
@@ -15,27 +17,38 @@ pub struct PrepareImagePlugin;
 impl Plugin for PrepareImagePlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(CompressedImageFormatSupport(CompressedImageFormats::BC))
-            .init_resource::<GpuImages>()
-            .add_systems(
-                PostUpdate,
-                send_images_to_gpu.chain().in_set(RenderSet::Prepare),
-            );
+            .init_non_send_resource::<GpuImages>()
+            .add_systems(PostUpdate, send_images_to_gpu.in_set(RenderSet::Prepare));
     }
 }
 
-#[derive(Resource, Default)]
+#[derive(Default)]
 pub struct GpuImages {
     pub mapping: HashMap<AssetId<Image>, glow::Texture>,
     pub updated_this_frame: bool,
     pub placeholder: Option<glow::Texture>,
+    pub gl: Option<Rc<glow::Context>>,
+}
+
+impl Drop for GpuImages {
+    fn drop(&mut self) {
+        unsafe {
+            for texture in self.mapping.values() {
+                self.gl.as_ref().unwrap().delete_texture(*texture);
+            }
+        }
+    }
 }
 
 pub fn send_images_to_gpu(
-    mut gpu_images: ResMut<GpuImages>,
+    mut gpu_images: NonSendMut<GpuImages>,
     images: Res<Assets<Image>>,
     mut image_events: MessageReader<AssetEvent<Image>>,
     ctx: If<NonSend<BevyGlContext>>,
 ) {
+    if gpu_images.gl.is_none() {
+        gpu_images.gl = Some(ctx.gl.clone());
+    }
     gpu_images.updated_this_frame = false;
 
     let mut updated: HashSet<AssetId<Image>> = HashSet::new();

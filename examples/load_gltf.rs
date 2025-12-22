@@ -147,9 +147,9 @@ fn update(
     )>,
     camera: Single<(Entity, &Camera, &GlobalTransform, &Projection)>,
     mut ctx: NonSendMut<BevyGlContext>,
-    gpu_meshes: Res<GPUMeshBufferMap>,
+    gpu_meshes: NonSend<GPUMeshBufferMap>,
     materials: Res<Assets<StandardMaterial>>,
-    gpu_images: Res<GpuImages>,
+    gpu_images: NonSend<GpuImages>,
 ) {
     let (_entity, _camera, cam_global_trans, cam_proj) = *camera;
 
