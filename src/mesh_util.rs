@@ -3,7 +3,7 @@ use bevy::{
     prelude::*,
 };
 
-pub fn get_mesh_indices(mesh: &Mesh, index_buffer_data: &mut Vec<u16>) -> Option<usize> {
+pub fn get_mesh_indices_u16(mesh: &Mesh, index_buffer_data: &mut Vec<u16>) -> usize {
     if let Some(indices) = mesh.indices() {
         match indices {
             Indices::U16(indices) => {
@@ -15,9 +15,35 @@ pub fn get_mesh_indices(mesh: &Mesh, index_buffer_data: &mut Vec<u16>) -> Option
                 }
             }
         };
-        Some(indices.len())
+        indices.len()
     } else {
-        None
+        let vertex_count = get_attribute_f32x3(mesh, Mesh::ATTRIBUTE_POSITION)
+            .unwrap()
+            .len();
+        index_buffer_data.append(&mut (0..vertex_count as u16).map(|i| i).collect::<Vec<_>>());
+        vertex_count
+    }
+}
+
+pub fn get_mesh_indices_u32(mesh: &Mesh, index_buffer_data: &mut Vec<u32>) -> usize {
+    if let Some(indices) = mesh.indices() {
+        match indices {
+            Indices::U16(indices) => {
+                for i in indices.iter() {
+                    index_buffer_data.push(*i as u32);
+                }
+            }
+            Indices::U32(indices) => {
+                index_buffer_data.extend(indices);
+            }
+        };
+        indices.len()
+    } else {
+        let vertex_count = get_attribute_f32x3(mesh, Mesh::ATTRIBUTE_POSITION)
+            .unwrap()
+            .len();
+        index_buffer_data.append(&mut (0..vertex_count as u32).map(|i| i).collect::<Vec<_>>());
+        vertex_count
     }
 }
 

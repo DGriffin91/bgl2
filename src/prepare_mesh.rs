@@ -4,7 +4,7 @@ use glow::{Context, HasContext};
 
 use crate::{
     AttribType, BevyGlContext,
-    mesh_util::{get_attribute_f32x3, get_mesh_indices},
+    mesh_util::{get_attribute_f32x3, get_mesh_indices_u16, get_mesh_indices_u32},
     render::RenderSet,
 };
 
@@ -26,6 +26,7 @@ pub struct GpuMeshBuffers {
     pub buffers: Vec<(MeshVertexAttribute, glow::Buffer)>,
     pub index: glow::Buffer,
     pub index_count: usize,
+    pub index_element_type: u32,
 }
 
 impl GpuMeshBuffers {
@@ -65,7 +66,8 @@ pub fn send_standard_meshes_to_gpu(
     meshes: Res<Assets<Mesh>>,
     mut gpu_meshes: ResMut<GPUMeshBufferMap>,
     mut mesh_events: MessageReader<AssetEvent<Mesh>>,
-    mut index_buffer_data: Local<Vec<u16>>,
+    mut index_buffer_data_u16: Local<Vec<u16>>,
+    mut index_buffer_data_u32: Local<Vec<u32>>,
     ctx: If<NonSend<BevyGlContext>>,
 ) {
     for event in mesh_events.read() {
@@ -84,27 +86,45 @@ pub fn send_standard_meshes_to_gpu(
         let Some(mesh) = meshes.get(*mesh_h) else {
             continue;
         };
-        index_buffer_data.clear();
+        index_buffer_data_u16.clear();
+        index_buffer_data_u32.clear();
 
         let positions = get_attribute_f32x3(mesh, Mesh::ATTRIBUTE_POSITION)
             .expect("Meshes vertex positions are required");
 
         let vertex_count = positions.len();
+        let index_count;
 
-        if vertex_count >= u16::MAX as usize {
-            warn!(
-                "Too many vertices. Base OpenGL ES 2.0 and WebGL 1.0 only support GL_UNSIGNED_BYTE or GL_UNSIGNED_SHORT"
-            );
-            // TODO: could split up mesh data and then issue multiple calls
-            continue;
-        }
-
-        let index_count = if let Some(index_count) = get_mesh_indices(mesh, &mut index_buffer_data)
-        {
-            index_count
+        let (index_buffer, element_type) = if vertex_count >= u16::MAX as usize {
+            let es_or_webgl = unsafe {
+                ctx.gl
+                    .get_parameter_string(glow::SHADING_LANGUAGE_VERSION)
+                    .contains(" ES ")
+            };
+            if es_or_webgl
+                && !ctx
+                    .gl
+                    .supported_extensions()
+                    .contains("OES_element_index_uint")
+            {
+                warn!(
+                    "Too many vertices. Base OpenGL ES 2.0 and WebGL 1.0 with OES_element_index_uint only support GL_UNSIGNED_BYTE or GL_UNSIGNED_SHORT"
+                );
+                // Could split up mesh data and then issue multiple calls, but if a platform doesn't have
+                // OES_element_index_uint it might also struggle with so many tris.
+                continue;
+            }
+            index_count = get_mesh_indices_u32(mesh, &mut index_buffer_data_u32);
+            (
+                ctx.gen_vbo_element(cast_slice(&index_buffer_data_u32), glow::STATIC_DRAW),
+                glow::UNSIGNED_INT,
+            )
         } else {
-            index_buffer_data.append(&mut (0..vertex_count as u16).map(|i| i).collect::<Vec<_>>());
-            vertex_count
+            index_count = get_mesh_indices_u16(mesh, &mut index_buffer_data_u16);
+            (
+                ctx.gen_vbo_element(cast_slice(&index_buffer_data_u16), glow::STATIC_DRAW),
+                glow::UNSIGNED_SHORT,
+            )
         };
 
         let buffers = mesh
@@ -123,7 +143,8 @@ pub fn send_standard_meshes_to_gpu(
             GpuMeshBuffers {
                 buffers,
                 index_count: index_count,
-                index: ctx.gen_vbo_element(cast_slice(&index_buffer_data), glow::STATIC_DRAW),
+                index: index_buffer,
+                index_element_type: element_type,
             },
         ) {
             old_buffer.delete(&ctx.gl);

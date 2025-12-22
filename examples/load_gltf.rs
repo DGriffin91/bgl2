@@ -349,7 +349,7 @@ void main() {
                     ctx.gl.draw_elements(
                         glow::TRIANGLES,
                         buffers.index_count as i32,
-                        glow::UNSIGNED_SHORT, // Base ES 2.0 and WebGL 1.0 only support GL_UNSIGNED_BYTE or GL_UNSIGNED_SHORT
+                        buffers.index_element_type,
                         0,
                     );
                     ctx.gl.bind_vertex_array(None);
