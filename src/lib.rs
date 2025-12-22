@@ -14,7 +14,6 @@ use glow::ActiveUniform;
 use glow::Buffer;
 use glow::HasContext;
 
-use glow::UniformLocation;
 #[cfg(target_arch = "wasm32")]
 use winit::platform::web::WindowExtWebSys;
 
@@ -59,17 +58,17 @@ impl BevyGlContext {
         #[allow(unused_variables)] bevy_window: &Window,
         winit_window: &bevy::window::WindowWrapper<winit::window::Window>,
     ) -> BevyGlContext {
-        let vsync = match bevy_window.present_mode {
-            bevy::window::PresentMode::AutoVsync => true,
-            bevy::window::PresentMode::AutoNoVsync => false,
-            bevy::window::PresentMode::Fifo => true,
-            bevy::window::PresentMode::FifoRelaxed => true,
-            bevy::window::PresentMode::Immediate => false,
-            bevy::window::PresentMode::Mailbox => false,
-        };
-
         #[cfg(not(target_arch = "wasm32"))]
         {
+            let vsync = match bevy_window.present_mode {
+                bevy::window::PresentMode::AutoVsync => true,
+                bevy::window::PresentMode::AutoNoVsync => false,
+                bevy::window::PresentMode::Fifo => true,
+                bevy::window::PresentMode::FifoRelaxed => true,
+                bevy::window::PresentMode::Immediate => false,
+                bevy::window::PresentMode::Mailbox => false,
+            };
+
             use glutin::{
                 config::{ConfigSurfaceTypes, ConfigTemplateBuilder, GlConfig},
                 context::{ContextApi, ContextAttributesBuilder},
@@ -483,12 +482,6 @@ pub fn shader_key(vertex: &str, fragment: &str) -> u64 {
     vertex.hash(&mut hasher);
     fragment.hash(&mut hasher);
     hasher.finish()
-}
-
-pub fn if_loc<F: Fn(&UniformLocation)>(loc: &Option<UniformLocation>, f: F) {
-    if let Some(loc) = loc {
-        f(loc)
-    }
 }
 
 pub trait UniformValue: Sized + 'static {

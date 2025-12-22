@@ -10,7 +10,7 @@ use bevy::{
 };
 use bevy_basic_camera::{CameraController, CameraControllerPlugin};
 use bevy_opengl::{
-    BevyGlContext, UniformValue, if_loc,
+    BevyGlContext,
     prepare_image::GpuImages,
     prepare_mesh::GPUMeshBufferMap,
     render::{OpenGLRenderPlugin, RenderSet},
