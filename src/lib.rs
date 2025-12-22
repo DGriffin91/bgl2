@@ -3,9 +3,11 @@ pub mod prepare_image;
 pub mod prepare_mesh;
 pub mod render;
 pub mod unifrom_slot_builder;
+pub mod watchers;
 
 use std::hash::Hash;
 use std::hash::Hasher;
+use std::path::Path;
 use std::rc::Rc;
 
 use bevy::{platform::collections::HashMap, prelude::*};
@@ -18,6 +20,9 @@ use glow::HasContext;
 #[cfg(target_arch = "wasm32")]
 use winit::platform::web::WindowExtWebSys;
 
+#[cfg(not(target_arch = "wasm32"))]
+use crate::watchers::Watchers;
+
 pub type ShaderIndex = u32;
 
 pub struct BevyGlContext {
@@ -29,6 +34,9 @@ pub struct BevyGlContext {
     #[cfg(not(target_arch = "wasm32"))]
     pub gl_display: Option<glutin::display::Display>,
     pub shader_cache: Vec<glow::Program>,
+    #[cfg(not(target_arch = "wasm32"))]
+    pub shader_cache_map: HashMap<u64, (ShaderIndex, Watchers)>,
+    #[cfg(target_arch = "wasm32")]
     pub shader_cache_map: HashMap<u64, ShaderIndex>,
 }
 
@@ -194,7 +202,7 @@ impl BevyGlContext {
             let gl = glow::Context::from_webgl1_context(webgl_context);
             unsafe { gl.viewport(0, 0, width as i32, height as i32) };
             BevyGlContext {
-                gl,
+                gl: Rc::new(gl),
                 shader_cache: Default::default(),
                 shader_cache_map: Default::default(),
             }
@@ -259,29 +267,51 @@ impl BevyGlContext {
         }
     }
 
-    pub fn shader_cached<F: Fn(&glow::Context, glow::Program)>(
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn shader_cached<P: AsRef<Path> + ?Sized>(
         &mut self,
-        vertex: &str,
-        fragment: &str,
-        before_link: F,
+        vertex: &P,
+        fragment: &P,
     ) -> ShaderIndex {
-        let key = shader_key(vertex, fragment);
-        if let Some(index) = self.shader_cache_map.get(&key) {
+        let key = shader_key(vertex.as_ref(), fragment.as_ref());
+        if let Some((index, watcher)) = self.shader_cache_map.get(&key) {
+            if watcher.check() {
+                let vertex_src = std::fs::read_to_string(vertex).unwrap();
+                let fragment_src = std::fs::read_to_string(fragment).unwrap();
+                let old_shader = self.shader_cache[*index as usize];
+                unsafe { self.gl.delete_program(old_shader) }
+                self.shader_cache[*index as usize] = self.shader(&vertex_src, &fragment_src);
+            }
             *index
         } else {
-            let shader = self.shader(vertex, fragment, before_link);
+            let vertex_src = std::fs::read_to_string(vertex).unwrap();
+            let fragment_src = std::fs::read_to_string(fragment).unwrap();
+            let shader = self.shader(&vertex_src, &fragment_src);
             let index = self.shader_cache.len() as u32;
             self.shader_cache.push(shader);
+            self.shader_cache_map.insert(
+                key,
+                (index, Watchers::new(&[vertex.as_ref(), fragment.as_ref()])),
+            );
             index
         }
     }
 
-    pub fn shader<F: Fn(&glow::Context, glow::Program)>(
-        &self,
-        vertex: &str,
-        fragment: &str,
-        before_link: F,
-    ) -> glow::Program {
+    #[cfg(target_arch = "wasm32")]
+    pub fn shader_cached_wasm(&mut self, vertex_src: &str, fragment_src: &str) -> ShaderIndex {
+        let key = shader_key(vertex_src.as_ref(), fragment_src.as_ref());
+        if let Some(index) = self.shader_cache_map.get(&key) {
+            *index
+        } else {
+            let shader = self.shader(&vertex_src, &fragment_src);
+            let index = self.shader_cache.len() as u32;
+            self.shader_cache.push(shader);
+            self.shader_cache_map.insert(key, index);
+            index
+        }
+    }
+
+    pub fn shader(&self, vertex: &str, fragment: &str) -> glow::Program {
         unsafe {
             let program = self.gl.create_program().expect("Cannot create program");
 
@@ -318,8 +348,6 @@ impl BevyGlContext {
                 self.gl.attach_shader(program, shader);
                 shaders.push(shader);
             }
-
-            before_link(&self.gl, program);
 
             self.gl.link_program(program);
 
@@ -478,7 +506,7 @@ impl AttribType {
     }
 }
 
-pub fn shader_key(vertex: &str, fragment: &str) -> u64 {
+pub fn shader_key(vertex: &Path, fragment: &Path) -> u64 {
     let mut hasher = std::hash::DefaultHasher::new();
     vertex.hash(&mut hasher);
     fragment.hash(&mut hasher);
