@@ -10,7 +10,7 @@ use bevy::{
 };
 use bevy_basic_camera::{CameraController, CameraControllerPlugin};
 use bevy_opengl::{
-    BevyGlContext, if_loc,
+    BevyGlContext, UniformValue, if_loc,
     prepare_image::GpuImages,
     prepare_mesh::GPUMeshBufferMap,
     render::{OpenGLRenderPlugin, RenderSet},
@@ -168,7 +168,7 @@ attribute vec3 Vertex_Normal;
 attribute vec2 Vertex_Uv;
 attribute vec2 Vertex_Uv_1;
 
-uniform mat4 mvp;
+uniform mat4 local_to_clip;
 uniform mat4 local_to_world;
 uniform mat4 view_to_world;
 
@@ -179,7 +179,7 @@ varying vec2 uv_0;
 varying vec2 uv_1;
 
 void main() {
-    gl_Position = mvp * vec4(Vertex_Position, 1.0);
+    gl_Position = local_to_clip * vec4(Vertex_Position, 1.0);
     normal = (local_to_world * vec4(Vertex_Normal, 0.0)).xyz;
     ws_position = (local_to_world * vec4(Vertex_Position, 1.0)).xyz;
     uv_0 = Vertex_Uv;
@@ -262,40 +262,22 @@ void main() {
     let shader_index = ctx.shader_cached(vertex, fragment, |_, _| {});
     ctx.use_cached_program(shader_index);
 
-    let mvp_loc = ctx.get_uniform_location(shader_index, "mvp");
-    let local_to_world_loc = ctx.get_uniform_location(shader_index, "local_to_world");
+    let mut build = UniformSlotBuilder::<StandardMaterial>::new(&ctx, &gpu_images, shader_index);
 
-    let mut material_builder =
-        UniformSlotBuilder::<StandardMaterial>::new(&ctx, &gpu_images, shader_index);
+    build.val("flip_normal_map_y", |m| m.flip_normal_map_y);
+    build.val("double_sided", |m| m.double_sided);
+    build.val("alpha_blend", |m| material_alpha_blend(m));
+    build.val("base_color", |m| m.base_color.to_linear().to_vec4());
+    build.val("perceptual_roughness", |m| m.perceptual_roughness);
 
-    material_builder.value("flip_normal_map_y", |ctx, material, loc| {
-        ctx.uniform_bool(&loc, material.flip_normal_map_y)
-    });
-    material_builder.value("double_sided", |ctx, material, loc| {
-        ctx.uniform_bool(&loc, material.double_sided)
-    });
-    material_builder.value("alpha_blend", |ctx, material, loc| {
-        ctx.uniform_bool(&loc, material_alpha_blend(material))
-    });
-    material_builder.value("base_color", |ctx, material, loc| {
-        ctx.uniform_vec4(&loc, material.base_color.to_linear().to_f32_array().into())
-    });
-    material_builder.value("perceptual_roughness", |ctx, material, loc| {
-        ctx.uniform_f32(&loc, material.perceptual_roughness)
+    build.tex("color_texture", |m| &m.base_color_texture);
+    build.tex("normal_texture", |m| &m.normal_map_texture);
+    build.tex("metallic_roughness_texture", |m| {
+        &m.metallic_roughness_texture
     });
 
-    material_builder.texture("color_texture", |material| &material.base_color_texture);
-    material_builder.texture("normal_texture", |material| &material.normal_map_texture);
-    material_builder.texture("metallic_roughness_texture", |material| {
-        &material.metallic_roughness_texture
-    });
-
-    if let Some(loc) = ctx.get_uniform_location(shader_index, "view_to_world") {
-        ctx.uniform_mat4(&loc, &view_to_world)
-    }
-    if let Some(loc) = ctx.get_uniform_location(shader_index, "view_position") {
-        ctx.uniform_vec3(&loc, view_position)
-    }
+    build.upload("view_to_world", view_to_world);
+    build.upload("view_position", view_position);
 
     unsafe {
         ctx.gl.depth_mask(true);
@@ -345,12 +327,11 @@ void main() {
 
                 buffers.bind(&ctx, shader_index);
 
-                if_loc(&mvp_loc, |loc| ctx.uniform_mat4(&loc, &local_to_clip));
-                if_loc(&local_to_world_loc, |loc| {
-                    ctx.uniform_mat4(&loc, &local_to_world)
-                });
+                // TODO cache
+                build.upload("local_to_clip", local_to_clip);
+                build.upload("local_to_world", local_to_world);
 
-                material_builder.run(material);
+                build.run(material);
 
                 unsafe {
                     ctx.gl.draw_elements(

@@ -1,7 +1,7 @@
-use bevy::{asset::Handle, image::Image};
+use bevy::{asset::Handle, image::Image, math::*};
 use glow::HasContext;
 
-use crate::{BevyGlContext, prepare_image::GpuImages};
+use crate::{BevyGlContext, UniformValue, prepare_image::GpuImages};
 
 // Probably not very fast, but writing uniforms every frame isn't either and I think the opengl uniform fn's themselves
 // are maybe also dyn dispatch?
@@ -10,10 +10,12 @@ pub struct UniformSlotBuilder<'a, T> {
     pub ctx: &'a BevyGlContext,
     pub gpu_images: &'a GpuImages,
     pub shader_index: u32,
+
     pub value_slots: Vec<(
         glow::UniformLocation,
-        Box<dyn Fn(&'a BevyGlContext, &T, &glow::UniformLocation)>,
+        Box<dyn Fn(&BevyGlContext, &T, &glow::UniformLocation)>,
     )>,
+
     pub texture_slots: Vec<(
         glow::UniformLocation,
         Box<dyn Fn(&T) -> &Option<Handle<Image>>>,
@@ -30,15 +32,26 @@ impl<'a, T> UniformSlotBuilder<'a, T> {
             texture_slots: Vec::new(),
         }
     }
-    pub fn value<F>(&mut self, name: &str, f: F)
+
+    pub fn val<V, F>(&mut self, name: &str, f: F)
     where
-        F: Fn(&'a BevyGlContext, &T, &glow::UniformLocation) + 'static,
+        V: UniformValue,
+        F: Fn(&T) -> V + 'static,
     {
         if let Some(location) = self.ctx.get_uniform_location(self.shader_index, name) {
-            self.value_slots.push((location, Box::new(f)))
+            self.value_slots.push((
+                location,
+                Box::new(
+                    move |ctx: &BevyGlContext, material: &T, loc: &glow::UniformLocation| {
+                        let v: V = f(material);
+                        v.upload(ctx, loc);
+                    },
+                ),
+            ));
         }
     }
-    pub fn texture<F>(&mut self, name: &str, f: F)
+
+    pub fn tex<F>(&mut self, name: &str, f: F)
     where
         F: Fn(&T) -> &Option<Handle<Image>> + 'static,
     {
@@ -63,6 +76,16 @@ impl<'a, T> UniformSlotBuilder<'a, T> {
                 self.ctx.gl.bind_texture(glow::TEXTURE_2D, Some(texture));
                 self.ctx.gl.uniform_1_i32(Some(&location), i as i32);
             }
+        }
+    }
+
+    /// Uploads immediately if location is found
+    pub fn upload<V>(&self, name: &str, v: V)
+    where
+        V: UniformValue,
+    {
+        if let Some(location) = self.ctx.get_uniform_location(self.shader_index, name) {
+            v.upload(&self.ctx, &location);
         }
     }
 }
