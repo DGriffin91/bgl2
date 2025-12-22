@@ -190,6 +190,7 @@ uniform float perceptual_roughness;
 
 uniform bool double_sided;
 uniform bool flip_normal_map_y;
+uniform bool alpha_blend;
 uniform int flags;
 
 uniform sampler2D color_texture;
@@ -226,7 +227,7 @@ void main() {
 
     vec4 color = base_color * texture2D(color_texture, uv_0);
 
-    if(color.a < 0.5) {
+    if (!alpha_blend && (color.a < 0.5)) {
         discard;
     }
 
@@ -260,6 +261,9 @@ void main() {
     });
     material_builder.value("double_sided", |ctx, material, loc| {
         ctx.uniform_bool(&loc, material.double_sided)
+    });
+    material_builder.value("alpha_blend", |ctx, material, loc| {
+        ctx.uniform_bool(&loc, material_alpha_blend(material))
     });
     material_builder.value("base_color", |ctx, material, loc| {
         ctx.uniform_vec4(&loc, material.base_color.to_linear().to_f32_array().into())
@@ -316,16 +320,7 @@ void main() {
             let Some(material) = materials.get(material_h) else {
                 continue;
             };
-            let material_blend = match material.alpha_mode {
-                AlphaMode::Opaque => false,
-                AlphaMode::Mask(_) => false,
-                AlphaMode::Blend => true,
-                AlphaMode::Premultiplied => true,
-                AlphaMode::AlphaToCoverage => true,
-                AlphaMode::Add => true,
-                AlphaMode::Multiply => true,
-            };
-            if material_blend != alpha_blend {
+            if material_alpha_blend(material) != alpha_blend {
                 continue;
             }
             if let Some(buffers) = gpu_meshes.buffers.get(&mesh.id()) {
@@ -357,4 +352,17 @@ void main() {
             }
         }
     }
+}
+
+fn material_alpha_blend(material: &StandardMaterial) -> bool {
+    let material_blend = match material.alpha_mode {
+        AlphaMode::Opaque => false,
+        AlphaMode::Mask(_) => false,
+        AlphaMode::Blend => true,
+        AlphaMode::Premultiplied => true,
+        AlphaMode::AlphaToCoverage => true,
+        AlphaMode::Add => true,
+        AlphaMode::Multiply => true,
+    };
+    material_blend
 }
