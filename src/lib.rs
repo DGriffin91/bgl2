@@ -5,6 +5,8 @@ pub mod render;
 pub mod unifrom_slot_builder;
 pub mod watchers;
 
+use anyhow::Error;
+use anyhow::anyhow;
 use std::hash::Hash;
 use std::hash::Hasher;
 use std::path::Path;
@@ -272,46 +274,67 @@ impl BevyGlContext {
         &mut self,
         vertex: &P,
         fragment: &P,
-    ) -> ShaderIndex {
+    ) -> Option<ShaderIndex> {
         let key = shader_key(vertex.as_ref(), fragment.as_ref());
         if let Some((index, watcher)) = self.shader_cache_map.get(&key) {
             if watcher.check() {
                 let vertex_src = std::fs::read_to_string(vertex).unwrap();
                 let fragment_src = std::fs::read_to_string(fragment).unwrap();
                 let old_shader = self.shader_cache[*index as usize];
-                unsafe { self.gl.delete_program(old_shader) }
-                self.shader_cache[*index as usize] = self.shader(&vertex_src, &fragment_src);
+                let new_shader = self.shader(&vertex_src, &fragment_src);
+                match new_shader {
+                    Ok(shader) => {
+                        self.shader_cache[*index as usize] = shader;
+                        unsafe { self.gl.delete_program(old_shader) }
+                    }
+                    Err(e) => println!("{}", e),
+                }
             }
-            *index
+            Some(*index)
         } else {
             let vertex_src = std::fs::read_to_string(vertex).unwrap();
             let fragment_src = std::fs::read_to_string(fragment).unwrap();
-            let shader = self.shader(&vertex_src, &fragment_src);
-            let index = self.shader_cache.len() as u32;
-            self.shader_cache.push(shader);
-            self.shader_cache_map.insert(
-                key,
-                (index, Watchers::new(&[vertex.as_ref(), fragment.as_ref()])),
-            );
-            index
+            let new_shader = self.shader(&vertex_src, &fragment_src);
+            match new_shader {
+                Ok(shader) => {
+                    let index = self.shader_cache.len() as u32;
+                    self.shader_cache.push(shader);
+                    self.shader_cache_map.insert(
+                        key,
+                        (index, Watchers::new(&[vertex.as_ref(), fragment.as_ref()])),
+                    );
+                    Some(index)
+                }
+                Err(e) => {
+                    println!("{}", e);
+                    None
+                }
+            }
         }
     }
 
     #[cfg(target_arch = "wasm32")]
-    pub fn shader_cached_wasm(&mut self, vertex_src: &str, fragment_src: &str) -> ShaderIndex {
+    pub fn shader_cached_wasm(
+        &mut self,
+        vertex_src: &str,
+        fragment_src: &str,
+    ) -> Option<ShaderIndex> {
         let key = shader_key(vertex_src.as_ref(), fragment_src.as_ref());
         if let Some(index) = self.shader_cache_map.get(&key) {
-            *index
+            Some(*index)
         } else {
-            let shader = self.shader(&vertex_src, &fragment_src);
+            let Ok(shader) = self.shader(&vertex_src, &fragment_src) else {
+                return None;
+            };
             let index = self.shader_cache.len() as u32;
             self.shader_cache.push(shader);
             self.shader_cache_map.insert(key, index);
-            index
+            Some(index)
         }
     }
 
-    pub fn shader(&self, vertex: &str, fragment: &str) -> glow::Program {
+    #[must_use]
+    pub fn shader(&self, vertex: &str, fragment: &str) -> Result<glow::Program, anyhow::Error> {
         unsafe {
             let program = self.gl.create_program().expect("Cannot create program");
 
@@ -323,10 +346,7 @@ impl BevyGlContext {
             let mut shaders = Vec::with_capacity(shader_sources.len());
 
             for (stage_name, shader_type, shader_source) in shader_sources.iter() {
-                let shader = self
-                    .gl
-                    .create_shader(*shader_type)
-                    .expect("Cannot create shader");
+                let shader = self.gl.create_shader(*shader_type).map_err(Error::msg)?;
 
                 #[cfg(target_arch = "wasm32")]
                 let preamble = "precision highp float;";
@@ -339,10 +359,10 @@ impl BevyGlContext {
                 self.gl.compile_shader(shader);
 
                 if !self.gl.get_shader_compile_status(shader) {
-                    panic!(
+                    return Err(anyhow!(
                         "{stage_name} shader compilation error: {}",
                         self.gl.get_shader_info_log(shader)
-                    );
+                    ));
                 }
 
                 self.gl.attach_shader(program, shader);
@@ -352,7 +372,7 @@ impl BevyGlContext {
             self.gl.link_program(program);
 
             if !self.gl.get_program_link_status(program) {
-                panic!("{}", self.gl.get_program_info_log(program));
+                return Err(anyhow!("{}", self.gl.get_program_info_log(program)));
             }
 
             for shader in shaders {
@@ -360,7 +380,7 @@ impl BevyGlContext {
                 self.gl.delete_shader(shader);
             }
 
-            program
+            Ok(program)
         }
     }
 

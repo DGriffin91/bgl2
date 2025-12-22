@@ -164,12 +164,16 @@ fn update(
     let _clip_to_world = view_to_world * clip_to_view;
 
     #[cfg(target_arch = "wasm32")]
-    let shader_index = ctx.shader_cached_wasm(
-        include_str!("npr_std_mat.vert"),
-        include_str!("npr_std_mat.frag"),
-    );
+    let shader_index = ctx
+        .shader_cached_wasm(
+            include_str!("npr_std_mat.vert"),
+            include_str!("npr_std_mat.frag"),
+        )
+        .unwrap();
     #[cfg(not(target_arch = "wasm32"))]
-    let shader_index = ctx.shader_cached("examples/npr_std_mat.vert", "examples/npr_std_mat.frag");
+    let shader_index = ctx
+        .shader_cached("examples/npr_std_mat.vert", "examples/npr_std_mat.frag")
+        .unwrap();
 
     ctx.use_cached_program(shader_index);
 
