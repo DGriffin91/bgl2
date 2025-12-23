@@ -1,4 +1,8 @@
-use bevy::{ecs::system::SystemState, prelude::*, winit::WINIT_WINDOWS};
+use bevy::{
+    ecs::system::SystemState,
+    prelude::*,
+    winit::{WINIT_WINDOWS, WakeUp},
+};
 use bevy_opengl::BevyGlContext;
 use bytemuck::cast_slice;
 use glow::HasContext;
@@ -21,7 +25,7 @@ fn main() {
             bevy::input::InputPlugin,
             AssetPlugin::default(),
             bevy::a11y::AccessibilityPlugin,
-            bevy::winit::WinitPlugin::default(),
+            bevy::winit::WinitPlugin::<WakeUp>::default(),
             bevy::scene::ScenePlugin,
             WindowPlugin::default(),
             ImagePlugin::default_linear(),
@@ -53,25 +57,9 @@ fn init(world: &mut World, params: &mut SystemState<Query<(Entity, &mut Window)>
 }
 
 fn update(mut ctx: If<NonSendMut<BevyGlContext>>) {
-    let vertex = r#"
-attribute vec2 a_position;
-varying vec2 vert;
-
-void main() {
-vert = a_position;
-    gl_Position = vec4(a_position - vec2(0.5, 0.5), 0.0, 1.0);
-}
-    "#;
-
-    let fragment = r#"
-varying vec2 vert;
-
-void main() {
-    gl_FragColor = vec4(vert, 0.0, 1.0);
-}
-"#;
-
-    let shader_index = ctx.shader_cached(vertex, fragment);
+    let shader_index = ctx
+        .shader_cached("examples/tri.vert", "examples/tri.frag")
+        .unwrap();
 
     unsafe {
         ctx.use_cached_program(shader_index);
