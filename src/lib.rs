@@ -69,6 +69,18 @@ impl BevyGlContext {
         #[allow(unused_variables)] bevy_window: &Window,
         winit_window: &bevy::window::WindowWrapper<winit::window::Window>,
     ) -> BevyGlContext {
+        #[cfg(feature = "gl21pipe")]
+        unsafe {
+            std::env::set_var(
+                "__EGL_VENDOR_LIBRARY_FILENAMES",
+                "/usr/share/glvnd/egl_vendor.d/50_mesa.json",
+            );
+            std::env::set_var("LIBGL_ALWAYS_SOFTWARE", "1");
+            std::env::set_var("MESA_LOADER_DRIVER_OVERRIDE", "llvmpipe");
+            std::env::set_var("MESA_GL_VERSION_OVERRIDE", "2.1");
+            std::env::set_var("MESA_GLSL_VERSION_OVERRIDE", "120");
+        }
+
         #[cfg(not(target_arch = "wasm32"))]
         {
             let vsync = match bevy_window.present_mode {

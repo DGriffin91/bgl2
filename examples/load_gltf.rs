@@ -20,17 +20,6 @@ use bevy_opengl::{
 use glow::HasContext;
 
 fn main() {
-    //unsafe {
-    //    std::env::set_var(
-    //        "__EGL_VENDOR_LIBRARY_FILENAMES",
-    //        "/usr/share/glvnd/egl_vendor.d/50_mesa.json",
-    //    );
-    //    std::env::set_var("LIBGL_ALWAYS_SOFTWARE", "1");
-    //    std::env::set_var("MESA_LOADER_DRIVER_OVERRIDE", "llvmpipe");
-    //    std::env::set_var("MESA_GL_VERSION_OVERRIDE", "2.1");
-    //    std::env::set_var("MESA_GLSL_VERSION_OVERRIDE", "120");
-    //}
-
     App::new()
         .insert_resource(WinitSettings {
             focused_mode: UpdateMode::Continuous,
