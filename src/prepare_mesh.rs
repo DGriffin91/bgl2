@@ -43,6 +43,10 @@ impl GpuMeshBuffers {
     }
 
     pub fn bind(&self, ctx: &BevyGlContext, shader_index: u32) {
+        unsafe {
+            ctx.gl
+                .bind_buffer(glow::ELEMENT_ARRAY_BUFFER, Some(self.index));
+        };
         for (att, buffer) in &self.buffers {
             // TODO use caching to avoid looking up from the name here
             if let Some(loc) = ctx.get_attrib_location(shader_index, att.name) {

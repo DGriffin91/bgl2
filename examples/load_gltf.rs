@@ -222,14 +222,10 @@ fn update(
             if let Some(buffers) = gpu_meshes.buffers.get(&mesh.id()) {
                 let local_to_world = transform.to_matrix();
                 let local_to_clip = world_to_clip * local_to_world;
-                unsafe {
-                    ctx.gl
-                        .bind_buffer(glow::ELEMENT_ARRAY_BUFFER, Some(buffers.index));
-                };
 
                 buffers.bind(&ctx, shader_index);
 
-                // TODO cache
+                // TODO cache name lookup
                 upload!(build, local_to_world);
                 upload!(build, local_to_clip);
 
@@ -242,11 +238,11 @@ fn update(
                         buffers.index_element_type,
                         0,
                     );
-                    ctx.gl.bind_vertex_array(None);
                 };
             }
         }
     }
+    unsafe { ctx.gl.bind_vertex_array(None) };
 }
 
 fn material_alpha_blend(material: &StandardMaterial) -> bool {
