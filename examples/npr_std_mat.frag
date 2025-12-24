@@ -15,8 +15,8 @@ uniform bool flip_normal_map_y;
 uniform bool alpha_blend;
 uniform int flags;
 
-uniform sampler2D color_texture;
-uniform sampler2D normal_texture;
+uniform sampler2D base_color_texture;
+uniform sampler2D normal_map_texture;
 uniform sampler2D metallic_roughness_texture;
 
 // http://www.mikktspace.com/
@@ -24,7 +24,7 @@ vec3 apply_normal_mapping(vec3 ws_normal, vec4 ws_tangent, vec2 uv) {
     vec3 N = ws_normal;
     vec3 T = ws_tangent.xyz;
     vec3 B = ws_tangent.w * cross(N, T);
-    vec3 Nt = texture2D(normal_texture, uv).rgb * 2.0 - 1.0; // Only supports 3-component normal maps
+    vec3 Nt = texture2D(normal_map_texture, uv).rgb * 2.0 - 1.0; // Only supports 3-component normal maps
     if (flip_normal_map_y) {
         Nt.y = -Nt.y;
     }
@@ -72,7 +72,7 @@ void main() {
     float roughness = metallic_roughness.g * perceptual_roughness;
     roughness *= roughness;
 
-    vec4 color = base_color * texture2D(color_texture, uv_0);
+    vec4 color = base_color * texture2D(base_color_texture, uv_0);
 
     if (!alpha_blend && (color.a < 0.5)) {
         discard;

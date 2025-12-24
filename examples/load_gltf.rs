@@ -15,7 +15,9 @@ use bevy_opengl::{
     prepare_image::GpuImages,
     prepare_mesh::GPUMeshBufferMap,
     render::{OpenGLRenderPlugin, RenderSet},
+    tex,
     unifrom_slot_builder::UniformSlotBuilder,
+    upload, val,
 };
 use glow::HasContext;
 
@@ -77,23 +79,19 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
         },
     ));
 
-    //commands.spawn(SceneRoot(
-    //    asset_server.load("models/bistro_exterior/BistroExterior.gltf#Scene0"),
-    //));
-    //commands.spawn((
-    //    SceneRoot(asset_server.load("models/bistro_interior_wine/BistroInterior_Wine.gltf#Scene0")),
-    //    Transform::from_xyz(0.0, 0.3, -0.2),
-    //));
+    commands.spawn(SceneRoot(
+        asset_server.load("models/bistro_exterior/BistroExterior.gltf#Scene0"),
+    ));
+    commands.spawn((
+        SceneRoot(asset_server.load("models/bistro_interior_wine/BistroInterior_Wine.gltf#Scene0")),
+        Transform::from_xyz(0.0, 0.3, -0.2),
+    ));
 
     commands.spawn((
         DirectionalLight {
             shadows_enabled: true,
             ..default()
         },
-        // This is a relatively small scene, so use tighter shadow
-        // cascade bounds than the default for better quality.
-        // We also adjusted the shadow map to be larger since we're
-        // only using a single cascade.
         CascadeShadowConfigBuilder {
             num_cascades: 1,
             maximum_distance: 1.6,
@@ -168,21 +166,20 @@ fn update(
 
     let mut build = UniformSlotBuilder::<StandardMaterial>::new(&ctx, &gpu_images, shader_index);
 
-    build.val("flip_normal_map_y", |m| m.flip_normal_map_y);
-    build.val("double_sided", |m| m.double_sided);
+    val!(build, flip_normal_map_y);
+    val!(build, double_sided);
+    val!(build, perceptual_roughness);
+    val!(build, metallic);
+
+    tex!(build, base_color_texture);
+    tex!(build, normal_map_texture);
+    tex!(build, metallic_roughness_texture);
+
     build.val("alpha_blend", |m| material_alpha_blend(m));
     build.val("base_color", |m| m.base_color.to_linear().to_vec4());
-    build.val("perceptual_roughness", |m| m.perceptual_roughness);
-    build.val("metallic", |m| m.metallic);
 
-    build.tex("color_texture", |m| &m.base_color_texture);
-    build.tex("normal_texture", |m| &m.normal_map_texture);
-    build.tex("metallic_roughness_texture", |m| {
-        &m.metallic_roughness_texture
-    });
-
-    build.upload("view_to_world", view_to_world);
-    build.upload("view_position", view_position);
+    upload!(build, view_to_world);
+    upload!(build, view_position);
 
     unsafe {
         ctx.gl.depth_mask(true);
@@ -233,8 +230,8 @@ fn update(
                 buffers.bind(&ctx, shader_index);
 
                 // TODO cache
-                build.upload("local_to_clip", local_to_clip);
-                build.upload("local_to_world", local_to_world);
+                upload!(build, local_to_world);
+                upload!(build, local_to_clip);
 
                 build.run(material);
 

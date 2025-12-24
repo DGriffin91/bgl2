@@ -89,3 +89,24 @@ impl<'a, T> UniformSlotBuilder<'a, T> {
         }
     }
 }
+
+#[macro_export]
+macro_rules! val {
+    ($obj:expr, $field:ident) => {
+        $obj.val(stringify!($field), |m| m.$field)
+    };
+}
+
+#[macro_export]
+macro_rules! tex {
+    ($obj:expr, $field:ident) => {
+        $obj.tex(stringify!($field), |m| &m.$field)
+    };
+}
+
+#[macro_export]
+macro_rules! upload {
+    ($obj:expr, $field:ident) => {
+        $obj.upload(stringify!($field), $field)
+    };
+}
