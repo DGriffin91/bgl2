@@ -1,5 +1,5 @@
-use bevy::{asset::Handle, image::Image, math::*};
-use glow::HasContext;
+use bevy::{asset::Handle, image::Image, math::*, platform::collections::HashMap};
+use glow::{HasContext, UniformLocation};
 
 use crate::{BevyGlContext, UniformValue, prepare_image::GpuImages};
 
@@ -20,6 +20,8 @@ pub struct UniformSlotBuilder<'a, T> {
         glow::UniformLocation,
         Box<dyn Fn(&T) -> &Option<Handle<Image>>>,
     )>,
+
+    pub uniform_location_cache: HashMap<String, Option<UniformLocation>>,
 }
 
 impl<'a, T> UniformSlotBuilder<'a, T> {
@@ -30,6 +32,18 @@ impl<'a, T> UniformSlotBuilder<'a, T> {
             shader_index,
             value_slots: Vec::with_capacity(ctx.get_uniform_count(shader_index) as usize),
             texture_slots: Vec::new(),
+            uniform_location_cache: Default::default(),
+        }
+    }
+
+    pub fn get_uniform_location(&mut self, name: &str) -> Option<UniformLocation> {
+        if let Some(location) = self.uniform_location_cache.get(name) {
+            *location
+        } else {
+            let location = self.ctx.get_uniform_location(self.shader_index, name);
+            self.uniform_location_cache
+                .insert(name.to_string(), location);
+            location
         }
     }
 
@@ -38,7 +52,7 @@ impl<'a, T> UniformSlotBuilder<'a, T> {
         V: UniformValue,
         F: Fn(&T) -> V + 'static,
     {
-        if let Some(location) = self.ctx.get_uniform_location(self.shader_index, name) {
+        if let Some(location) = self.get_uniform_location(name) {
             self.value_slots.push((
                 location,
                 Box::new(
@@ -55,7 +69,7 @@ impl<'a, T> UniformSlotBuilder<'a, T> {
     where
         F: Fn(&T) -> &Option<Handle<Image>> + 'static,
     {
-        if let Some(location) = self.ctx.get_uniform_location(self.shader_index, name) {
+        if let Some(location) = self.get_uniform_location(name) {
             self.texture_slots.push((location, Box::new(f)))
         }
     }
@@ -80,11 +94,11 @@ impl<'a, T> UniformSlotBuilder<'a, T> {
     }
 
     /// Uploads immediately if location is found
-    pub fn upload<V>(&self, name: &str, v: V)
+    pub fn upload<V>(&mut self, name: &str, v: V)
     where
         V: UniformValue,
     {
-        if let Some(location) = self.ctx.get_uniform_location(self.shader_index, name) {
+        if let Some(location) = self.get_uniform_location(name) {
             v.upload(&self.ctx, &location);
         }
     }
