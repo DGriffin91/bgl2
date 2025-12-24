@@ -1,3 +1,4 @@
+pub mod faststack;
 pub mod mesh_util;
 pub mod prepare_image;
 pub mod prepare_mesh;
@@ -22,6 +23,8 @@ use glow::HasContext;
 #[cfg(target_arch = "wasm32")]
 use winit::platform::web::WindowExtWebSys;
 
+use crate::faststack::FastStack;
+use crate::faststack::StackStack;
 #[cfg(not(target_arch = "wasm32"))]
 use crate::watchers::Watchers;
 
@@ -547,11 +550,16 @@ pub fn shader_key(vertex: &Path, fragment: &Path) -> u64 {
 
 pub trait UniformValue: Sized + 'static {
     fn upload(&self, ctx: &BevyGlContext, loc: &glow::UniformLocation);
+    fn read_raw(&self, out: &mut StackStack<u32, 16>);
 }
 
 impl UniformValue for bool {
     fn upload(&self, ctx: &BevyGlContext, loc: &glow::UniformLocation) {
         unsafe { ctx.gl.uniform_1_i32(Some(&loc), if *self { 1 } else { 0 }) };
+    }
+    fn read_raw(&self, out: &mut StackStack<u32, 16>) {
+        out.clear();
+        out.push(if *self { 1 } else { 0 });
     }
 }
 
@@ -559,11 +567,19 @@ impl UniformValue for f32 {
     fn upload(&self, ctx: &BevyGlContext, loc: &glow::UniformLocation) {
         unsafe { ctx.gl.uniform_1_f32(Some(&loc), *self) };
     }
+    fn read_raw(&self, out: &mut StackStack<u32, 16>) {
+        out.clear();
+        out.push(self.to_bits());
+    }
 }
 
 impl UniformValue for i32 {
     fn upload(&self, ctx: &BevyGlContext, loc: &glow::UniformLocation) {
         unsafe { ctx.gl.uniform_1_i32(Some(&loc), *self) };
+    }
+    fn read_raw(&self, out: &mut StackStack<u32, 16>) {
+        out.clear();
+        out.push(*self as u32);
     }
 }
 
@@ -571,17 +587,29 @@ impl UniformValue for Vec2 {
     fn upload(&self, ctx: &BevyGlContext, loc: &glow::UniformLocation) {
         unsafe { ctx.gl.uniform_2_f32_slice(Some(&loc), &self.to_array()) };
     }
+    fn read_raw(&self, out: &mut StackStack<u32, 16>) {
+        out.clear();
+        self.to_array().iter().for_each(|n| out.push(n.to_bits()));
+    }
 }
 
 impl UniformValue for Vec3 {
     fn upload(&self, ctx: &BevyGlContext, loc: &glow::UniformLocation) {
         unsafe { ctx.gl.uniform_3_f32_slice(Some(&loc), &self.to_array()) };
     }
+    fn read_raw(&self, out: &mut StackStack<u32, 16>) {
+        out.clear();
+        self.to_array().iter().for_each(|n| out.push(n.to_bits()));
+    }
 }
 
 impl UniformValue for Vec4 {
     fn upload(&self, ctx: &BevyGlContext, loc: &glow::UniformLocation) {
         unsafe { ctx.gl.uniform_4_f32_slice(Some(&loc), &self.to_array()) };
+    }
+    fn read_raw(&self, out: &mut StackStack<u32, 16>) {
+        out.clear();
+        self.to_array().iter().for_each(|n| out.push(n.to_bits()));
     }
 }
 
@@ -591,5 +619,11 @@ impl UniformValue for Mat4 {
             ctx.gl
                 .uniform_matrix_4_f32_slice(Some(&loc), false, &self.to_cols_array())
         };
+    }
+    fn read_raw(&self, out: &mut StackStack<u32, 16>) {
+        out.clear();
+        self.to_cols_array()
+            .iter()
+            .for_each(|n| out.push(n.to_bits()));
     }
 }

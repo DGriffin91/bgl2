@@ -57,7 +57,7 @@ fn main() {
         .add_plugins(MipmapGeneratorPlugin)
         .add_systems(Update, generate_mipmaps::<StandardMaterial>)
         .add_systems(Startup, (setup, init))
-        .add_systems(PostUpdate, update.in_set(RenderSet::Render))
+        .add_systems(PostUpdate, render_std_mat.in_set(RenderSet::Render))
         .run();
 }
 
@@ -124,7 +124,7 @@ fn init(world: &mut World, params: &mut SystemState<Query<(Entity, &mut Window)>
     });
 }
 
-fn update(
+fn render_std_mat(
     mut mesh_entities: Query<(
         Entity,
         &ViewVisibility,

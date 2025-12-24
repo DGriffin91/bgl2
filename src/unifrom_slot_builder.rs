@@ -1,10 +1,16 @@
 use bevy::{asset::Handle, image::Image, math::*, platform::collections::HashMap};
 use glow::{HasContext, UniformLocation};
 
-use crate::{BevyGlContext, UniformValue, prepare_image::GpuImages};
+use crate::{BevyGlContext, UniformValue, faststack::StackStack, prepare_image::GpuImages};
 
 // Probably not very fast, but writing uniforms every frame isn't either and I think the opengl uniform fn's themselves
 // are maybe also dyn dispatch?
+
+pub struct SlotData {
+    init: bool,
+    previous: StackStack<u32, 16>,
+    location: glow::UniformLocation,
+}
 
 pub struct UniformSlotBuilder<'a, T> {
     pub ctx: &'a BevyGlContext,
@@ -12,8 +18,8 @@ pub struct UniformSlotBuilder<'a, T> {
     pub shader_index: u32,
 
     pub value_slots: Vec<(
-        glow::UniformLocation,
-        Box<dyn Fn(&BevyGlContext, &T, &glow::UniformLocation)>,
+        SlotData,
+        Box<dyn Fn(&BevyGlContext, &T, &mut SlotData, &mut StackStack<u32, 16>)>,
     )>,
 
     pub texture_slots: Vec<(
@@ -22,6 +28,8 @@ pub struct UniformSlotBuilder<'a, T> {
     )>,
 
     pub uniform_location_cache: HashMap<String, Option<UniformLocation>>,
+
+    pub temp_value: StackStack<u32, 16>,
 }
 
 impl<'a, T> UniformSlotBuilder<'a, T> {
@@ -33,6 +41,7 @@ impl<'a, T> UniformSlotBuilder<'a, T> {
             value_slots: Vec::with_capacity(ctx.get_uniform_count(shader_index) as usize),
             texture_slots: Vec::new(),
             uniform_location_cache: Default::default(),
+            temp_value: Default::default(),
         }
     }
 
@@ -54,11 +63,27 @@ impl<'a, T> UniformSlotBuilder<'a, T> {
     {
         if let Some(location) = self.get_uniform_location(name) {
             self.value_slots.push((
-                location,
+                SlotData {
+                    init: false,
+                    previous: Default::default(),
+                    location: location,
+                },
                 Box::new(
-                    move |ctx: &BevyGlContext, material: &T, loc: &glow::UniformLocation| {
+                    move |ctx: &BevyGlContext,
+                          material: &T,
+                          slot: &mut SlotData,
+                          temp_value: &mut StackStack<u32, 16>| {
                         let v: V = f(material);
-                        v.upload(ctx, loc);
+                        if !slot.init {
+                            v.upload(ctx, &slot.location);
+                            slot.init = true;
+                        } else {
+                            v.read_raw(temp_value);
+                            if temp_value != &slot.previous {
+                                std::mem::swap(&mut slot.previous, temp_value);
+                                v.upload(ctx, &slot.location);
+                            }
+                        }
                     },
                 ),
             ));
@@ -73,9 +98,9 @@ impl<'a, T> UniformSlotBuilder<'a, T> {
             self.texture_slots.push((location, Box::new(f)))
         }
     }
-    pub fn run(&self, material: &T) {
-        for (location, f) in &self.value_slots {
-            f(&self.ctx, material, location)
+    pub fn run(&mut self, material: &T) {
+        for (slot, f) in &mut self.value_slots {
+            f(&self.ctx, material, slot, &mut self.temp_value)
         }
         for (i, (location, f)) in self.texture_slots.iter().enumerate() {
             let mut texture = self.gpu_images.placeholder.unwrap();
@@ -90,6 +115,12 @@ impl<'a, T> UniformSlotBuilder<'a, T> {
                 self.ctx.gl.bind_texture(glow::TEXTURE_2D, Some(texture));
                 self.ctx.gl.uniform_1_i32(Some(&location), i as i32);
             }
+        }
+    }
+
+    pub fn reset_slot_cache(&mut self) {
+        for (slot, _f) in &mut self.value_slots {
+            slot.init = false;
         }
     }
 
