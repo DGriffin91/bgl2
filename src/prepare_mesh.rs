@@ -1,5 +1,3 @@
-use std::rc::Rc;
-
 use bevy::{
     mesh::MeshVertexAttribute,
     platform::collections::{HashMap, HashSet},
@@ -7,9 +5,11 @@ use bevy::{
 };
 use bytemuck::cast_slice;
 use glow::{Context, HasContext};
+use std::hash::Hasher;
+use std::{hash::Hash, rc::Rc};
 
 use crate::{
-    AttribType, BevyGlContext,
+    AttribType, BevyGlContext, ShaderIndex,
     mesh_util::{get_attribute_f32x3, get_mesh_indices_u16, get_mesh_indices_u32},
     render::RenderSet,
 };
@@ -32,7 +32,6 @@ impl Plugin for PrepareMeshPlugin {
 pub struct GpuMeshBufferSet {
     pub buffers: Vec<(MeshVertexAttribute, glow::Buffer)>,
     pub index: glow::Buffer,
-    pub all_index_count: usize,
     pub index_element_type: u32,
 }
 
@@ -60,6 +59,7 @@ pub struct GPUMeshBufferMap {
     pub buffers: Vec<Option<(GpuMeshBufferSet, HashSet<AssetId<Mesh>>)>>,
     pub map: HashMap<AssetId<Mesh>, BufferRef>,
     pub gl: Option<Rc<glow::Context>>,
+    pub last_bind: Option<(ShaderIndex, usize)>, //shader_index, buffer_index
 }
 
 impl Drop for GPUMeshBufferMap {
@@ -73,6 +73,13 @@ impl Drop for GPUMeshBufferMap {
 }
 
 impl GPUMeshBufferMap {
+    /// Call before using bind()
+    pub fn reset_bind_cache(&mut self) {
+        self.last_bind = None;
+    }
+
+    /// Make sure to call reset_bind_cache() before the first iteration of bind(). It doesn't know about whatever random
+    /// opengl state came before.
     pub fn bind(
         &mut self,
         ctx: &BevyGlContext,
@@ -81,6 +88,11 @@ impl GPUMeshBufferMap {
     ) -> Option<BufferRef> {
         if let Some(buffer_ref) = self.map.get(mesh) {
             if let Some((buffers, _)) = &self.buffers[buffer_ref.buffer_index] {
+                let this_bind_set = Some((shader_index, buffer_ref.buffer_index));
+                if this_bind_set == self.last_bind {
+                    return Some(*buffer_ref);
+                }
+                self.last_bind = this_bind_set;
                 unsafe {
                     ctx.gl
                         .bind_buffer(glow::ELEMENT_ARRAY_BUFFER, Some(buffers.index));
@@ -116,6 +128,8 @@ pub fn send_standard_meshes_to_gpu(
         gpu_meshes.gl = Some(ctx.gl.clone());
     }
 
+    let mut meshes_to_add: HashMap<u64, Vec<AssetId<Mesh>>> = HashMap::new();
+
     for event in mesh_events.read() {
         let mesh_h = match event {
             AssetEvent::LoadedWithDependencies { id }
@@ -144,94 +158,151 @@ pub fn send_standard_meshes_to_gpu(
             }
             AssetEvent::Unused { id: _ } => continue,
         };
+
         let Some(mesh) = meshes.get(*mesh_h) else {
             continue;
         };
+
+        let mut hasher = std::hash::DefaultHasher::new();
+
+        let attributes = mesh.attributes();
+
+        for (a, _) in attributes {
+            a.id.hash(&mut hasher);
+            a.format.hash(&mut hasher);
+        }
+        let attr_hash = hasher.finish();
+
+        // See if there's other meshes that were added this frame that this one could be packed with.
+        if let Some(mesh_h_set) = meshes_to_add.get_mut(&attr_hash) {
+            mesh_h_set.push(*mesh_h);
+        } else {
+            meshes_to_add.insert(attr_hash, vec![*mesh_h]);
+        }
+    }
+
+    let es_or_webgl = unsafe {
+        ctx.gl
+            .get_parameter_string(glow::SHADING_LANGUAGE_VERSION)
+            .contains(" ES ")
+    };
+    let u16_indices = es_or_webgl
+        && !ctx
+            .gl
+            .supported_extensions()
+            .contains("OES_element_index_uint");
+    let element_type = if u16_indices {
+        glow::UNSIGNED_SHORT
+    } else {
+        glow::UNSIGNED_INT
+    };
+
+    // For each group of matching meshes, collect the vertex attributes and offset indices
+    for (_, mesh_handles) in meshes_to_add {
+        let next_buffer_set_index = gpu_meshes.buffers.len();
         index_buffer_data_u16.clear();
         index_buffer_data_u32.clear();
 
-        let positions = get_attribute_f32x3(mesh, Mesh::ATTRIBUTE_POSITION)
-            .expect("Meshes vertex positions are required");
-
-        let vertex_count = positions.len();
-        let index_count;
-
-        let (index_buffer, element_type) = if vertex_count >= u16::MAX as usize {
-            let es_or_webgl = unsafe {
-                ctx.gl
-                    .get_parameter_string(glow::SHADING_LANGUAGE_VERSION)
-                    .contains(" ES ")
-            };
-            if es_or_webgl
-                && !ctx
-                    .gl
-                    .supported_extensions()
-                    .contains("OES_element_index_uint")
-            {
-                warn!(
-                    "Too many vertices. Base OpenGL ES 2.0 and WebGL 1.0 with OES_element_index_uint only support GL_UNSIGNED_BYTE or GL_UNSIGNED_SHORT"
-                );
-                // Could split up mesh data and then issue multiple calls, but if a platform doesn't have
-                // OES_element_index_uint it might also struggle with so many tris.
-                continue;
-            }
-            index_count = get_mesh_indices_u32(mesh, &mut index_buffer_data_u32);
-            (
-                ctx.gen_vbo_element(cast_slice(&index_buffer_data_u32), glow::STATIC_DRAW),
-                glow::UNSIGNED_INT,
-            )
-        } else {
-            index_count = get_mesh_indices_u16(mesh, &mut index_buffer_data_u16);
-            (
-                ctx.gen_vbo_element(cast_slice(&index_buffer_data_u16), glow::STATIC_DRAW),
-                glow::UNSIGNED_SHORT,
-            )
+        let Some(first_mesh_h) = mesh_handles.get(0) else {
+            continue;
+        };
+        let Some(first_mesh) = meshes.get(*first_mesh_h) else {
+            continue;
         };
 
-        let buffers = mesh
+        let count = first_mesh.attributes().count();
+
+        let mut buffer_data: Vec<Vec<u8>> = vec![Vec::new(); count];
+
+        let mut vertex_offset = 0;
+        let mut index_offset = 0;
+        for mesh_h in &mesh_handles {
+            let Some(mesh) = meshes.get(*mesh_h) else {
+                continue;
+            };
+
+            let positions = get_attribute_f32x3(mesh, Mesh::ATTRIBUTE_POSITION)
+                .expect("Meshes vertex positions are required");
+
+            let vertex_count = positions.len();
+
+            let index_count = if u16_indices {
+                if (vertex_count + vertex_offset) >= u16::MAX as usize {
+                    warn!(
+                        "Too many vertices. Base OpenGL ES 2.0 and WebGL 1.0 with OES_element_index_uint only support GL_UNSIGNED_BYTE or GL_UNSIGNED_SHORT"
+                    );
+                    // Could split up mesh data and then issue multiple calls, but if a platform doesn't have
+                    // OES_element_index_uint it might also struggle with so many tris.
+                    continue;
+                }
+                get_mesh_indices_u16(mesh, &mut index_buffer_data_u16, vertex_offset as u16)
+            } else {
+                get_mesh_indices_u32(mesh, &mut index_buffer_data_u32, vertex_offset as u32)
+            };
+
+            mesh.attributes()
+                .zip(buffer_data.iter_mut())
+                .for_each(|((_, data), dst_data)| {
+                    // TODO convert unsupported data types (like f16 to f32)
+                    dst_data.extend(data.get_bytes());
+                });
+
+            let buffer_ref = BufferRef {
+                buffer_index: next_buffer_set_index,
+                indices_start: index_offset,
+                indices_count: index_count,
+                index_element_type: element_type,
+            };
+
+            // Add mapping from mesh handle to buffer. If this handle already had a mapping, remove it from the old set.
+            // If the old set now has zero references, remove the buffer.
+            if let Some(old_buffer_ref) = gpu_meshes.map.insert(mesh_h.clone(), buffer_ref) {
+                let mut buffer_unused = false;
+                if let Some(b) = gpu_meshes.buffers.get_mut(old_buffer_ref.buffer_index) {
+                    if let Some((_old_buffer, set)) = b {
+                        set.remove(mesh_h);
+                        buffer_unused = set.is_empty();
+                    }
+                }
+                if buffer_unused {
+                    if let Some((old_buffer, _)) =
+                        gpu_meshes.buffers[old_buffer_ref.buffer_index].take()
+                    {
+                        old_buffer.delete(&ctx.gl);
+                    }
+                }
+            }
+
+            index_offset += index_count;
+            vertex_offset += vertex_count;
+        }
+
+        // Create combined GPU index buffer
+        let index_buffer = ctx.gen_vbo_element(
+            if u16_indices {
+                cast_slice(&index_buffer_data_u16)
+            } else {
+                cast_slice(&index_buffer_data_u32)
+            },
+            glow::STATIC_DRAW,
+        );
+
+        // Create combined vertex attribute buffers
+        let buffers = first_mesh
             .attributes()
-            .map(|(mesh_attribute, data)| {
-                // TODO convert unsupported data types (like f16 to f32)
-                (
-                    *mesh_attribute,
-                    ctx.gen_vbo(data.get_bytes(), glow::STATIC_DRAW),
-                )
+            .zip(buffer_data.iter_mut())
+            .map(|((mesh_attribute, _), data)| {
+                (*mesh_attribute, ctx.gen_vbo(data, glow::STATIC_DRAW))
             })
             .collect();
 
-        let buffer_index = gpu_meshes.buffers.len();
         gpu_meshes.buffers.push(Some((
             GpuMeshBufferSet {
                 buffers,
-                all_index_count: index_count,
                 index: index_buffer,
                 index_element_type: element_type,
             },
-            HashSet::from_iter([mesh_h.clone()]),
+            HashSet::from_iter(mesh_handles),
         )));
-
-        let buffer_ref = BufferRef {
-            buffer_index,
-            indices_start: 0,
-            indices_count: index_count,
-            index_element_type: element_type,
-        };
-
-        // Add mapping from mesh handle to buffer. If this handle already had a mapping, remove it from the old set.
-        // If the old set now has zero references, remove the buffer.
-        if let Some(old_buffer_ref) = gpu_meshes.map.insert(mesh_h.clone(), buffer_ref) {
-            let mut buffer_unused = false;
-            if let Some((_old_buffer, set)) = &mut gpu_meshes.buffers[old_buffer_ref.buffer_index] {
-                set.remove(mesh_h);
-                buffer_unused = set.is_empty();
-            }
-            if buffer_unused {
-                if let Some((old_buffer, _)) =
-                    gpu_meshes.buffers[old_buffer_ref.buffer_index].take()
-                {
-                    old_buffer.delete(&ctx.gl);
-                }
-            }
-        }
     }
 }

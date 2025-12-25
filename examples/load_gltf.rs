@@ -189,6 +189,7 @@ fn render_std_mat(
             .clear(glow::COLOR_BUFFER_BIT | glow::DEPTH_BUFFER_BIT);
     };
 
+    gpu_meshes.reset_bind_cache();
     for alpha_blend in [false, true] {
         if alpha_blend {
             unsafe {
@@ -230,12 +231,18 @@ fn render_std_mat(
 
                 build.run(material);
 
+                let index_size = match buffer_ref.index_element_type {
+                    glow::UNSIGNED_SHORT => 2,
+                    glow::UNSIGNED_INT => 4,
+                    _ => unreachable!(),
+                };
+
                 unsafe {
                     ctx.gl.draw_elements(
                         glow::TRIANGLES,
                         buffer_ref.indices_count as i32,
                         buffer_ref.index_element_type,
-                        buffer_ref.indices_start as i32,
+                        buffer_ref.indices_start as i32 * index_size,
                     );
                 };
             }
