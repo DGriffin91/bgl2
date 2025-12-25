@@ -220,32 +220,14 @@ fn render_std_mat(
             if material_alpha_blend(material) != alpha_blend {
                 continue;
             }
+            let local_to_world = transform.to_matrix();
+            let local_to_clip = world_to_clip * local_to_world;
 
-            if let Some(buffer_ref) = gpu_meshes.bind(&ctx, &mesh.id(), shader_index) {
-                let local_to_world = transform.to_matrix();
-                let local_to_clip = world_to_clip * local_to_world;
+            upload!(build, local_to_world);
+            upload!(build, local_to_clip);
 
-                // TODO cache name lookup
-                upload!(build, local_to_world);
-                upload!(build, local_to_clip);
-
-                build.run(material);
-
-                let index_size = match buffer_ref.index_element_type {
-                    glow::UNSIGNED_SHORT => 2,
-                    glow::UNSIGNED_INT => 4,
-                    _ => unreachable!(),
-                };
-
-                unsafe {
-                    ctx.gl.draw_elements(
-                        glow::TRIANGLES,
-                        buffer_ref.indices_count as i32,
-                        buffer_ref.index_element_type,
-                        buffer_ref.indices_start as i32 * index_size,
-                    );
-                };
-            }
+            build.run(material);
+            gpu_meshes.draw_mesh(&ctx, mesh.id(), shader_index);
         }
     }
     unsafe { ctx.gl.bind_vertex_array(None) };

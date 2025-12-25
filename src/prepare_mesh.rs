@@ -52,6 +52,7 @@ pub struct BufferRef {
     pub indices_start: usize,
     pub indices_count: usize,
     pub index_element_type: u32,
+    pub bytes_offset: i32,
 }
 
 #[derive(Default)]
@@ -113,6 +114,21 @@ impl GPUMeshBufferMap {
             }
         }
         None
+    }
+
+    /// Make sure to call reset_bind_cache() before the first iteration of bind(). It doesn't know about whatever random
+    /// opengl state came before.
+    pub fn draw_mesh(&mut self, ctx: &BevyGlContext, mesh: AssetId<Mesh>, shader_index: u32) {
+        if let Some(buffer_ref) = self.bind(&ctx, &mesh, shader_index) {
+            unsafe {
+                ctx.gl.draw_elements(
+                    glow::TRIANGLES,
+                    buffer_ref.indices_count as i32,
+                    buffer_ref.index_element_type,
+                    buffer_ref.bytes_offset,
+                );
+            };
+        }
     }
 }
 
@@ -252,6 +268,7 @@ pub fn send_standard_meshes_to_gpu(
                 indices_start: index_offset,
                 indices_count: index_count,
                 index_element_type: element_type,
+                bytes_offset: index_offset as i32 * if u16_indices { 2 } else { 4 },
             };
 
             // Add mapping from mesh handle to buffer. If this handle already had a mapping, remove it from the old set.
