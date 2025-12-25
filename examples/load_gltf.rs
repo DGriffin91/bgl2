@@ -1,5 +1,5 @@
 use bevy::{
-    asset::UnapprovedPathMode,
+    asset::{AssetMetaCheck, UnapprovedPathMode},
     diagnostic::{FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin},
     ecs::system::SystemState,
     light::CascadeShadowConfigBuilder,
@@ -48,6 +48,13 @@ fn main() {
                         ..default()
                     }),
                     ..default()
+                })
+                .set(AssetPlugin {
+                    // Wasm builds will check for meta files (that don't exist) if this isn't set.
+                    // This causes errors and even panics in web builds on itch.
+                    // See https://github.com/bevyengine/bevy_github_ci_template/issues/48.
+                    meta_check: AssetMetaCheck::Never,
+                    ..default()
                 }),
             OpenGLRenderPlugin,
             CameraControllerPlugin,
@@ -79,13 +86,13 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
         },
     ));
 
-    //commands.spawn(SceneRoot(
-    //    asset_server.load("models/bistro_exterior/BistroExterior.gltf#Scene0"),
-    //));
-    //commands.spawn((
-    //    SceneRoot(asset_server.load("models/bistro_interior_wine/BistroInterior_Wine.gltf#Scene0")),
-    //    Transform::from_xyz(0.0, 0.3, -0.2),
-    //));
+    commands.spawn(SceneRoot(
+        asset_server.load("models/bistro_exterior/BistroExterior.gltf#Scene0"),
+    ));
+    commands.spawn((
+        SceneRoot(asset_server.load("models/bistro_interior_wine/BistroInterior_Wine.gltf#Scene0")),
+        Transform::from_xyz(0.0, 0.3, -0.2),
+    ));
 
     commands.spawn((
         DirectionalLight {
@@ -158,8 +165,11 @@ fn render_std_mat(
         Blend,
     }
 
-    for stage in [Stage::Prepass, Stage::Opaque, Stage::Blend] {
+    let mut prepass_has_run = false;
+    //Stage::Prepass,
+    for stage in [Stage::Opaque, Stage::Blend] {
         let defs = if stage == Stage::Prepass {
+            prepass_has_run = true;
             &[("DEPTH_PREPASS", "")]
         } else {
             &[("", "")]
@@ -210,7 +220,7 @@ fn render_std_mat(
 
         match stage {
             Stage::Prepass => ctx.start_depth_only(),
-            Stage::Opaque => ctx.start_opaque(false),
+            Stage::Opaque => ctx.start_opaque(!prepass_has_run),
             Stage::Blend => ctx.start_alpha_blend(),
         }
 

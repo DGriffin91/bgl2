@@ -144,7 +144,8 @@ pub fn send_standard_meshes_to_gpu(
         gpu_meshes.gl = Some(ctx.gl.clone());
     }
 
-    let mut meshes_to_add: HashMap<u64, Vec<AssetId<Mesh>>> = HashMap::new();
+    // key is hash of vertex attribute props
+    let mut meshes_by_attr: HashMap<u64, Vec<AssetId<Mesh>>> = HashMap::new();
 
     for event in mesh_events.read() {
         let mesh_h = match event {
@@ -190,10 +191,10 @@ pub fn send_standard_meshes_to_gpu(
         let attr_hash = hasher.finish();
 
         // See if there's other meshes that were added this frame that this one could be packed with.
-        if let Some(mesh_h_set) = meshes_to_add.get_mut(&attr_hash) {
+        if let Some(mesh_h_set) = meshes_by_attr.get_mut(&attr_hash) {
             mesh_h_set.push(*mesh_h);
         } else {
-            meshes_to_add.insert(attr_hash, vec![*mesh_h]);
+            meshes_by_attr.insert(attr_hash, vec![*mesh_h]);
         }
     }
 
@@ -212,9 +213,49 @@ pub fn send_standard_meshes_to_gpu(
     } else {
         glow::UNSIGNED_INT
     };
+    let max_verts_per_buffer = if u16_indices {
+        u16::MAX as usize
+    } else {
+        u32::MAX as usize
+    };
+
+    // Groups of meshes to be combined.
+    let mut mesh_groups: Vec<Vec<AssetId<Mesh>>> = Vec::new();
+
+    // Go though meshes_by_attr and create groups that can fit in the index space available (which might only be u16::MAX)
+    for (_, mesh_handles) in meshes_by_attr {
+        let mut mesh_group = Vec::new();
+        let mut accum_positions = 0;
+        let mut accum_indices = 0;
+        for mesh_h in mesh_handles {
+            let Some(mesh) = meshes.get(mesh_h) else {
+                continue;
+            };
+            let positions_count = get_attribute_f32x3(mesh, Mesh::ATTRIBUTE_POSITION)
+                .expect("Meshes vertex positions are required")
+                .len();
+            accum_positions += positions_count;
+            accum_indices += mesh.indices().map_or(positions_count, |ind| ind.len());
+            // The math for accum_indices is because draw_elements offset is an i32 that uses bytes. Doesn't matter that
+            // i16 would only be 2 bytes since if this was over it would also easily already be over for u16 in general.
+            if accum_positions < max_verts_per_buffer && accum_indices * 4 < i32::MAX as usize {
+                // If a single mesh goes over, it ends up being skipped here. TODO break into multiple meshes.
+                mesh_group.push(mesh_h);
+            } else {
+                accum_positions = 0;
+                accum_indices = 0;
+                let mut new_group = Vec::new();
+                std::mem::swap(&mut mesh_group, &mut new_group);
+                mesh_groups.push(new_group);
+            }
+        }
+        if !mesh_group.is_empty() {
+            mesh_groups.push(mesh_group);
+        }
+    }
 
     // For each group of matching meshes, collect the vertex attributes and offset indices
-    for (_, mesh_handles) in meshes_to_add {
+    for mesh_handles in mesh_groups {
         let next_buffer_set_index = gpu_meshes.buffers.len();
         index_buffer_data_u16.clear();
         index_buffer_data_u32.clear();
