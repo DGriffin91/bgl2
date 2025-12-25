@@ -74,7 +74,7 @@ impl Drop for GPUMeshBufferMap {
 }
 
 impl GPUMeshBufferMap {
-    /// Call before using bind()
+    /// Call before using bind() or draw_mesh()
     pub fn reset_bind_cache(&mut self) {
         self.last_bind = None;
     }

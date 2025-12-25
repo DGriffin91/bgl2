@@ -289,14 +289,15 @@ impl BevyGlContext {
         &mut self,
         vertex: &P,
         fragment: &P,
+        shader_defs: &[(&str, &str)],
     ) -> Option<ShaderIndex> {
-        let key = shader_key(vertex.as_ref(), fragment.as_ref());
+        let key = shader_key(vertex.as_ref(), fragment.as_ref(), shader_defs);
         if let Some((index, watcher)) = self.shader_cache_map.get(&key) {
             if watcher.check() {
                 let vertex_src = std::fs::read_to_string(vertex).unwrap();
                 let fragment_src = std::fs::read_to_string(fragment).unwrap();
                 let old_shader = self.shader_cache[*index as usize];
-                let new_shader = self.shader(&vertex_src, &fragment_src);
+                let new_shader = self.shader(&vertex_src, &fragment_src, shader_defs);
                 match new_shader {
                     Ok(shader) => {
                         self.shader_cache[*index as usize] = shader;
@@ -309,7 +310,7 @@ impl BevyGlContext {
         } else {
             let vertex_src = std::fs::read_to_string(vertex).unwrap();
             let fragment_src = std::fs::read_to_string(fragment).unwrap();
-            let new_shader = self.shader(&vertex_src, &fragment_src);
+            let new_shader = self.shader(&vertex_src, &fragment_src, shader_defs);
             match new_shader {
                 Ok(shader) => {
                     let index = self.shader_cache.len() as u32;
@@ -333,12 +334,13 @@ impl BevyGlContext {
         &mut self,
         vertex_src: &str,
         fragment_src: &str,
+        shader_defs: &[(&str, &str)],
     ) -> Option<ShaderIndex> {
-        let key = shader_key(vertex_src.as_ref(), fragment_src.as_ref());
+        let key = shader_key(vertex_src.as_ref(), fragment_src.as_ref(), shader_defs);
         if let Some(index) = self.shader_cache_map.get(&key) {
             Some(*index)
         } else {
-            let Ok(shader) = self.shader(&vertex_src, &fragment_src) else {
+            let Ok(shader) = self.shader(&vertex_src, &fragment_src, shader_defs) else {
                 return None;
             };
             let index = self.shader_cache.len() as u32;
@@ -349,7 +351,12 @@ impl BevyGlContext {
     }
 
     #[must_use]
-    pub fn shader(&self, vertex: &str, fragment: &str) -> Result<glow::Program, anyhow::Error> {
+    pub fn shader(
+        &self,
+        vertex: &str,
+        fragment: &str,
+        shader_defs: &[(&str, &str)],
+    ) -> Result<glow::Program, anyhow::Error> {
         unsafe {
             let program = self.gl.create_program().expect("Cannot create program");
 
@@ -364,9 +371,15 @@ impl BevyGlContext {
                 let shader = self.gl.create_shader(*shader_type).map_err(Error::msg)?;
 
                 #[cfg(target_arch = "wasm32")]
-                let preamble = "precision highp float;";
+                let mut preamble = "precision highp float;\n".to_string();
                 #[cfg(not(target_arch = "wasm32"))]
-                let preamble = "#version 120";
+                let mut preamble = "#version 120\n".to_string();
+
+                shader_defs.into_iter().for_each(|shader_def| {
+                    if !(shader_def.0.is_empty() && shader_def.1.is_empty()) {
+                        preamble.push_str(&format!("#define {} {}\n", shader_def.0, shader_def.1));
+                    }
+                });
 
                 self.gl
                     .shader_source(shader, &format!("{}\n{}", preamble, shader_source));
@@ -439,6 +452,51 @@ impl BevyGlContext {
                 0,
             );
             self.gl.enable_vertex_attrib_array(index);
+        }
+    }
+
+    pub fn clear_color_and_depth(&self) {
+        unsafe {
+            self.gl.depth_mask(true);
+            self.gl.clear_color(0.0, 0.0, 0.0, 1.0);
+            self.gl.clear_depth_f32(0.0);
+            self.gl
+                .clear(glow::COLOR_BUFFER_BIT | glow::DEPTH_BUFFER_BIT);
+        };
+    }
+
+    pub fn start_alpha_blend(&self) {
+        unsafe {
+            self.gl.enable(glow::DEPTH_TEST);
+            self.gl.enable(glow::BLEND);
+            self.gl.depth_func(glow::GEQUAL);
+            self.gl.depth_mask(false);
+            self.gl.color_mask(true, true, true, true);
+            self.gl
+                .blend_func(glow::SRC_ALPHA, glow::ONE_MINUS_SRC_ALPHA);
+        }
+    }
+
+    /// It's not necessary to write depth after a prepass if everything is also included in opaque.
+    pub fn start_opaque(&self, write_depth: bool) {
+        unsafe {
+            self.gl.enable(glow::DEPTH_TEST);
+            self.gl.disable(glow::BLEND);
+            self.gl.depth_func(glow::GEQUAL);
+            self.gl.depth_mask(write_depth);
+            self.gl.color_mask(true, true, true, true);
+            self.gl.blend_func(glow::ZERO, glow::ONE);
+        }
+    }
+
+    pub fn start_depth_only(&self) {
+        unsafe {
+            self.gl.enable(glow::DEPTH_TEST);
+            self.gl.disable(glow::BLEND);
+            self.gl.depth_func(glow::GEQUAL);
+            self.gl.depth_mask(true);
+            self.gl.color_mask(false, false, false, false);
+            self.gl.blend_func(glow::ZERO, glow::ONE);
         }
     }
 
@@ -541,10 +599,11 @@ impl AttribType {
     }
 }
 
-pub fn shader_key(vertex: &Path, fragment: &Path) -> u64 {
+pub fn shader_key(vertex: &Path, fragment: &Path, shader_defs: &[(&str, &str)]) -> u64 {
     let mut hasher = std::hash::DefaultHasher::new();
     vertex.hash(&mut hasher);
     fragment.hash(&mut hasher);
+    shader_defs.hash(&mut hasher);
     hasher.finish()
 }
 

@@ -61,6 +61,13 @@ vec3 agx_tonemapping(vec3 /*Linear BT.709*/ ci) {
 }
 
 void main() {
+    vec4 color = base_color * texture2D(base_color_texture, uv_0);
+
+    if (!alpha_blend && (color.a < 0.5)) {
+        discard;
+    }
+
+    #ifndef DEPTH_PREPASS
     vec3 light_dir = normalize(vec3(-0.2, 0.5, 1.0));
     vec3 light_color = vec3(1.0, 0.9, 0.8) * 3.0;
     float specular_intensity = 1.0;
@@ -71,12 +78,6 @@ void main() {
     vec4 metallic_roughness = texture2D(metallic_roughness_texture, uv_0);
     float roughness = metallic_roughness.g * perceptual_roughness;
     roughness *= roughness;
-
-    vec4 color = base_color * texture2D(base_color_texture, uv_0);
-
-    if (!alpha_blend && (color.a < 0.5)) {
-        discard;
-    }
 
     vec3 normal = apply_normal_mapping(normal, tangent, uv_0);
 
@@ -98,4 +99,5 @@ void main() {
     gl_FragColor = vec4(diffuse_color + specular_color, color.a);
     gl_FragColor.rgb = pow(agx_tonemapping(gl_FragColor.rgb), vec3(2.2)); //Convert back to linear
     gl_FragColor = clamp(gl_FragColor, vec4(0.0), vec4(1.0));
+    #endif
 }

@@ -79,13 +79,13 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
         },
     ));
 
-    commands.spawn(SceneRoot(
-        asset_server.load("models/bistro_exterior/BistroExterior.gltf#Scene0"),
-    ));
-    commands.spawn((
-        SceneRoot(asset_server.load("models/bistro_interior_wine/BistroInterior_Wine.gltf#Scene0")),
-        Transform::from_xyz(0.0, 0.3, -0.2),
-    ));
+    //commands.spawn(SceneRoot(
+    //    asset_server.load("models/bistro_exterior/BistroExterior.gltf#Scene0"),
+    //));
+    //commands.spawn((
+    //    SceneRoot(asset_server.load("models/bistro_interior_wine/BistroInterior_Wine.gltf#Scene0")),
+    //    Transform::from_xyz(0.0, 0.3, -0.2),
+    //));
 
     commands.spawn((
         DirectionalLight {
@@ -138,6 +138,7 @@ fn render_std_mat(
     materials: Res<Assets<StandardMaterial>>,
     gpu_images: NonSend<GpuImages>,
 ) {
+    ctx.clear_color_and_depth();
     let (_entity, _camera, cam_global_trans, cam_proj) = *camera;
 
     let view_position = cam_global_trans.translation();
@@ -150,64 +151,67 @@ fn render_std_mat(
     let world_to_clip = view_to_clip * world_to_view;
     let _clip_to_world = view_to_world * clip_to_view;
 
-    #[cfg(target_arch = "wasm32")]
-    let shader_index = ctx
-        .shader_cached_wasm(
-            include_str!("npr_std_mat.vert"),
-            include_str!("npr_std_mat.frag"),
-        )
-        .unwrap();
-    #[cfg(not(target_arch = "wasm32"))]
-    let shader_index = ctx
-        .shader_cached("examples/npr_std_mat.vert", "examples/npr_std_mat.frag")
-        .unwrap();
+    #[derive(PartialEq, Eq)]
+    enum Stage {
+        Prepass,
+        Opaque,
+        Blend,
+    }
 
-    ctx.use_cached_program(shader_index);
-
-    let mut build = UniformSlotBuilder::<StandardMaterial>::new(&ctx, &gpu_images, shader_index);
-
-    val!(build, flip_normal_map_y);
-    val!(build, double_sided);
-    val!(build, perceptual_roughness);
-    val!(build, metallic);
-
-    tex!(build, base_color_texture);
-    tex!(build, normal_map_texture);
-    tex!(build, metallic_roughness_texture);
-
-    build.val("alpha_blend", |m| material_alpha_blend(m));
-    build.val("base_color", |m| m.base_color.to_linear().to_vec4());
-
-    upload!(build, view_to_world);
-    upload!(build, view_position);
-
-    unsafe {
-        ctx.gl.depth_mask(true);
-        ctx.gl.clear_color(0.0, 0.0, 0.0, 1.0);
-        ctx.gl.clear_depth_f32(0.0);
-        ctx.gl
-            .clear(glow::COLOR_BUFFER_BIT | glow::DEPTH_BUFFER_BIT);
-    };
-
-    gpu_meshes.reset_bind_cache();
-    for alpha_blend in [false, true] {
-        if alpha_blend {
-            unsafe {
-                ctx.gl.enable(glow::DEPTH_TEST);
-                ctx.gl.enable(glow::BLEND);
-                ctx.gl.depth_func(glow::GREATER);
-                ctx.gl.depth_mask(false);
-                ctx.gl
-                    .blend_func(glow::SRC_ALPHA, glow::ONE_MINUS_SRC_ALPHA);
-            }
+    for stage in [Stage::Prepass, Stage::Opaque, Stage::Blend] {
+        let defs = if stage == Stage::Prepass {
+            &[("DEPTH_PREPASS", "")]
         } else {
-            unsafe {
-                ctx.gl.enable(glow::DEPTH_TEST);
-                ctx.gl.disable(glow::BLEND);
-                ctx.gl.depth_func(glow::GREATER);
-                ctx.gl.depth_mask(true);
-                ctx.gl.blend_func(glow::ZERO, glow::ONE);
-            }
+            &[("", "")]
+        };
+
+        #[cfg(not(target_arch = "wasm32"))]
+        let shader_index = {
+            ctx.shader_cached(
+                "examples/npr_std_mat.vert",
+                "examples/npr_std_mat.frag",
+                defs,
+            )
+            .unwrap()
+        };
+
+        #[cfg(target_arch = "wasm32")]
+        let shader_index = {
+            ctx.shader_cached_wasm(
+                include_str!("npr_std_mat.vert"),
+                include_str!("npr_std_mat.frag"),
+                defs,
+            )
+            .unwrap()
+        };
+
+        ctx.use_cached_program(shader_index);
+
+        let mut build =
+            UniformSlotBuilder::<StandardMaterial>::new(&ctx, &gpu_images, shader_index);
+
+        val!(build, flip_normal_map_y);
+        val!(build, double_sided);
+        val!(build, perceptual_roughness);
+        val!(build, metallic);
+
+        tex!(build, base_color_texture);
+        tex!(build, normal_map_texture);
+        tex!(build, metallic_roughness_texture);
+
+        build.val("alpha_blend", |m| material_alpha_blend(m));
+        build.val("base_color", |m| m.base_color.to_linear().to_vec4());
+
+        upload!(build, view_to_world);
+        upload!(build, view_position);
+
+        gpu_meshes.reset_bind_cache();
+        ctx.use_cached_program(shader_index);
+
+        match stage {
+            Stage::Prepass => ctx.start_depth_only(),
+            Stage::Opaque => ctx.start_opaque(false),
+            Stage::Blend => ctx.start_alpha_blend(),
         }
 
         for (_entity, view_vis, transform, mesh, material_h) in &mut mesh_entities {
@@ -217,8 +221,15 @@ fn render_std_mat(
             let Some(material) = materials.get(material_h) else {
                 continue;
             };
-            if material_alpha_blend(material) != alpha_blend {
-                continue;
+            let material_blend = material_alpha_blend(material);
+            if stage == Stage::Blend {
+                if !material_blend {
+                    continue;
+                }
+            } else {
+                if material_blend {
+                    continue;
+                }
             }
             let local_to_world = transform.to_matrix();
             let local_to_clip = world_to_clip * local_to_world;

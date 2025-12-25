@@ -47,11 +47,11 @@ impl<'a, T> UniformSlotBuilder<'a, T> {
 
     pub fn get_uniform_location(&mut self, name: &str) -> Option<UniformLocation> {
         if let Some(location) = self.uniform_location_cache.get(name) {
-            *location
+            location.clone()
         } else {
             let location = self.ctx.get_uniform_location(self.shader_index, name);
             self.uniform_location_cache
-                .insert(name.to_string(), location);
+                .insert(name.to_string(), location.clone());
             location
         }
     }
