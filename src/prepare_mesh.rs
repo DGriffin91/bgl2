@@ -1,6 +1,10 @@
 use std::rc::Rc;
 
-use bevy::{mesh::MeshVertexAttribute, platform::collections::HashMap, prelude::*};
+use bevy::{
+    mesh::MeshVertexAttribute,
+    platform::collections::{HashMap, HashSet},
+    prelude::*,
+};
 use bytemuck::cast_slice;
 use glow::{Context, HasContext};
 
@@ -25,14 +29,14 @@ impl Plugin for PrepareMeshPlugin {
     }
 }
 
-pub struct GpuMeshBuffers {
+pub struct GpuMeshBufferSet {
     pub buffers: Vec<(MeshVertexAttribute, glow::Buffer)>,
     pub index: glow::Buffer,
-    pub index_count: usize,
+    pub all_index_count: usize,
     pub index_element_type: u32,
 }
 
-impl GpuMeshBuffers {
+impl GpuMeshBufferSet {
     fn delete(&self, gl: &Context) {
         unsafe {
             gl.delete_buffer(self.index);
@@ -41,38 +45,62 @@ impl GpuMeshBuffers {
             }
         }
     }
+}
 
-    pub fn bind(&self, ctx: &BevyGlContext, shader_index: u32) {
-        unsafe {
-            ctx.gl
-                .bind_buffer(glow::ELEMENT_ARRAY_BUFFER, Some(self.index));
-        };
-        for (att, buffer) in &self.buffers {
-            // TODO use caching to avoid looking up from the name here
-            if let Some(loc) = ctx.get_attrib_location(shader_index, att.name) {
-                let attrib_type = AttribType::from_bevy_vertex_format(att.format);
-                ctx.bind_vertex_attrib(
-                    loc,
-                    att.format.size() as u32 / attrib_type.gl_type_bytes(),
-                    attrib_type,
-                    *buffer,
-                );
-            }
-        }
-    }
+#[derive(Clone, Copy)]
+pub struct BufferRef {
+    pub buffer_index: usize,
+    pub indices_start: usize,
+    pub indices_count: usize,
+    pub index_element_type: u32,
 }
 
 #[derive(Default)]
 pub struct GPUMeshBufferMap {
-    pub buffers: HashMap<AssetId<Mesh>, GpuMeshBuffers>,
+    pub buffers: Vec<Option<(GpuMeshBufferSet, HashSet<AssetId<Mesh>>)>>,
+    pub map: HashMap<AssetId<Mesh>, BufferRef>,
     pub gl: Option<Rc<glow::Context>>,
 }
 
 impl Drop for GPUMeshBufferMap {
     fn drop(&mut self) {
-        for (_, buffer) in &self.buffers {
-            buffer.delete(self.gl.as_ref().unwrap());
+        for buffer in &self.buffers {
+            if let Some((buffer, _)) = buffer {
+                buffer.delete(self.gl.as_ref().unwrap());
+            }
         }
+    }
+}
+
+impl GPUMeshBufferMap {
+    pub fn bind(
+        &mut self,
+        ctx: &BevyGlContext,
+        mesh: &AssetId<Mesh>,
+        shader_index: u32,
+    ) -> Option<BufferRef> {
+        if let Some(buffer_ref) = self.map.get(mesh) {
+            if let Some((buffers, _)) = &self.buffers[buffer_ref.buffer_index] {
+                unsafe {
+                    ctx.gl
+                        .bind_buffer(glow::ELEMENT_ARRAY_BUFFER, Some(buffers.index));
+                };
+                for (att, buffer) in &buffers.buffers {
+                    // TODO use caching to avoid looking up from the name here
+                    if let Some(loc) = ctx.get_attrib_location(shader_index, att.name) {
+                        let attrib_type = AttribType::from_bevy_vertex_format(att.format);
+                        ctx.bind_vertex_attrib(
+                            loc,
+                            att.format.size() as u32 / attrib_type.gl_type_bytes(),
+                            attrib_type,
+                            *buffer,
+                        );
+                    }
+                }
+                return Some(*buffer_ref);
+            }
+        }
+        None
     }
 }
 
@@ -94,8 +122,23 @@ pub fn send_standard_meshes_to_gpu(
             | AssetEvent::Added { id }
             | AssetEvent::Modified { id } => id,
             AssetEvent::Removed { id } => {
-                if let Some(buffers) = gpu_meshes.buffers.remove(id) {
-                    buffers.delete(&ctx.gl);
+                if let Some(buffer_ref) = gpu_meshes.map.remove(id) {
+                    // after removing mapping, also remove it from the old set
+                    // If the old set now has zero references, remove the buffer.
+                    let mut buffer_unused = false;
+                    if let Some((_old_buffer, set)) =
+                        &mut gpu_meshes.buffers[buffer_ref.buffer_index]
+                    {
+                        set.remove(id);
+                        buffer_unused = set.is_empty();
+                    }
+                    if buffer_unused {
+                        if let Some((old_buffer, _)) =
+                            gpu_meshes.buffers[buffer_ref.buffer_index].take()
+                        {
+                            old_buffer.delete(&ctx.gl);
+                        }
+                    }
                 }
                 continue;
             }
@@ -156,16 +199,39 @@ pub fn send_standard_meshes_to_gpu(
             })
             .collect();
 
-        if let Some(old_buffer) = gpu_meshes.buffers.insert(
-            mesh_h.clone(),
-            GpuMeshBuffers {
+        let buffer_index = gpu_meshes.buffers.len();
+        gpu_meshes.buffers.push(Some((
+            GpuMeshBufferSet {
                 buffers,
-                index_count: index_count,
+                all_index_count: index_count,
                 index: index_buffer,
                 index_element_type: element_type,
             },
-        ) {
-            old_buffer.delete(&ctx.gl);
+            HashSet::from_iter([mesh_h.clone()]),
+        )));
+
+        let buffer_ref = BufferRef {
+            buffer_index,
+            indices_start: 0,
+            indices_count: index_count,
+            index_element_type: element_type,
+        };
+
+        // Add mapping from mesh handle to buffer. If this handle already had a mapping, remove it from the old set.
+        // If the old set now has zero references, remove the buffer.
+        if let Some(old_buffer_ref) = gpu_meshes.map.insert(mesh_h.clone(), buffer_ref) {
+            let mut buffer_unused = false;
+            if let Some((_old_buffer, set)) = &mut gpu_meshes.buffers[old_buffer_ref.buffer_index] {
+                set.remove(mesh_h);
+                buffer_unused = set.is_empty();
+            }
+            if buffer_unused {
+                if let Some((old_buffer, _)) =
+                    gpu_meshes.buffers[old_buffer_ref.buffer_index].take()
+                {
+                    old_buffer.delete(&ctx.gl);
+                }
+            }
         }
     }
 }

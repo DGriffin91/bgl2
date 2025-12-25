@@ -134,7 +134,7 @@ fn render_std_mat(
     )>,
     camera: Single<(Entity, &Camera, &GlobalTransform, &Projection)>,
     mut ctx: NonSendMut<BevyGlContext>,
-    gpu_meshes: NonSend<GPUMeshBufferMap>,
+    mut gpu_meshes: NonSendMut<GPUMeshBufferMap>,
     materials: Res<Assets<StandardMaterial>>,
     gpu_images: NonSend<GpuImages>,
 ) {
@@ -219,11 +219,10 @@ fn render_std_mat(
             if material_alpha_blend(material) != alpha_blend {
                 continue;
             }
-            if let Some(buffers) = gpu_meshes.buffers.get(&mesh.id()) {
+
+            if let Some(buffer_ref) = gpu_meshes.bind(&ctx, &mesh.id(), shader_index) {
                 let local_to_world = transform.to_matrix();
                 let local_to_clip = world_to_clip * local_to_world;
-
-                buffers.bind(&ctx, shader_index);
 
                 // TODO cache name lookup
                 upload!(build, local_to_world);
@@ -234,9 +233,9 @@ fn render_std_mat(
                 unsafe {
                     ctx.gl.draw_elements(
                         glow::TRIANGLES,
-                        buffers.index_count as i32,
-                        buffers.index_element_type,
-                        0,
+                        buffer_ref.indices_count as i32,
+                        buffer_ref.index_element_type,
+                        buffer_ref.indices_start as i32,
                     );
                 };
             }
