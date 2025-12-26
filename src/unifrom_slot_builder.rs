@@ -24,6 +24,7 @@ pub struct UniformSlotBuilder<'a, T> {
 
     pub texture_slots: Vec<(
         glow::UniformLocation,
+        Option<glow::Texture>,
         Box<dyn Fn(&T) -> &Option<Handle<Image>>>,
     )>,
 
@@ -95,14 +96,14 @@ impl<'a, T> UniformSlotBuilder<'a, T> {
         F: Fn(&T) -> &Option<Handle<Image>> + 'static,
     {
         if let Some(location) = self.get_uniform_location(name) {
-            self.texture_slots.push((location, Box::new(f)))
+            self.texture_slots.push((location, None, Box::new(f)))
         }
     }
     pub fn run(&mut self, material: &T) {
         for (slot, f) in &mut self.value_slots {
             f(&self.ctx, material, slot, &mut self.temp_value)
         }
-        for (i, (location, f)) in self.texture_slots.iter().enumerate() {
+        for (i, (location, previous_texture, f)) in self.texture_slots.iter_mut().enumerate() {
             let mut texture = self.gpu_images.placeholder.unwrap();
             if let Some(image_h) = f(material) {
                 if let Some(t) = self.gpu_images.mapping.get(&image_h.id()) {
@@ -110,10 +111,16 @@ impl<'a, T> UniformSlotBuilder<'a, T> {
                 }
             }
             unsafe {
+                if let Some(previous_texture) = previous_texture.as_ref() {
+                    if previous_texture == &texture {
+                        continue;
+                    }
+                }
                 // TODO needs to use info from the texture to actually setup correctly
                 self.ctx.gl.active_texture(glow::TEXTURE0 + i as u32);
                 self.ctx.gl.bind_texture(glow::TEXTURE_2D, Some(texture));
                 self.ctx.gl.uniform_1_i32(Some(&location), i as i32);
+                *previous_texture = Some(texture);
             }
         }
     }
@@ -121,6 +128,9 @@ impl<'a, T> UniformSlotBuilder<'a, T> {
     pub fn reset_slot_cache(&mut self) {
         for (slot, _f) in &mut self.value_slots {
             slot.init = false;
+        }
+        for (_slot, t, _f) in &mut self.texture_slots {
+            *t = None;
         }
     }
 
