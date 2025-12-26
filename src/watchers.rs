@@ -6,6 +6,7 @@ use std::{
     },
 };
 
+#[derive(Default)]
 pub struct Watchers {
     has_changes: Arc<AtomicBool>,
     _watchers: Vec<notify::RecommendedWatcher>,

@@ -26,4 +26,4 @@ Environment Variables:
 `VC_LTL` [VC-LTL-Binary](https://github.com/Chuyu-Team/VC-LTL5/releases/tag/v5.3.1)
 `YY_THUNKS` [YY-Thunks-Objs](https://github.com/Chuyu-Team/YY-Thunks/releases/tag/v1.1.9)
 
-`thunk --os xp --arch x86 -- --example load_gltf --release`
+`thunk --os xp --arch x86 -- --example load_gltf --release --features bundle_shaders`

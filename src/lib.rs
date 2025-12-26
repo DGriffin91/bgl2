@@ -25,7 +25,6 @@ use winit::platform::web::WindowExtWebSys;
 
 use crate::faststack::FastStack;
 use crate::faststack::StackStack;
-#[cfg(not(target_arch = "wasm32"))]
 use crate::watchers::Watchers;
 
 pub type ShaderIndex = u32;
@@ -39,10 +38,7 @@ pub struct BevyGlContext {
     #[cfg(not(target_arch = "wasm32"))]
     pub gl_display: Option<glutin::display::Display>,
     pub shader_cache: Vec<glow::Program>,
-    #[cfg(not(target_arch = "wasm32"))]
     pub shader_cache_map: HashMap<u64, (ShaderIndex, Watchers)>,
-    #[cfg(target_arch = "wasm32")]
-    pub shader_cache_map: HashMap<u64, ShaderIndex>,
 }
 
 impl Drop for BevyGlContext {
@@ -284,7 +280,6 @@ impl BevyGlContext {
         }
     }
 
-    #[cfg(not(target_arch = "wasm32"))]
     pub fn shader_cached<P: AsRef<Path> + ?Sized>(
         &mut self,
         vertex: &P,
@@ -326,27 +321,6 @@ impl BevyGlContext {
                     None
                 }
             }
-        }
-    }
-
-    #[cfg(target_arch = "wasm32")]
-    pub fn shader_cached_wasm(
-        &mut self,
-        vertex_src: &str,
-        fragment_src: &str,
-        shader_defs: &[(&str, &str)],
-    ) -> Option<ShaderIndex> {
-        let key = shader_key(vertex_src.as_ref(), fragment_src.as_ref(), shader_defs);
-        if let Some(index) = self.shader_cache_map.get(&key) {
-            Some(*index)
-        } else {
-            let Ok(shader) = self.shader(&vertex_src, &fragment_src, shader_defs) else {
-                return None;
-            };
-            let index = self.shader_cache.len() as u32;
-            self.shader_cache.push(shader);
-            self.shader_cache_map.insert(key, index);
-            Some(index)
         }
     }
 
@@ -685,4 +659,29 @@ impl UniformValue for Mat4 {
             .iter()
             .for_each(|n| out.push(n.to_bits()));
     }
+}
+
+#[macro_export]
+macro_rules! shader_cached_include {
+    ($bevy_gl_context:expr, $vertex:expr, $fragment:expr, $shader_defs:expr) => {{
+        let key = $crate::shader_key($vertex.as_ref(), $fragment.as_ref(), $shader_defs);
+        if let Some((index, _)) = $bevy_gl_context.shader_cache_map.get(&key) {
+            Some(*index)
+        } else {
+            if let Ok(shader) = $bevy_gl_context.shader(
+                &include_str!($vertex),
+                &include_str!($fragment),
+                $shader_defs,
+            ) {
+                let index = $bevy_gl_context.shader_cache.len() as u32;
+                $bevy_gl_context.shader_cache.push(shader);
+                $bevy_gl_context
+                    .shader_cache_map
+                    .insert(key, (index, Default::default()));
+                Some(index)
+            } else {
+                None
+            }
+        }
+    }};
 }

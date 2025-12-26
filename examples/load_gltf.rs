@@ -175,7 +175,7 @@ fn render_std_mat(
             &[("", "")]
         };
 
-        #[cfg(not(target_arch = "wasm32"))]
+        #[cfg(not(any(target_arch = "wasm32", feature = "bundle_shaders")))]
         let shader_index = {
             ctx.shader_cached(
                 "examples/npr_std_mat.vert",
@@ -185,15 +185,10 @@ fn render_std_mat(
             .unwrap()
         };
 
-        #[cfg(target_arch = "wasm32")]
-        let shader_index = {
-            ctx.shader_cached_wasm(
-                include_str!("npr_std_mat.vert"),
-                include_str!("npr_std_mat.frag"),
-                defs,
-            )
-            .unwrap()
-        };
+        #[cfg(any(target_arch = "wasm32", feature = "bundle_shaders"))]
+        let shader_index =
+            bevy_opengl::shader_cached_include!(ctx, "npr_std_mat.vert", "npr_std_mat.frag", defs)
+                .unwrap();
 
         ctx.use_cached_program(shader_index);
 

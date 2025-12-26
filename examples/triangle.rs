@@ -1,8 +1,4 @@
-use bevy::{
-    ecs::system::SystemState,
-    prelude::*,
-    winit::{WINIT_WINDOWS, WakeUp},
-};
+use bevy::{ecs::system::SystemState, prelude::*, winit::WINIT_WINDOWS};
 use bevy_opengl::BevyGlContext;
 use bytemuck::cast_slice;
 use glow::HasContext;
@@ -14,7 +10,7 @@ fn main() {
             bevy::input::InputPlugin,
             AssetPlugin::default(),
             bevy::a11y::AccessibilityPlugin,
-            bevy::winit::WinitPlugin::<WakeUp>::default(),
+            bevy::winit::WinitPlugin::default(),
             bevy::scene::ScenePlugin,
             WindowPlugin::default(),
             ImagePlugin::default_linear(),
