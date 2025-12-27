@@ -159,21 +159,11 @@ fn render_std_mat(
     let world_to_clip = view_to_clip * world_to_view;
     let _clip_to_world = view_to_world * clip_to_view;
 
-    #[cfg(not(any(target_arch = "wasm32", feature = "bundle_shaders")))]
-    let shader_index = {
-        ctx.shader_cached(
-            "examples/npr_std_mat.vert",
-            "examples/npr_std_mat.frag",
-            Default::default(),
-        )
-        .unwrap()
-    };
-
-    #[cfg(any(target_arch = "wasm32", feature = "bundle_shaders"))]
-    let shader_index = bevy_opengl::shader_cached_include!(
+    let shader_index = bevy_opengl::shader_cached!(
         ctx,
         "npr_std_mat.vert",
         "npr_std_mat.frag",
+        Default::default(),
         Default::default()
     )
     .unwrap();
