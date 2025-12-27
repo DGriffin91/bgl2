@@ -88,15 +88,18 @@ fn present(
     }
 }
 
-#[derive(Resource, Default)]
+#[derive(Resource, Default, PartialEq, Eq)]
 pub enum RenderPhase {
     #[default]
     Opaque,
-    Transparent(Entity),
+    Transparent,
 }
 
-#[derive(Resource, Default, Deref, DerefMut)]
-pub struct DeferredAlphaBlendDraws(pub Vec<(f32, Entity, TypeId)>);
+#[derive(Resource, Default)]
+pub struct DeferredAlphaBlendDraws {
+    pub deferred: Vec<(f32, Entity, TypeId)>,
+    pub next: Vec<Entity>,
+}
 
 #[derive(Default, Resource)]
 pub struct RenderRunner {
@@ -124,7 +127,7 @@ fn render_opaque(world: &mut World) {
     world
         .get_resource_mut::<DeferredAlphaBlendDraws>()
         .unwrap()
-        .0
+        .deferred
         .clear();
 
     // Systems fill in phase data while they draw opaque
@@ -140,22 +143,57 @@ fn render_transparent(world: &mut World) {
         .get_non_send_resource_mut::<BevyGlContext>()
         .unwrap()
         .start_alpha_blend();
+    *world.get_resource_mut::<RenderPhase>().unwrap() = RenderPhase::Transparent;
 
     let Some(runner) = world.remove_resource::<RenderRunner>() else {
         return;
     };
 
-    let mut draws = world.remove_resource::<DeferredAlphaBlendDraws>().unwrap();
-
-    draws.0.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap());
-
-    // Systems read from RenderPhase to draw transparent
-    for (_dist, entity, type_id) in &draws.0 {
-        *world.get_resource_mut::<RenderPhase>().unwrap() = RenderPhase::Transparent(*entity);
-        let _ = world.run_system(*runner.registry.get(type_id).unwrap());
+    {
+        let mut draws = world.get_resource_mut::<DeferredAlphaBlendDraws>().unwrap();
+        draws
+            .deferred
+            .sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap());
+        draws.next.clear();
     }
 
-    draws.0.clear();
-    world.insert_resource(draws);
+    let mut current_type_id = None;
+    let mut last = false;
+    // Draw deferred transparent
+    loop {
+        let mut draws = world.get_resource_mut::<DeferredAlphaBlendDraws>().unwrap();
+        // collect draws off the end of draws.deferred on to draws.next until we hit a different id, then submit those
+        // before collecting the next set
+        loop {
+            if let Some((dist, entity, type_id)) = draws.deferred.pop() {
+                if let Some(last_type_id) = current_type_id {
+                    if last_type_id == type_id {
+                        draws.next.push(entity);
+                    } else {
+                        draws.deferred.push((dist, entity, type_id));
+                        current_type_id = None;
+                        break;
+                    }
+                } else {
+                    draws.next.clear();
+                    draws.next.push(entity);
+                    current_type_id = Some(type_id);
+                }
+            } else {
+                last = true;
+                break;
+            }
+        }
+
+        if let Some(current_type_id) = current_type_id {
+            let _ = world.run_system(*runner.registry.get(&current_type_id).unwrap());
+        } else {
+            break;
+        }
+        if last {
+            break;
+        }
+    }
+
     world.insert_resource(runner);
 }

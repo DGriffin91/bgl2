@@ -1,4 +1,4 @@
-use std::{any::TypeId, iter};
+use std::{any::TypeId, mem};
 
 use bevy::{
     asset::{AssetMetaCheck, UnapprovedPathMode},
@@ -156,7 +156,7 @@ fn render_std_mat(
     mut gpu_meshes: NonSendMut<GPUMeshBufferMap>,
     materials: Res<Assets<StandardMaterial>>,
     phase: If<Res<RenderPhase>>,
-    mut transparent_draws: Option<ResMut<DeferredAlphaBlendDraws>>,
+    mut transparent_draws: ResMut<DeferredAlphaBlendDraws>,
     gpu_images: NonSend<GpuImages>,
 ) {
     let (_entity, _camera, cam_global_trans, cam_proj) = *camera;
@@ -210,8 +210,8 @@ fn render_std_mat(
 
     let iter = match **phase {
         RenderPhase::Opaque => Either::Left(mesh_entities.iter()),
-        RenderPhase::Transparent(entity) => {
-            Either::Right(iter::once(mesh_entities.get(entity).unwrap()))
+        RenderPhase::Transparent => {
+            Either::Right(mesh_entities.iter_many(mem::take(&mut transparent_draws.next)))
         }
     };
 
@@ -224,12 +224,11 @@ fn render_std_mat(
             continue;
         };
 
-        if let Some(transparent_draws) = &mut transparent_draws {
-            // If the DeferredAlphaBlendDraws is Some we are in the opaque phase and must defer any alpha blend draws
-            // so they can be sorted and run in order.
+        if **phase == RenderPhase::Opaque {
+            // If in opaque phase and must defer any alpha blend draws so they can be sorted and run in order.
             if material_alpha_blend(material) {
-                transparent_draws.push((
-                    -world_to_view
+                transparent_draws.deferred.push((
+                    world_to_view
                         .project_point3a(transform.translation_vec3a())
                         .z,
                     entity,
