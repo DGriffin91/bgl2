@@ -24,6 +24,7 @@ raw-window-handle = "0.6.2"
 winit = "0.30.12"
 notify = "8.2.0"
 anyhow = "1.0.100"
+itertools = "0.14.0"
 
 [target.'cfg(not(any(target_arch = "wasm32")))'.dependencies]
 glutin = "0.32.3"

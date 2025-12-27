@@ -1,3 +1,5 @@
+use std::{any::TypeId, iter};
+
 use bevy::{
     asset::{AssetMetaCheck, UnapprovedPathMode},
     diagnostic::{FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin},
@@ -14,57 +16,67 @@ use bevy_opengl::{
     BevyGlContext,
     prepare_image::GpuImages,
     prepare_mesh::GPUMeshBufferMap,
-    render::{OpenGLRenderPlugin, RenderSet},
+    render::{DeferredAlphaBlendDraws, OpenGLRenderPlugin, RenderPhase, RenderRunner},
     tex,
     unifrom_slot_builder::UniformSlotBuilder,
     upload, val,
 };
 use glow::HasContext;
+use itertools::Either;
 
 fn main() {
-    App::new()
-        .insert_resource(WinitSettings {
-            focused_mode: UpdateMode::Continuous,
-            unfocused_mode: UpdateMode::Continuous,
-        })
-        .add_plugins((
-            DefaultPlugins
-                .set(RenderPlugin {
-                    render_creation: WgpuSettings {
-                        backends: None,
-                        ..default()
-                    }
-                    .into(),
+    let mut app = App::new();
+    app.insert_resource(WinitSettings {
+        focused_mode: UpdateMode::Continuous,
+        unfocused_mode: UpdateMode::Continuous,
+    })
+    .add_plugins((
+        DefaultPlugins
+            .set(RenderPlugin {
+                render_creation: WgpuSettings {
+                    backends: None,
                     ..default()
-                })
-                .set(AssetPlugin {
-                    // Allow scenes to be loaded from anywhere on disk
-                    unapproved_path_mode: UnapprovedPathMode::Allow,
-                    ..default()
-                })
-                .set(WindowPlugin {
-                    primary_window: Some(Window {
-                        present_mode: PresentMode::Immediate,
-                        ..default()
-                    }),
-                    ..default()
-                })
-                .set(AssetPlugin {
-                    // Wasm builds will check for meta files (that don't exist) if this isn't set.
-                    // This causes errors and even panics in web builds on itch.
-                    // See https://github.com/bevyengine/bevy_github_ci_template/issues/48.
-                    meta_check: AssetMetaCheck::Never,
+                }
+                .into(),
+                ..default()
+            })
+            .set(AssetPlugin {
+                // Allow scenes to be loaded from anywhere on disk
+                unapproved_path_mode: UnapprovedPathMode::Allow,
+                ..default()
+            })
+            .set(WindowPlugin {
+                primary_window: Some(Window {
+                    present_mode: PresentMode::Immediate,
                     ..default()
                 }),
-            OpenGLRenderPlugin,
-            CameraControllerPlugin,
-            LogDiagnosticsPlugin::default(),
-            FrameTimeDiagnosticsPlugin::default(),
-        ))
-        .add_plugins(MipmapGeneratorPlugin)
+                ..default()
+            })
+            .set(AssetPlugin {
+                // Wasm builds will check for meta files (that don't exist) if this isn't set.
+                // This causes errors and even panics in web builds on itch.
+                // See https://github.com/bevyengine/bevy_github_ci_template/issues/48.
+                meta_check: AssetMetaCheck::Never,
+                ..default()
+            }),
+        OpenGLRenderPlugin,
+        CameraControllerPlugin,
+        LogDiagnosticsPlugin::default(),
+        FrameTimeDiagnosticsPlugin::default(),
+    ));
+
+    {
+        let world = app.world_mut();
+        let render_std_mat_id = world.register_system(render_std_mat);
+        world
+            .get_resource_mut::<RenderRunner>()
+            .unwrap()
+            .register::<StandardMaterial>(render_std_mat_id);
+    }
+
+    app.add_plugins(MipmapGeneratorPlugin)
         .add_systems(Update, generate_mipmaps::<StandardMaterial>)
         .add_systems(Startup, (setup, init))
-        .add_systems(PostUpdate, render_std_mat.in_set(RenderSet::Render))
         .run();
 }
 
@@ -132,7 +144,7 @@ fn init(world: &mut World, params: &mut SystemState<Query<(Entity, &mut Window)>
 }
 
 fn render_std_mat(
-    mut mesh_entities: Query<(
+    mesh_entities: Query<(
         Entity,
         &ViewVisibility,
         Ref<GlobalTransform>,
@@ -143,9 +155,10 @@ fn render_std_mat(
     mut ctx: NonSendMut<BevyGlContext>,
     mut gpu_meshes: NonSendMut<GPUMeshBufferMap>,
     materials: Res<Assets<StandardMaterial>>,
+    phase: If<Res<RenderPhase>>,
+    mut transparent_draws: Option<ResMut<DeferredAlphaBlendDraws>>,
     gpu_images: NonSend<GpuImages>,
 ) {
-    ctx.clear_color_and_depth();
     let (_entity, _camera, cam_global_trans, cam_proj) = *camera;
 
     let view_position = cam_global_trans.translation();
@@ -158,94 +171,84 @@ fn render_std_mat(
     let world_to_clip = view_to_clip * world_to_view;
     let _clip_to_world = view_to_world * clip_to_view;
 
-    #[derive(PartialEq, Eq)]
-    enum Stage {
-        Prepass,
-        Opaque,
-        Blend,
-    }
+    #[cfg(not(any(target_arch = "wasm32", feature = "bundle_shaders")))]
+    let shader_index = {
+        ctx.shader_cached(
+            "examples/npr_std_mat.vert",
+            "examples/npr_std_mat.frag",
+            Default::default(),
+        )
+        .unwrap()
+    };
 
-    let mut prepass_has_run = false;
-    //Stage::Prepass,
-    for stage in [Stage::Opaque, Stage::Blend] {
-        let defs = if stage == Stage::Prepass {
-            prepass_has_run = true;
-            &[("DEPTH_PREPASS", "")]
-        } else {
-            &[("", "")]
-        };
+    #[cfg(any(target_arch = "wasm32", feature = "bundle_shaders"))]
+    let shader_index =
+        bevy_opengl::shader_cached_include!(ctx, "npr_std_mat.vert", "npr_std_mat.frag", defs)
+            .unwrap();
 
-        #[cfg(not(any(target_arch = "wasm32", feature = "bundle_shaders")))]
-        let shader_index = {
-            ctx.shader_cached(
-                "examples/npr_std_mat.vert",
-                "examples/npr_std_mat.frag",
-                defs,
-            )
-            .unwrap()
-        };
+    ctx.use_cached_program(shader_index);
 
-        #[cfg(any(target_arch = "wasm32", feature = "bundle_shaders"))]
-        let shader_index =
-            bevy_opengl::shader_cached_include!(ctx, "npr_std_mat.vert", "npr_std_mat.frag", defs)
-                .unwrap();
+    let mut build = UniformSlotBuilder::<StandardMaterial>::new(&ctx, &gpu_images, shader_index);
 
-        ctx.use_cached_program(shader_index);
+    val!(build, flip_normal_map_y);
+    val!(build, double_sided);
+    val!(build, perceptual_roughness);
+    val!(build, metallic);
 
-        let mut build =
-            UniformSlotBuilder::<StandardMaterial>::new(&ctx, &gpu_images, shader_index);
+    tex!(build, base_color_texture);
+    tex!(build, normal_map_texture);
+    tex!(build, metallic_roughness_texture);
 
-        val!(build, flip_normal_map_y);
-        val!(build, double_sided);
-        val!(build, perceptual_roughness);
-        val!(build, metallic);
+    build.val("alpha_blend", |m| material_alpha_blend(m));
+    build.val("base_color", |m| m.base_color.to_linear().to_vec4());
 
-        tex!(build, base_color_texture);
-        tex!(build, normal_map_texture);
-        tex!(build, metallic_roughness_texture);
+    upload!(build, view_to_world);
+    upload!(build, view_position);
 
-        build.val("alpha_blend", |m| material_alpha_blend(m));
-        build.val("base_color", |m| m.base_color.to_linear().to_vec4());
+    gpu_meshes.reset_bind_cache();
+    ctx.use_cached_program(shader_index);
 
-        upload!(build, view_to_world);
-        upload!(build, view_position);
+    let iter = match **phase {
+        RenderPhase::Opaque => Either::Left(mesh_entities.iter()),
+        RenderPhase::Transparent(entity) => {
+            Either::Right(iter::once(mesh_entities.get(entity).unwrap()))
+        }
+    };
 
-        gpu_meshes.reset_bind_cache();
-        ctx.use_cached_program(shader_index);
-
-        match stage {
-            Stage::Prepass => ctx.start_depth_only(),
-            Stage::Opaque => ctx.start_opaque(!prepass_has_run),
-            Stage::Blend => ctx.start_alpha_blend(),
+    for (entity, view_vis, transform, mesh, material_h) in iter {
+        if !view_vis.get() {
+            continue;
         }
 
-        for (_entity, view_vis, transform, mesh, material_h) in &mut mesh_entities {
-            if !view_vis.get() {
+        let Some(material) = materials.get(material_h) else {
+            continue;
+        };
+
+        if let Some(transparent_draws) = &mut transparent_draws {
+            // If the DeferredAlphaBlendDraws is Some we are in the opaque phase and must defer any alpha blend draws
+            // so they can be sorted and run in order.
+            if material_alpha_blend(material) {
+                transparent_draws.push((
+                    -world_to_view
+                        .project_point3a(transform.translation_vec3a())
+                        .z,
+                    entity,
+                    TypeId::of::<StandardMaterial>(),
+                ));
                 continue;
             }
-            let Some(material) = materials.get(material_h) else {
-                continue;
-            };
-            let material_blend = material_alpha_blend(material);
-            if stage == Stage::Blend {
-                if !material_blend {
-                    continue;
-                }
-            } else {
-                if material_blend {
-                    continue;
-                }
-            }
-            let local_to_world = transform.to_matrix();
-            let local_to_clip = world_to_clip * local_to_world;
-
-            upload!(build, local_to_world);
-            upload!(build, local_to_clip);
-
-            build.run(material);
-            gpu_meshes.draw_mesh(&ctx, mesh.id(), shader_index);
         }
+
+        let local_to_world = transform.to_matrix();
+        let local_to_clip = world_to_clip * local_to_world;
+
+        upload!(build, local_to_world);
+        upload!(build, local_to_clip);
+
+        build.run(material);
+        gpu_meshes.draw_mesh(&ctx, mesh.id(), shader_index);
     }
+
     unsafe { ctx.gl.bind_vertex_array(None) };
 }
 
