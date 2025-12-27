@@ -1,7 +1,11 @@
 use std::any::TypeId;
 
 use bevy::{
-    ecs::system::SystemId, platform::collections::HashMap, prelude::*, window::WindowResized,
+    ecs::system::{SystemId, SystemState},
+    platform::collections::HashMap,
+    prelude::*,
+    window::WindowResized,
+    winit::WINIT_WINDOWS,
 };
 
 use glow::HasContext;
@@ -32,7 +36,7 @@ impl Plugin for OpenGLRenderPlugin {
             .add_plugins((PrepareMeshPlugin, PrepareImagePlugin));
 
         // TODO reference: https://github.com/bevyengine/bevy/pull/22144
-        app.configure_sets(Startup, (RenderSet::Init, RenderSet::Pipeline));
+        app.configure_sets(Startup, (RenderSet::Init, RenderSet::Pipeline).chain());
         app.configure_sets(
             PostUpdate,
             (
@@ -49,6 +53,7 @@ impl Plugin for OpenGLRenderPlugin {
                 .after(TransformSystems::Propagate),
         );
 
+        app.add_systems(Startup, init_gl.in_set(RenderSet::Init));
         app.add_systems(PostUpdate, clear.in_set(RenderSet::PrepareView));
         app.add_systems(PostUpdate, render_opaque.in_set(RenderSet::RenderOpaque));
         app.add_systems(
@@ -199,4 +204,23 @@ fn render_transparent(world: &mut World) {
     let ctx = world.non_send_resource::<BevyGlContext>();
     unsafe { ctx.gl.bind_vertex_array(None) };
     world.insert_resource(runner);
+}
+
+pub fn init_gl(world: &mut World, params: &mut SystemState<Query<(Entity, &mut Window)>>) {
+    if world.contains_non_send::<BevyGlContext>() {
+        return;
+    }
+    WINIT_WINDOWS.with_borrow(|winit_windows| {
+        let mut windows = params.get_mut(world);
+
+        let (bevy_window_entity, bevy_window) = windows.single_mut().unwrap();
+        let Some(winit_window) = winit_windows.get_window(bevy_window_entity) else {
+            warn!("No Window Found");
+            return;
+        };
+
+        let ctx = BevyGlContext::new(&bevy_window, winit_window);
+
+        world.insert_non_send_resource(ctx);
+    });
 }

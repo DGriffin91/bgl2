@@ -3,12 +3,11 @@ use std::{any::TypeId, mem};
 use bevy::{
     camera::primitives::Aabb,
     diagnostic::{FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin},
-    ecs::system::SystemState,
     light::CascadeShadowConfigBuilder,
     prelude::*,
     render::{RenderPlugin, settings::WgpuSettings},
     window::PresentMode,
-    winit::{UpdateMode, WINIT_WINDOWS, WinitSettings},
+    winit::{UpdateMode, WinitSettings},
 };
 use bevy_basic_camera::{CameraController, CameraControllerPlugin};
 use bevy_mod_mipmap_generator::{MipmapGeneratorPlugin, generate_mipmaps};
@@ -16,7 +15,7 @@ use bevy_opengl::{
     BevyGlContext,
     prepare_image::GpuImages,
     prepare_mesh::GPUMeshBufferMap,
-    render::{DeferredAlphaBlendDraws, OpenGLRenderPlugin, RenderPhase, RenderRunner},
+    render::{DeferredAlphaBlendDraws, OpenGLRenderPlugin, RenderPhase, RenderRunner, RenderSet},
     tex,
     unifrom_slot_builder::UniformSlotBuilder,
     upload, val,
@@ -63,12 +62,19 @@ fn main() {
 
     app.add_plugins(MipmapGeneratorPlugin)
         .add_systems(Update, generate_mipmaps::<StandardMaterial>)
-        .add_systems(Startup, (setup, init))
+        .add_systems(Startup, setup.in_set(RenderSet::Pipeline))
         .run();
 }
 
 /// set up a simple 3D scene
-fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
+fn setup(
+    mut commands: Commands,
+    asset_server: Res<AssetServer>,
+    mut ctx: NonSendMut<BevyGlContext>,
+) {
+    ctx.shader_snippets
+        .insert(String::from("agx"), String::from(include_str!("agx.glsl")));
+
     commands.spawn((
         Camera3d::default(),
         Transform::from_xyz(0.7, 0.7, 1.0).looking_at(Vec3::new(0.0, 0.3, 0.0), Vec3::Y),
@@ -109,25 +115,6 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
         GltfAssetLabel::Scene(0).from_asset("models/FlightHelmet/FlightHelmet.gltf"),
     )));
     commands.spawn(SceneRoot(asset_server.load("models/Wood/wood.gltf#Scene0")));
-}
-
-fn init(world: &mut World, params: &mut SystemState<Query<(Entity, &mut Window)>>) {
-    if world.contains_non_send::<BevyGlContext>() {
-        return;
-    }
-    WINIT_WINDOWS.with_borrow(|winit_windows| {
-        let mut windows = params.get_mut(world);
-
-        let (bevy_window_entity, bevy_window) = windows.single_mut().unwrap();
-        let Some(winit_window) = winit_windows.get_window(bevy_window_entity) else {
-            warn!("No Window Found");
-            return;
-        };
-
-        let ctx = BevyGlContext::new(&bevy_window, winit_window);
-
-        world.insert_non_send_resource(ctx);
-    });
 }
 
 fn render_std_mat(

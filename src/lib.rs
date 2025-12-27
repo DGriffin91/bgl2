@@ -8,6 +8,7 @@ pub mod watchers;
 
 use anyhow::Error;
 use anyhow::anyhow;
+use bevy::platform::collections::HashSet;
 use std::hash::Hash;
 use std::hash::Hasher;
 use std::path::Path;
@@ -39,6 +40,7 @@ pub struct BevyGlContext {
     pub gl_display: Option<glutin::display::Display>,
     pub shader_cache: Vec<glow::Program>,
     pub shader_cache_map: HashMap<u64, (ShaderIndex, Watchers)>,
+    pub shader_snippets: HashMap<String, String>,
 }
 
 impl Drop for BevyGlContext {
@@ -193,6 +195,7 @@ impl BevyGlContext {
                 gl_display: Some(gl_display),
                 shader_cache: Default::default(),
                 shader_cache_map: Default::default(),
+                shader_snippets: Default::default(),
             }
         }
         #[cfg(target_arch = "wasm32")]
@@ -218,6 +221,7 @@ impl BevyGlContext {
                 gl: Rc::new(gl),
                 shader_cache: Default::default(),
                 shader_cache_map: Default::default(),
+                shader_snippets: Default::default(),
             }
         }
     }
@@ -366,8 +370,27 @@ impl BevyGlContext {
                     }
                 });
 
+                let mut expanded_shader_source = String::with_capacity(shader_source.len() * 2);
+                let mut already_included_snippets = HashSet::new();
+
+                for line in shader_source.lines() {
+                    if let Some(rest) = line.strip_prefix("#include") {
+                        let snippet_name = rest.trim();
+                        if let Some(snippet) = self.shader_snippets.get(snippet_name) {
+                            if already_included_snippets.insert(snippet_name) {
+                                expanded_shader_source.push_str("\n");
+                                expanded_shader_source.push_str(snippet);
+                                expanded_shader_source.push_str("\n");
+                            }
+                        }
+                    } else {
+                        expanded_shader_source.push_str(line);
+                        expanded_shader_source.push_str("\n");
+                    }
+                }
+
                 self.gl
-                    .shader_source(shader, &format!("{}\n{}", preamble, shader_source));
+                    .shader_source(shader, &format!("{}\n{}", preamble, expanded_shader_source));
 
                 self.gl.compile_shader(shader);
 
