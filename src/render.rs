@@ -107,6 +107,18 @@ pub struct DeferredAlphaBlendDraws {
     pub next: Vec<Entity>,
 }
 
+impl DeferredAlphaBlendDraws {
+    // Defer an entity to be drawn in the alpha blend phase
+    pub fn defer<T: ?Sized + 'static>(&mut self, distance: f32, entity: Entity) {
+        self.deferred.push((distance, entity, TypeId::of::<T>()));
+    }
+
+    // Take the current set of alpha blend entities to be drawn
+    pub fn take(&mut self) -> Vec<Entity> {
+        std::mem::take(&mut self.next)
+    }
+}
+
 #[derive(Default, Resource)]
 pub struct RenderRunner {
     pub registry: HashMap<TypeId, SystemId>,

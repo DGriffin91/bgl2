@@ -180,7 +180,7 @@ fn render_std_mat(
     let iter = match **phase {
         RenderPhase::Opaque => Either::Left(mesh_entities.iter()),
         RenderPhase::Transparent => {
-            Either::Right(mesh_entities.iter_many(mem::take(&mut transparent_draws.next)))
+            Either::Right(mesh_entities.iter_many(transparent_draws.take()))
         }
     };
 
@@ -200,12 +200,11 @@ fn render_std_mat(
             if material_alpha_blend(material) {
                 let ws_radius = transform.radius_vec3a(aabb.half_extents);
                 let ws_center = world_from_local.transform_point3a(aabb.center);
-                transparent_draws.deferred.push((
+                transparent_draws.defer::<StandardMaterial>(
                     // Use closest point on bounding sphere
                     view_from_world.project_point3a(ws_center).z + ws_radius,
                     entity,
-                    TypeId::of::<StandardMaterial>(),
-                ));
+                );
                 continue;
             }
         }
