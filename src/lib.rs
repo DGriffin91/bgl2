@@ -291,21 +291,14 @@ impl BevyGlContext {
         vertex: &P,
         fragment: &P,
         shader_defs: &[(&str, &str)],
-        binding_locations: &[(&str, u32)],
     ) -> Option<ShaderIndex> {
-        let key = shader_key(
-            vertex.as_ref(),
-            fragment.as_ref(),
-            shader_defs,
-            binding_locations,
-        );
+        let key = shader_key(vertex.as_ref(), fragment.as_ref(), shader_defs);
         if let Some((index, watcher)) = self.shader_cache_map.get(&key) {
             if watcher.check() {
                 let vertex_src = std::fs::read_to_string(vertex).unwrap();
                 let fragment_src = std::fs::read_to_string(fragment).unwrap();
                 let old_shader = self.shader_cache[*index as usize];
-                let new_shader =
-                    self.shader(&vertex_src, &fragment_src, shader_defs, binding_locations);
+                let new_shader = self.shader(&vertex_src, &fragment_src, shader_defs);
                 match new_shader {
                     Ok(shader) => {
                         self.shader_cache[*index as usize] = shader;
@@ -318,8 +311,7 @@ impl BevyGlContext {
         } else {
             let vertex_src = std::fs::read_to_string(vertex).unwrap();
             let fragment_src = std::fs::read_to_string(fragment).unwrap();
-            let new_shader =
-                self.shader(&vertex_src, &fragment_src, shader_defs, binding_locations);
+            let new_shader = self.shader(&vertex_src, &fragment_src, shader_defs);
             match new_shader {
                 Ok(shader) => {
                     let index = self.shader_cache.len() as u32;
@@ -344,7 +336,6 @@ impl BevyGlContext {
         vertex: &str,
         fragment: &str,
         shader_defs: &[(&str, &str)],
-        binding_locations: &[(&str, u32)],
     ) -> Result<glow::Program, anyhow::Error> {
         unsafe {
             let program = self.gl.create_program().expect("Cannot create program");
@@ -403,10 +394,6 @@ impl BevyGlContext {
 
                 self.gl.attach_shader(program, shader);
                 shaders.push(shader);
-            }
-
-            for (name, index) in binding_locations {
-                self.gl.bind_attrib_location(program, *index, name);
             }
 
             self.gl.link_program(program);
@@ -611,17 +598,11 @@ impl AttribType {
     }
 }
 
-pub fn shader_key(
-    vertex: &Path,
-    fragment: &Path,
-    shader_defs: &[(&str, &str)],
-    binding_locations: &[(&str, u32)],
-) -> u64 {
+pub fn shader_key(vertex: &Path, fragment: &Path, shader_defs: &[(&str, &str)]) -> u64 {
     let mut hasher = std::hash::DefaultHasher::new();
     vertex.hash(&mut hasher);
     fragment.hash(&mut hasher);
     shader_defs.hash(&mut hasher);
-    binding_locations.hash(&mut hasher);
     hasher.finish()
 }
 
@@ -706,31 +687,19 @@ impl UniformValue for Mat4 {
 }
 
 #[macro_export]
-/// Binding locations are optional. If they are not used get_uniform_location or UniformSlotBuilder must be used to
-/// correlate binding names to numbers.
 /// if target_arch = wasm32 or the bundle_shaders feature is enabled the shader strings will be included in the binary.
 /// otherwise they will be hot reloaded when modified.
 macro_rules! shader_cached {
-    ($bevy_gl_context:expr, $vertex:expr, $fragment:expr, $shader_defs:expr, $binding_locations:expr) => {{
+    ($bevy_gl_context:expr, $vertex:expr, $fragment:expr, $shader_defs:expr) => {{
         #[cfg(not(any(target_arch = "wasm32", feature = "bundle_shaders")))]
         {
             let path = std::path::Path::new(file!()).parent().unwrap();
-            $bevy_gl_context.shader_cached(
-                &path.join($vertex),
-                &path.join($fragment),
-                $shader_defs,
-                $binding_locations,
-            )
+            $bevy_gl_context.shader_cached(&path.join($vertex), &path.join($fragment), $shader_defs)
         }
 
         #[cfg(any(target_arch = "wasm32", feature = "bundle_shaders"))]
         {
-            let key = $crate::shader_key(
-                $vertex.as_ref(),
-                $fragment.as_ref(),
-                $shader_defs,
-                $binding_locations,
-            );
+            let key = $crate::shader_key($vertex.as_ref(), $fragment.as_ref(), $shader_defs);
             if let Some((index, _)) = $bevy_gl_context.shader_cache_map.get(&key) {
                 Some(*index)
             } else {
@@ -738,7 +707,6 @@ macro_rules! shader_cached {
                     &include_str!($vertex),
                     &include_str!($fragment),
                     $shader_defs,
-                    $binding_locations,
                 ) {
                     let index = $bevy_gl_context.shader_cache.len() as u32;
                     $bevy_gl_context.shader_cache.push(shader);

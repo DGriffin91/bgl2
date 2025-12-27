@@ -1,5 +1,3 @@
-use std::{any::TypeId, mem};
-
 use bevy::{
     camera::primitives::Aabb,
     diagnostic::{FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin},
@@ -150,7 +148,6 @@ fn render_std_mat(
         ctx,
         "npr_std_mat.vert",
         "npr_std_mat.frag",
-        Default::default(),
         Default::default()
     )
     .unwrap();

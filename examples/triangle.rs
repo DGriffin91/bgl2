@@ -43,12 +43,7 @@ fn init(world: &mut World, params: &mut SystemState<Query<(Entity, &mut Window)>
 
 fn update(mut ctx: If<NonSendMut<BevyGlContext>>) {
     let shader_index = ctx
-        .shader_cached(
-            "examples/tri.vert",
-            "examples/tri.frag",
-            &[],
-            Default::default(),
-        )
+        .shader_cached("examples/tri.vert", "examples/tri.frag", Default::default())
         .unwrap();
 
     unsafe {
