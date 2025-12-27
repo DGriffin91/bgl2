@@ -4,6 +4,7 @@ use bevy::{
     ecs::system::SystemId, platform::collections::HashMap, prelude::*, window::WindowResized,
 };
 
+use glow::HasContext;
 #[cfg(not(target_arch = "wasm32"))]
 use glutin::surface::GlSurface;
 
@@ -195,5 +196,7 @@ fn render_transparent(world: &mut World) {
         }
     }
 
+    let ctx = world.non_send_resource::<BevyGlContext>();
+    unsafe { ctx.gl.bind_vertex_array(None) };
     world.insert_resource(runner);
 }

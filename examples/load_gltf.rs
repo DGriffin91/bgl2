@@ -1,7 +1,6 @@
 use std::{any::TypeId, mem};
 
 use bevy::{
-    asset::{AssetMetaCheck, UnapprovedPathMode},
     camera::primitives::Aabb,
     diagnostic::{FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin},
     ecs::system::SystemState,
@@ -22,7 +21,6 @@ use bevy_opengl::{
     unifrom_slot_builder::UniformSlotBuilder,
     upload, val,
 };
-use glow::HasContext;
 use itertools::Either;
 
 fn main() {
@@ -41,23 +39,11 @@ fn main() {
                 .into(),
                 ..default()
             })
-            .set(AssetPlugin {
-                // Allow scenes to be loaded from anywhere on disk
-                unapproved_path_mode: UnapprovedPathMode::Allow,
-                ..default()
-            })
             .set(WindowPlugin {
                 primary_window: Some(Window {
                     present_mode: PresentMode::Immediate,
                     ..default()
                 }),
-                ..default()
-            })
-            .set(AssetPlugin {
-                // Wasm builds will check for meta files (that don't exist) if this isn't set.
-                // This causes errors and even panics in web builds on itch.
-                // See https://github.com/bevyengine/bevy_github_ci_template/issues/48.
-                meta_check: AssetMetaCheck::Never,
                 ..default()
             }),
         OpenGLRenderPlugin,
@@ -184,9 +170,13 @@ fn render_std_mat(
     };
 
     #[cfg(any(target_arch = "wasm32", feature = "bundle_shaders"))]
-    let shader_index =
-        bevy_opengl::shader_cached_include!(ctx, "npr_std_mat.vert", "npr_std_mat.frag", defs)
-            .unwrap();
+    let shader_index = bevy_opengl::shader_cached_include!(
+        ctx,
+        "npr_std_mat.vert",
+        "npr_std_mat.frag",
+        Default::default()
+    )
+    .unwrap();
 
     ctx.use_cached_program(shader_index);
 
@@ -249,8 +239,6 @@ fn render_std_mat(
         build.run(material);
         gpu_meshes.draw_mesh(&ctx, mesh.id(), shader_index);
     }
-
-    unsafe { ctx.gl.bind_vertex_array(None) };
 }
 
 fn material_alpha_blend(material: &StandardMaterial) -> bool {
