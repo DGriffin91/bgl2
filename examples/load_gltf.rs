@@ -150,14 +150,14 @@ fn render_std_mat(
     let (_entity, _camera, cam_global_trans, cam_proj) = *camera;
 
     let view_position = cam_global_trans.translation();
-    let view_to_clip = cam_proj.get_clip_from_view();
-    let view_to_world = cam_global_trans.to_matrix();
-    let world_to_view = view_to_world.inverse();
+    let clip_from_view = cam_proj.get_clip_from_view();
+    let world_from_view = cam_global_trans.to_matrix();
+    let view_from_world = world_from_view.inverse();
 
-    let clip_to_view = view_to_clip.inverse();
+    let view_from_clip = clip_from_view.inverse();
 
-    let world_to_clip = view_to_clip * world_to_view;
-    let _clip_to_world = view_to_world * clip_to_view;
+    let clip_from_world = clip_from_view * view_from_world;
+    let _world_from_clip = world_from_view * view_from_clip;
 
     let shader_index = bevy_opengl::shader_cached!(
         ctx,
@@ -184,7 +184,7 @@ fn render_std_mat(
     build.val("alpha_blend", |m| material_alpha_blend(m));
     build.val("base_color", |m| m.base_color.to_linear().to_vec4());
 
-    upload!(build, view_to_world);
+    upload!(build, world_from_view);
     upload!(build, view_position);
 
     gpu_meshes.reset_bind_cache();
@@ -205,17 +205,17 @@ fn render_std_mat(
         let Some(material) = materials.get(material_h) else {
             continue;
         };
-        let local_to_world = transform.to_matrix();
-        let local_to_clip = world_to_clip * local_to_world;
+        let world_from_local = transform.to_matrix();
+        let clip_from_local = clip_from_world * world_from_local;
 
         if **phase == RenderPhase::Opaque {
             // If in opaque phase and must defer any alpha blend draws so they can be sorted and run in order.
             if material_alpha_blend(material) {
                 let ws_radius = transform.radius_vec3a(aabb.half_extents);
-                let ws_center = local_to_world.transform_point3a(aabb.center);
+                let ws_center = world_from_local.transform_point3a(aabb.center);
                 transparent_draws.deferred.push((
                     // Use closest point on bounding sphere
-                    world_to_view.project_point3a(ws_center).z + ws_radius,
+                    view_from_world.project_point3a(ws_center).z + ws_radius,
                     entity,
                     TypeId::of::<StandardMaterial>(),
                 ));
@@ -223,8 +223,8 @@ fn render_std_mat(
             }
         }
 
-        upload!(build, local_to_world);
-        upload!(build, local_to_clip);
+        upload!(build, world_from_local);
+        upload!(build, clip_from_local);
 
         build.run(material);
         gpu_meshes.draw_mesh(&ctx, mesh.id(), shader_index);
