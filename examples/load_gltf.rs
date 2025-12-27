@@ -2,6 +2,7 @@ use std::{any::TypeId, mem};
 
 use bevy::{
     asset::{AssetMetaCheck, UnapprovedPathMode},
+    camera::primitives::Aabb,
     diagnostic::{FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin},
     ecs::system::SystemState,
     light::CascadeShadowConfigBuilder,
@@ -147,8 +148,9 @@ fn render_std_mat(
     mesh_entities: Query<(
         Entity,
         &ViewVisibility,
-        Ref<GlobalTransform>,
-        Ref<Mesh3d>,
+        &GlobalTransform,
+        &Mesh3d,
+        &Aabb,
         &MeshMaterial3d<StandardMaterial>,
     )>,
     camera: Single<(Entity, &Camera, &GlobalTransform, &Projection)>,
@@ -215,7 +217,7 @@ fn render_std_mat(
         }
     };
 
-    for (entity, view_vis, transform, mesh, material_h) in iter {
+    for (entity, view_vis, transform, mesh, aabb, material_h) in iter {
         if !view_vis.get() {
             continue;
         }
@@ -223,23 +225,23 @@ fn render_std_mat(
         let Some(material) = materials.get(material_h) else {
             continue;
         };
+        let local_to_world = transform.to_matrix();
+        let local_to_clip = world_to_clip * local_to_world;
 
         if **phase == RenderPhase::Opaque {
             // If in opaque phase and must defer any alpha blend draws so they can be sorted and run in order.
             if material_alpha_blend(material) {
+                let ws_radius = transform.radius_vec3a(aabb.half_extents);
+                let ws_center = local_to_world.transform_point3a(aabb.center);
                 transparent_draws.deferred.push((
-                    world_to_view
-                        .project_point3a(transform.translation_vec3a())
-                        .z,
+                    // Use closest point on bounding sphere
+                    world_to_view.project_point3a(ws_center).z + ws_radius,
                     entity,
                     TypeId::of::<StandardMaterial>(),
                 ));
                 continue;
             }
         }
-
-        let local_to_world = transform.to_matrix();
-        let local_to_clip = world_to_clip * local_to_world;
 
         upload!(build, local_to_world);
         upload!(build, local_to_clip);
