@@ -1,7 +1,7 @@
 use std::rc::Rc;
 
 use bevy::{
-    image::{CompressedImageFormatSupport, CompressedImageFormats},
+    image::{ImageFilterMode, ImageSampler, ImageSamplerDescriptor},
     platform::collections::{HashMap, HashSet},
     prelude::*,
     render::render_resource::TextureFormat,
@@ -14,10 +14,19 @@ use crate::{BevyGlContext, render::RenderSet};
 /// Handles uploading bevy Image assets to the GPU
 pub struct PrepareImagePlugin;
 
+#[derive(Resource, Deref)]
+pub struct DefaultSampler(ImageSamplerDescriptor);
+
 impl Plugin for PrepareImagePlugin {
     fn build(&self, app: &mut App) {
-        app.insert_resource(CompressedImageFormatSupport(CompressedImageFormats::BC))
-            .init_non_send_resource::<GpuImages>()
+        if let Some(image_plugin) = app.get_added_plugins::<ImagePlugin>().first() {
+            let default_sampler = image_plugin.default_sampler.clone();
+            app.insert_resource(DefaultSampler(default_sampler));
+        } else {
+            warn!("No ImagePlugin found. Try adding PrepareImagePlugin after DefaultPlugins");
+        }
+
+        app.init_non_send_resource::<GpuImages>()
             .add_systems(PostUpdate, send_images_to_gpu.in_set(RenderSet::Prepare));
     }
 }
@@ -45,6 +54,7 @@ pub fn send_images_to_gpu(
     images: Res<Assets<Image>>,
     mut image_events: MessageReader<AssetEvent<Image>>,
     ctx: If<NonSend<BevyGlContext>>,
+    default_sampler: Res<DefaultSampler>,
 ) {
     if gpu_images.gl.is_none() {
         gpu_images.gl = Some(ctx.gl.clone());
@@ -102,21 +112,37 @@ pub fn send_images_to_gpu(
                 let texture = ctx.gl.create_texture().unwrap();
                 ctx.gl.bind_texture(glow::TEXTURE_2D, Some(texture));
                 let mip_level_count = bevy_image.texture_descriptor.mip_level_count;
-                // TODO actually set correct params/format/mips
-                ctx.gl.tex_parameter_i32(
-                    glow::TEXTURE_2D,
-                    glow::TEXTURE_MIN_FILTER,
-                    if mip_level_count > 1 {
-                        glow::LINEAR_MIPMAP_LINEAR as i32
-                    } else {
-                        glow::LINEAR as i32
-                    },
-                );
-                ctx.gl.tex_parameter_i32(
-                    glow::TEXTURE_2D,
-                    glow::TEXTURE_MAG_FILTER,
-                    glow::LINEAR as i32,
-                );
+                let sampler = match &bevy_image.sampler {
+                    ImageSampler::Default => &default_sampler.0,
+                    ImageSampler::Descriptor(s) => &s,
+                };
+
+                let min_filter = match &sampler.min_filter {
+                    ImageFilterMode::Nearest => {
+                        if mip_level_count > 1 {
+                            glow::NEAREST_MIPMAP_NEAREST as i32
+                        } else {
+                            glow::NEAREST as i32
+                        }
+                    }
+                    ImageFilterMode::Linear => {
+                        if mip_level_count > 1 {
+                            glow::LINEAR_MIPMAP_LINEAR as i32
+                        } else {
+                            glow::LINEAR as i32
+                        }
+                    }
+                };
+
+                let mag_filter = match &sampler.mag_filter {
+                    ImageFilterMode::Nearest => glow::NEAREST as i32,
+                    ImageFilterMode::Linear => glow::LINEAR as i32,
+                };
+
+                ctx.gl
+                    .tex_parameter_i32(glow::TEXTURE_2D, glow::TEXTURE_MIN_FILTER, min_filter);
+                ctx.gl
+                    .tex_parameter_i32(glow::TEXTURE_2D, glow::TEXTURE_MAG_FILTER, mag_filter);
 
                 #[cfg(not(target_arch = "wasm32"))]
                 {

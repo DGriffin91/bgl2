@@ -2,6 +2,7 @@ use std::any::TypeId;
 
 use bevy::{
     ecs::system::{SystemId, SystemState},
+    image::{CompressedImageFormatSupport, CompressedImageFormats},
     light::{Cascades, SimulationLightSystems, cascade::Cascade},
     platform::collections::HashMap,
     prelude::*,
@@ -32,7 +33,8 @@ pub struct OpenGLRenderPlugin;
 
 impl Plugin for OpenGLRenderPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<RenderRunner>()
+        app.insert_resource(CompressedImageFormatSupport(CompressedImageFormats::BC)) // TODO query?
+            .init_resource::<RenderRunner>()
             .init_resource::<RenderPhase>()
             .init_resource::<DeferredAlphaBlendDraws>()
             .add_plugins((PrepareMeshPlugin, PrepareImagePlugin));
