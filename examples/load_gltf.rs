@@ -3,7 +3,7 @@ use std::f32::consts::PI;
 use bevy::{
     camera::primitives::Aabb,
     diagnostic::{FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin},
-    light::{CascadeShadowConfig, CascadeShadowConfigBuilder, Cascades, light_consts::lux},
+    light::{CascadeShadowConfigBuilder, light_consts::lux},
     prelude::*,
     render::{RenderPlugin, settings::WgpuSettings},
     window::PresentMode,
@@ -116,7 +116,7 @@ fn setup(
             num_cascades: 1,
             minimum_distance: 0.1,
             maximum_distance: 70.0,
-            first_cascade_far_bound: 10.0,
+            first_cascade_far_bound: 70.0,
             overlap_proportion: 0.2,
         }
         .build(),
@@ -142,70 +142,44 @@ fn render_std_mat(
     materials: Res<Assets<StandardMaterial>>,
     phase: If<Res<RenderPhase>>,
     mut transparent_draws: ResMut<DeferredAlphaBlendDraws>,
-    shadow_texture: Option<Res<DirectionalLightInfo>>,
+    shadow: Option<Res<DirectionalLightInfo>>,
     gpu_images: NonSend<GpuImages>,
-    directional_lights: Query<(
-        &DirectionalLight,
-        &Cascades,
-        &CascadeShadowConfig,
-        &ViewVisibility,
-    )>,
     bevy_window: Single<&Window>,
+    directional_lights: Query<&Transform, With<DirectionalLight>>,
 ) {
     let (_entity, _camera, cam_global_trans, cam_proj) = *camera;
     let phase = **phase;
 
     let view_position;
-    let clip_from_view;
     let world_from_view;
+    let view_from_world;
+    let clip_from_world;
+    let shadow_def;
 
     match phase {
         RenderPhase::Shadow => {
-            if let Some((light, cascades, _cascade_config, visibility)) =
-                directional_lights.iter().next()
-            {
-                if !visibility.get() {
-                    return;
-                }
-                if !light.shadows_enabled {
-                    return;
-                }
-                if let Some((_, cascades)) = cascades.cascades.iter().next() {
-                    if let Some(cascade) = cascades.get(0) {
-                        clip_from_view = cascade.clip_from_cascade; // Not correct?
-                        view_position = cascade.world_from_cascade.project_point3(Vec3::ZERO);
-                        world_from_view = cascade.world_from_cascade;
-                    } else {
-                        return;
-                    }
-                } else {
-                    return;
-                }
+            if let Some(shadow) = &shadow {
+                view_position = shadow.cascade.world_from_cascade.project_point3(Vec3::ZERO);
+                //clip_from_view = shadow.cascade.clip_from_cascade;
+                world_from_view = shadow.cascade.world_from_cascade;
+                view_from_world = world_from_view.inverse();
+                clip_from_world = shadow.cascade.clip_from_world;
+                shadow_def = ("RENDER_SHADOW", "");
             } else {
                 return;
             }
         }
         RenderPhase::Opaque | RenderPhase::Transparent => {
             view_position = cam_global_trans.translation();
-            clip_from_view = cam_proj.get_clip_from_view();
+            let clip_from_view = cam_proj.get_clip_from_view();
             world_from_view = cam_global_trans.to_matrix();
+            view_from_world = world_from_view.inverse();
+            clip_from_world = clip_from_view * view_from_world;
+            shadow_def = shadow.as_ref().map_or(("", ""), |_| ("SAMPLE_SHADOW", ""));
         }
     }
-
-    let view_from_world = world_from_view.inverse();
-
-    let mut clip_from_world = clip_from_view * view_from_world;
-
-    let shadow = if phase == RenderPhase::Shadow {
-        ("RENDER_SHADOW", "")
-    } else if shadow_texture.is_some() {
-        ("SAMPLE_SHADOW", "")
-    } else {
-        ("", "")
-    };
-
     let shader_index =
-        bevy_opengl::shader_cached!(ctx, "npr_std_mat.vert", "npr_std_mat.frag", &[shadow])
+        bevy_opengl::shader_cached!(ctx, "npr_std_mat.vert", "npr_std_mat.frag", &[shadow_def])
             .unwrap();
     gpu_meshes.reset_bind_cache();
     ctx.use_cached_program(shader_index);
@@ -221,16 +195,17 @@ fn render_std_mat(
     tex!(build, normal_map_texture);
     tex!(build, metallic_roughness_texture);
 
-    if let Some(shadow_texture) = shadow_texture {
-        let shadow = shadow_texture.texture;
-        build.tex("shadow_texture", move |_| Tex::Gl(shadow));
-        let shadow_clip_from_world = shadow_texture.clip_from_world;
+    if let Some(shadow) = &shadow {
+        let shadow_texture = shadow.texture;
+        build.tex("shadow_texture", move |_| Tex::Gl(shadow_texture));
+        let shadow_clip_from_world = shadow.cascade.clip_from_world;
         upload!(build, shadow_clip_from_world);
-        let directional_light_dir_to_light = shadow_texture.dir_to_light;
-        upload!(build, directional_light_dir_to_light);
-        if phase == RenderPhase::Shadow {
-            clip_from_world = shadow_clip_from_world;
-        };
+    }
+
+    if let Some(trans) = directional_lights.iter().next() {
+        build.upload("directional_light_dir_to_light", trans.back().as_vec3());
+    } else {
+        build.upload("directional_light_dir_to_light", Vec3::ZERO);
     }
 
     build.val("alpha_blend", |m| material_alpha_blend(m));

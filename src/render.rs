@@ -2,7 +2,7 @@ use std::any::TypeId;
 
 use bevy::{
     ecs::system::{SystemId, SystemState},
-    light::{Cascades, SimulationLightSystems},
+    light::{Cascades, SimulationLightSystems, cascade::Cascade},
     platform::collections::HashMap,
     prelude::*,
     window::WindowResized,
@@ -95,23 +95,17 @@ fn present(
     }
 }
 
-#[derive(Resource, Clone, Copy)]
+#[derive(Resource, Clone)]
 pub struct DirectionalLightInfo {
     pub texture: glow::Texture,
-    pub clip_from_world: Mat4,
+    pub cascade: Cascade,
     pub dir_to_light: Vec3,
     width: u32,
     height: u32,
 }
 
 impl DirectionalLightInfo {
-    fn new(
-        gl: &glow::Context,
-        clip_from_world: Mat4,
-        dir_to_light: Vec3,
-        width: u32,
-        height: u32,
-    ) -> Self {
+    fn new(gl: &glow::Context, cascade: Cascade, width: u32, height: u32) -> Self {
         unsafe {
             let texture = gl.create_texture().unwrap();
             gl.bind_texture(glow::TEXTURE_2D, Some(texture));
@@ -136,9 +130,12 @@ impl DirectionalLightInfo {
                 glow::UNSIGNED_BYTE,
                 PixelUnpackData::Slice(None),
             );
+            let dir_to_light = cascade
+                .world_from_cascade
+                .project_point3(vec3(0.0, 0.0, 1.0));
             Self {
                 texture,
-                clip_from_world,
+                cascade,
                 dir_to_light,
                 width,
                 height,
@@ -151,18 +148,19 @@ fn update_shadow_tex(
     mut commands: Commands,
     bevy_window: Single<&Window>,
     shadow_tex: Option<Res<DirectionalLightInfo>>,
-    directional_lights: Query<(&DirectionalLight, &GlobalTransform, &Cascades)>,
+    directional_lights: Query<(&DirectionalLight, &Cascades)>,
     ctx: NonSend<BevyGlContext>,
 ) {
     // Keep shadow texture size up to date.
 
-    let mut shadow_clip_from_world = None;
-    if let Some((directional_light, transform, cascades)) = directional_lights.iter().next() {
+    let mut shadow_cascade = None;
+    if let Some((directional_light, cascades)) = directional_lights.iter().next() {
         if directional_light.shadows_enabled {
             if let Some((_, cascades)) = cascades.cascades.iter().next() {
                 if let Some(cascade) = cascades.get(0) {
-                    shadow_clip_from_world = Some((cascade.clip_from_world, transform.back()));
+                    shadow_cascade = Some(cascade.clone());
                 } else {
+                    commands.remove_resource::<DirectionalLightInfo>();
                     return;
                 }
             }
@@ -171,14 +169,13 @@ fn update_shadow_tex(
     let width = bevy_window.physical_width().max(1);
     let height = bevy_window.physical_height().max(1);
     if let Some(shadow_tex) = shadow_tex {
-        if let Some((shadow_clip_from_world, dir_to_light)) = shadow_clip_from_world {
+        if let Some(shadow_cascade) = shadow_cascade {
             if shadow_tex.width != width || shadow_tex.height != height {
                 unsafe {
                     ctx.gl.delete_texture(shadow_tex.texture);
                     commands.insert_resource(DirectionalLightInfo::new(
                         &ctx.gl,
-                        shadow_clip_from_world,
-                        dir_to_light.into(),
+                        shadow_cascade,
                         width,
                         height,
                     ))
@@ -189,11 +186,10 @@ fn update_shadow_tex(
             commands.remove_resource::<DirectionalLightInfo>();
         }
     } else {
-        if let Some((shadow_clip_from_world, dir_to_light)) = shadow_clip_from_world {
+        if let Some(shadow_cascade) = shadow_cascade {
             commands.insert_resource(DirectionalLightInfo::new(
                 &ctx.gl,
-                shadow_clip_from_world,
-                dir_to_light.into(),
+                shadow_cascade,
                 width,
                 height,
             ))

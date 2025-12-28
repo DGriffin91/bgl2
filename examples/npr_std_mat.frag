@@ -157,8 +157,13 @@ void main() {
     #ifdef RENDER_SHADOW
     gl_FragColor = EncodeFloatRGBA(clamp(ndc_position.z * 0.5 + 0.5, 0.0, 1.0));
     #else
-    vec3 light_dir = normalize(directional_light_dir_to_light); //normalize(vec3(-0.2, 0.5, 1.0));
-    vec3 light_color = vec3(1.0, 0.9, 0.8) * 3.0;
+    vec3 light_dir = vec3(0.0, 1.0, 0.0);
+    vec3 light_color = vec3(0.0);
+    if (directional_light_dir_to_light != vec3(0.0)) {
+        light_dir = normalize(directional_light_dir_to_light);
+        light_color = vec3(1.0, 0.9, 0.8) * 3.0;
+    }
+
     float specular_intensity = 1.0;
 
     vec3 V = normalize(ws_position - view_position);
