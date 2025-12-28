@@ -364,14 +364,16 @@ impl BevyGlContext {
                 let mut expanded_shader_source = String::with_capacity(shader_source.len() * 2);
                 let mut already_included_snippets = HashSet::new();
 
-                for line in shader_source.lines() {
+                for (i, line) in shader_source.lines().enumerate() {
                     if let Some(rest) = line.strip_prefix("#include") {
                         let snippet_name = rest.trim();
                         if let Some(snippet) = self.shader_snippets.get(snippet_name) {
                             if already_included_snippets.insert(snippet_name) {
-                                expanded_shader_source.push_str("\n");
+                                // TODO index snippets and use source-string-number
+                                expanded_shader_source.push_str(&format!("#line -1 1\n"));
                                 expanded_shader_source.push_str(snippet);
                                 expanded_shader_source.push_str("\n");
+                                expanded_shader_source.push_str(&format!("#line {i} 0\n"));
                             }
                         }
                     } else {
