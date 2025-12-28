@@ -1,12 +1,17 @@
 #include agx
 
+varying vec4 clip_position;
 varying vec3 ws_position;
 varying vec4 tangent;
 varying vec3 normal;
 varying vec2 uv_0;
 varying vec2 uv_1;
 
+uniform mat4 shadow_clip_from_world;
+uniform vec3 directional_light_dir_to_light;
+
 uniform vec3 view_position;
+uniform vec2 view_resolution;
 
 uniform vec4 base_color;
 uniform float metallic;
@@ -20,6 +25,19 @@ uniform int flags;
 uniform sampler2D base_color_texture;
 uniform sampler2D normal_map_texture;
 uniform sampler2D metallic_roughness_texture;
+
+uniform sampler2D shadow_texture;
+
+// https://aras-p.info/blog/2009/07/30/encoding-floats-to-rgba-the-final/
+vec4 EncodeFloatRGBA(float v) {
+    vec4 enc = vec4(1.0, 255.0, 65025.0, 16581375.0) * v;
+    enc = fract(enc);
+    enc -= enc.yzww * vec4(1.0 / 255.0, 1.0 / 255.0, 1.0 / 255.0, 0.0);
+    return enc;
+}
+float DecodeFloatRGBA(vec4 rgba) {
+    return dot(rgba, vec4(1.0, 1 / 255.0, 1 / 65025.0, 1 / 16581375.0));
+}
 
 // http://www.mikktspace.com/
 vec3 apply_normal_mapping(vec3 ws_normal, vec4 ws_tangent, vec2 uv) {
@@ -44,8 +62,12 @@ void main() {
         discard;
     }
 
-    #ifndef DEPTH_PREPASS
-    vec3 light_dir = normalize(vec3(-0.2, 0.5, 1.0));
+    vec3 ndc_position = clip_position.xyz / clip_position.w;
+
+    #ifdef RENDER_SHADOW
+    gl_FragColor = EncodeFloatRGBA(clamp(ndc_position.z * 0.5 + 0.5, 0.0, 1.0));
+    #else
+    vec3 light_dir = normalize(directional_light_dir_to_light); //normalize(vec3(-0.2, 0.5, 1.0));
     vec3 light_color = vec3(1.0, 0.9, 0.8) * 3.0;
     float specular_intensity = 1.0;
 
@@ -76,5 +98,27 @@ void main() {
     gl_FragColor = vec4(diffuse_color + specular_color, color.a);
     gl_FragColor.rgb = pow(agx_tonemapping(gl_FragColor.rgb), vec3(2.2)); //Convert back to linear
     gl_FragColor = clamp(gl_FragColor, vec4(0.0), vec4(1.0));
-    #endif
+
+    #ifdef SAMPLE_SHADOW
+    vec4 shadow_clip = shadow_clip_from_world * vec4(ws_position, 1.0);
+    vec3 shadow_ndc = shadow_clip.xyz / shadow_clip.w;
+    float receiver_z = shadow_ndc.z * 0.5 + 0.5;
+    vec2 shadow_uv = shadow_ndc.xy * 0.5 + 0.5;
+    float bias = 0.002;
+    if (shadow_uv.x > 0.0 && shadow_uv.x < 1.0 && shadow_uv.y > 0.0 && shadow_uv.y < 1.0) {
+        vec2 step = 1.0 / view_resolution; //Shadow initially renders to view texture
+        float sum = 0.0;
+        for (int y = -1; y <= 1; ++y) {
+            for (int x = -1; x <= 1; ++x) {
+                vec2 offset = vec2(float(x), float(y)) * step;
+                float shadow_z = DecodeFloatRGBA(texture2D(shadow_texture, shadow_uv + offset));
+                sum += (receiver_z < shadow_z - bias) ? 0.0 : 1.0;
+            }
+        }
+        sum /= 9.0;
+        gl_FragColor.xyz *= sum;
+    }
+    #endif // SAMPLE_SHADOW
+
+    #endif // NOT RENDER_SHADOW
 }

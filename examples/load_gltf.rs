@@ -1,7 +1,9 @@
+use std::f32::consts::PI;
+
 use bevy::{
     camera::primitives::Aabb,
     diagnostic::{FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin},
-    light::CascadeShadowConfigBuilder,
+    light::{CascadeShadowConfig, CascadeShadowConfigBuilder, Cascades, light_consts::lux},
     prelude::*,
     render::{RenderPlugin, settings::WgpuSettings},
     window::PresentMode,
@@ -13,9 +15,12 @@ use bevy_opengl::{
     BevyGlContext,
     prepare_image::GpuImages,
     prepare_mesh::GPUMeshBufferMap,
-    render::{DeferredAlphaBlendDraws, OpenGLRenderPlugin, RenderPhase, RenderRunner, RenderSet},
+    render::{
+        DeferredAlphaBlendDraws, DirectionalLightInfo, OpenGLRenderPlugin, RenderPhase,
+        RenderRunner, RenderSet,
+    },
     tex,
-    unifrom_slot_builder::UniformSlotBuilder,
+    uniform_slot_builder::{Tex, UniformSlotBuilder},
     upload, val,
 };
 use itertools::Either;
@@ -98,14 +103,21 @@ fn setup(
     ));
 
     commands.spawn((
+        Transform::from_rotation(Quat::from_euler(EulerRot::XYZ, PI * -0.35, PI * -0.13, 0.0)),
         DirectionalLight {
+            color: Color::srgb(1.0, 0.87, 0.78),
+            illuminance: lux::FULL_DAYLIGHT,
             shadows_enabled: true,
+            shadow_depth_bias: 0.2,
+            shadow_normal_bias: 0.2,
             ..default()
         },
         CascadeShadowConfigBuilder {
             num_cascades: 1,
-            maximum_distance: 1.6,
-            ..default()
+            minimum_distance: 0.1,
+            maximum_distance: 70.0,
+            first_cascade_far_bound: 10.0,
+            overlap_proportion: 0.2,
         }
         .build(),
     ));
@@ -130,28 +142,72 @@ fn render_std_mat(
     materials: Res<Assets<StandardMaterial>>,
     phase: If<Res<RenderPhase>>,
     mut transparent_draws: ResMut<DeferredAlphaBlendDraws>,
+    shadow_texture: Option<Res<DirectionalLightInfo>>,
     gpu_images: NonSend<GpuImages>,
+    directional_lights: Query<(
+        &DirectionalLight,
+        &Cascades,
+        &CascadeShadowConfig,
+        &ViewVisibility,
+    )>,
+    bevy_window: Single<&Window>,
 ) {
     let (_entity, _camera, cam_global_trans, cam_proj) = *camera;
+    let phase = **phase;
 
-    let view_position = cam_global_trans.translation();
-    let clip_from_view = cam_proj.get_clip_from_view();
-    let world_from_view = cam_global_trans.to_matrix();
+    let view_position;
+    let clip_from_view;
+    let world_from_view;
+
+    match phase {
+        RenderPhase::Shadow => {
+            if let Some((light, cascades, _cascade_config, visibility)) =
+                directional_lights.iter().next()
+            {
+                if !visibility.get() {
+                    return;
+                }
+                if !light.shadows_enabled {
+                    return;
+                }
+                if let Some((_, cascades)) = cascades.cascades.iter().next() {
+                    if let Some(cascade) = cascades.get(0) {
+                        clip_from_view = cascade.clip_from_cascade; // Not correct?
+                        view_position = cascade.world_from_cascade.project_point3(Vec3::ZERO);
+                        world_from_view = cascade.world_from_cascade;
+                    } else {
+                        return;
+                    }
+                } else {
+                    return;
+                }
+            } else {
+                return;
+            }
+        }
+        RenderPhase::Opaque | RenderPhase::Transparent => {
+            view_position = cam_global_trans.translation();
+            clip_from_view = cam_proj.get_clip_from_view();
+            world_from_view = cam_global_trans.to_matrix();
+        }
+    }
+
     let view_from_world = world_from_view.inverse();
 
-    let view_from_clip = clip_from_view.inverse();
+    let mut clip_from_world = clip_from_view * view_from_world;
 
-    let clip_from_world = clip_from_view * view_from_world;
-    let _world_from_clip = world_from_view * view_from_clip;
+    let shadow = if phase == RenderPhase::Shadow {
+        ("RENDER_SHADOW", "")
+    } else if shadow_texture.is_some() {
+        ("SAMPLE_SHADOW", "")
+    } else {
+        ("", "")
+    };
 
-    let shader_index = bevy_opengl::shader_cached!(
-        ctx,
-        "npr_std_mat.vert",
-        "npr_std_mat.frag",
-        Default::default()
-    )
-    .unwrap();
-
+    let shader_index =
+        bevy_opengl::shader_cached!(ctx, "npr_std_mat.vert", "npr_std_mat.frag", &[shadow])
+            .unwrap();
+    gpu_meshes.reset_bind_cache();
     ctx.use_cached_program(shader_index);
 
     let mut build = UniformSlotBuilder::<StandardMaterial>::new(&ctx, &gpu_images, shader_index);
@@ -165,24 +221,39 @@ fn render_std_mat(
     tex!(build, normal_map_texture);
     tex!(build, metallic_roughness_texture);
 
+    if let Some(shadow_texture) = shadow_texture {
+        let shadow = shadow_texture.texture;
+        build.tex("shadow_texture", move |_| Tex::Gl(shadow));
+        let shadow_clip_from_world = shadow_texture.clip_from_world;
+        upload!(build, shadow_clip_from_world);
+        let directional_light_dir_to_light = shadow_texture.dir_to_light;
+        upload!(build, directional_light_dir_to_light);
+        if phase == RenderPhase::Shadow {
+            clip_from_world = shadow_clip_from_world;
+        };
+    }
+
     build.val("alpha_blend", |m| material_alpha_blend(m));
     build.val("base_color", |m| m.base_color.to_linear().to_vec4());
 
     upload!(build, world_from_view);
     upload!(build, view_position);
 
-    gpu_meshes.reset_bind_cache();
-    ctx.use_cached_program(shader_index);
+    let view_resolution = vec2(
+        bevy_window.physical_width().max(1) as f32,
+        bevy_window.physical_height().max(1) as f32,
+    );
+    upload!(build, view_resolution);
 
-    let iter = match **phase {
-        RenderPhase::Opaque => Either::Left(mesh_entities.iter()),
+    let iter = match phase {
+        RenderPhase::Shadow | RenderPhase::Opaque => Either::Left(mesh_entities.iter()),
         RenderPhase::Transparent => {
             Either::Right(mesh_entities.iter_many(transparent_draws.take()))
         }
     };
 
     for (entity, view_vis, transform, mesh, aabb, material_h) in iter {
-        if !view_vis.get() {
+        if phase != RenderPhase::Shadow && !view_vis.get() {
             continue;
         }
 
@@ -192,9 +263,9 @@ fn render_std_mat(
         let world_from_local = transform.to_matrix();
         let clip_from_local = clip_from_world * world_from_local;
 
-        if **phase == RenderPhase::Opaque {
-            // If in opaque phase and must defer any alpha blend draws so they can be sorted and run in order.
-            if material_alpha_blend(material) {
+        // If in opaque phase and must defer any alpha blend draws so they can be sorted and run in order.
+        if material_alpha_blend(material) {
+            if phase == RenderPhase::Opaque {
                 let ws_radius = transform.radius_vec3a(aabb.half_extents);
                 let ws_center = world_from_local.transform_point3a(aabb.center);
                 transparent_draws.defer::<StandardMaterial>(
@@ -202,6 +273,8 @@ fn render_std_mat(
                     view_from_world.project_point3a(ws_center).z + ws_radius,
                     entity,
                 );
+            }
+            if phase != RenderPhase::Transparent {
                 continue;
             }
         }

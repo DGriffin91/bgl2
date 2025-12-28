@@ -8,6 +8,7 @@ uniform mat4 clip_from_local;
 uniform mat4 world_from_local;
 uniform mat4 world_from_view;
 
+varying vec4 clip_position;
 varying vec3 ws_position;
 varying vec4 tangent;
 varying vec3 normal;
@@ -15,7 +16,8 @@ varying vec2 uv_0;
 varying vec2 uv_1;
 
 void main() {
-    gl_Position = clip_from_local * vec4(Vertex_Position, 1.0);
+    clip_position = clip_from_local * vec4(Vertex_Position, 1.0);
+    gl_Position = clip_position;
     normal = (world_from_local * vec4(Vertex_Normal, 0.0)).xyz;
     ws_position = (world_from_local * vec4(Vertex_Position, 1.0)).xyz;
     uv_0 = Vertex_Uv;

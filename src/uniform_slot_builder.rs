@@ -12,6 +12,12 @@ pub struct SlotData {
     location: glow::UniformLocation,
 }
 
+#[derive(Clone)]
+pub enum Tex {
+    Bevy(Option<Handle<Image>>),
+    Gl(glow::Texture),
+}
+
 pub struct UniformSlotBuilder<'a, T> {
     pub ctx: &'a BevyGlContext,
     pub gpu_images: &'a GpuImages,
@@ -25,7 +31,7 @@ pub struct UniformSlotBuilder<'a, T> {
     pub texture_slots: Vec<(
         glow::UniformLocation,
         Option<glow::Texture>,
-        Box<dyn Fn(&T) -> &Option<Handle<Image>>>,
+        Box<dyn Fn(&T) -> Tex>,
     )>,
 
     pub uniform_location_cache: HashMap<String, Option<UniformLocation>>,
@@ -93,21 +99,29 @@ impl<'a, T> UniformSlotBuilder<'a, T> {
 
     pub fn tex<F>(&mut self, name: &str, f: F)
     where
-        F: Fn(&T) -> &Option<Handle<Image>> + 'static,
+        F: Fn(&T) -> Tex + 'static,
     {
         if let Some(location) = self.get_uniform_location(name) {
             self.texture_slots.push((location, None, Box::new(f)))
         }
     }
+
     pub fn run(&mut self, material: &T) {
         for (slot, f) in &mut self.value_slots {
             f(&self.ctx, material, slot, &mut self.temp_value)
         }
         for (i, (location, previous_texture, f)) in self.texture_slots.iter_mut().enumerate() {
             let mut texture = self.gpu_images.placeholder.unwrap();
-            if let Some(image_h) = f(material) {
-                if let Some(t) = self.gpu_images.mapping.get(&image_h.id()) {
-                    texture = *t;
+            match f(material) {
+                Tex::Bevy(image_h) => {
+                    if let Some(image_h) = image_h {
+                        if let Some(t) = self.gpu_images.mapping.get(&image_h.id()) {
+                            texture = *t;
+                        }
+                    }
+                }
+                Tex::Gl(t) => {
+                    texture = t;
                 }
             }
             unsafe {
@@ -155,7 +169,9 @@ macro_rules! val {
 #[macro_export]
 macro_rules! tex {
     ($obj:expr, $field:ident) => {
-        $obj.tex(stringify!($field), |m| &m.$field)
+        $obj.tex(stringify!($field), |m| {
+            $crate::uniform_slot_builder::Tex::Bevy(m.$field.clone())
+        })
     };
 }
 

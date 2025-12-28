@@ -3,7 +3,7 @@ pub mod mesh_util;
 pub mod prepare_image;
 pub mod prepare_mesh;
 pub mod render;
-pub mod unifrom_slot_builder;
+pub mod uniform_slot_builder;
 pub mod watchers;
 
 use anyhow::Error;
