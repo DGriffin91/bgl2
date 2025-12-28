@@ -25,6 +25,8 @@ uniform int flags;
 uniform sampler2D base_color_texture;
 uniform sampler2D normal_map_texture;
 uniform sampler2D metallic_roughness_texture;
+uniform samplerCube specular_map;
+uniform samplerCube diffuse_map;
 
 uniform sampler2D shadow_texture;
 
@@ -157,6 +159,25 @@ void main() {
     #ifdef RENDER_SHADOW
     gl_FragColor = EncodeFloatRGBA(clamp(ndc_position.z * 0.5 + 0.5, 0.0, 1.0));
     #else
+
+    float shadow = 1.0;
+    #ifdef SAMPLE_SHADOW
+    float bias = 0.002;
+    float normal_bias = 0.05;
+
+    vec4 shadow_clip = shadow_clip_from_world * vec4(ws_position + vert_normal * normal_bias, 1.0);
+    vec3 shadow_ndc = shadow_clip.xyz / shadow_clip.w;
+    float receiver_z = shadow_ndc.z * 0.5 + 0.5;
+    vec2 shadow_uv = shadow_ndc.xy * 0.5 + 0.5;
+    vec2 step = 1.0 / view_resolution;
+    float sum = 0.0;
+
+    if (shadow_uv.x > 0.0 && shadow_uv.x < 1.0 && shadow_uv.y > 0.0 && shadow_uv.y < 1.0) {
+        shadow *= bilinear_shadow2(shadow_uv, receiver_z, bias, view_resolution);
+        //shadow *= sample_shadow_map_castano_thirteen(shadow_uv, receiver_z, bias, view_resolution);
+    }
+    #endif // SAMPLE_SHADOW
+
     vec3 light_dir = vec3(0.0, 1.0, 0.0);
     vec3 light_color = vec3(0.0);
     if (directional_light_dir_to_light != vec3(0.0)) {
@@ -170,8 +191,8 @@ void main() {
     vec3 view_dir = normalize(view_position - ws_position);
 
     vec4 metallic_roughness = texture2D(metallic_roughness_texture, uv_0);
-    float roughness = metallic_roughness.g * perceptual_roughness;
-    roughness *= roughness;
+    float perceptual_roughness_tex = metallic_roughness.g * perceptual_roughness; // TODO better name
+    float roughness = perceptual_roughness_tex * perceptual_roughness_tex;
 
     vec3 normal = apply_normal_mapping(vert_normal, tangent, uv_0);
 
@@ -185,31 +206,21 @@ void main() {
     specular = specular * pow(min(lambert + 1.0, 1.0), 4.0); // Fade out spec TODO improve
 
     float metallic = metallic * metallic_roughness.b;
-    vec3 diffuse_color = color.rgb * lambert * light_color * (1.0 - metallic);
-    vec3 specular_color = specular * light_color * specular_intensity;
+    vec3 diffuse_color = shadow * color.rgb * lambert * light_color * (1.0 - metallic);
+    vec3 specular_color = shadow * specular * light_color * specular_intensity;
     specular_color = mix(specular_color, specular_color * color.rgb, vec3(metallic));
+
+    float mip_levels = 8.0; // TODO put in uniform
+    vec3 specular_env_color = textureCubeLod(specular_map, reflect(V, normal), perceptual_roughness_tex * mip_levels).rgb;
+    specular_color += specular_env_color * specular_intensity;
+    vec3 diffuse_env_color = textureCubeLod(diffuse_map, normal, 0.0).rgb;
+    diffuse_color += color.rgb * diffuse_env_color * (1.0 - metallic);
 
     lambert = max(lambert, 0.0);
     gl_FragColor = vec4(diffuse_color + specular_color, color.a);
-    gl_FragColor.rgb = pow(agx_tonemapping(gl_FragColor.rgb), vec3(2.2)); //Convert back to linear
+    //gl_FragColor.rgb = pow(agx_tonemapping(gl_FragColor.rgb), vec3(2.2)); //Convert back to linear
+    gl_FragColor.rgb = gl_FragColor.rgb * 0.4;
     gl_FragColor = clamp(gl_FragColor, vec4(0.0), vec4(1.0));
-
-    #ifdef SAMPLE_SHADOW
-    float bias = 0.002;
-    float normal_bias = 0.05;
-
-    vec4 shadow_clip = shadow_clip_from_world * vec4(ws_position + vert_normal * normal_bias, 1.0);
-    vec3 shadow_ndc = shadow_clip.xyz / shadow_clip.w;
-    float receiver_z = shadow_ndc.z * 0.5 + 0.5;
-    vec2 shadow_uv = shadow_ndc.xy * 0.5 + 0.5;
-    vec2 step = 1.0 / view_resolution;
-    float sum = 0.0;
-
-    if (shadow_uv.x > 0.0 && shadow_uv.x < 1.0 && shadow_uv.y > 0.0 && shadow_uv.y < 1.0) {
-        gl_FragColor.xyz *= bilinear_shadow2(shadow_uv, receiver_z, bias, view_resolution);
-        //gl_FragColor.xyz *= sample_shadow_map_castano_thirteen(shadow_uv, receiver_z, bias, view_resolution);
-    }
-    #endif // SAMPLE_SHADOW
 
     #endif // NOT RENDER_SHADOW
 }

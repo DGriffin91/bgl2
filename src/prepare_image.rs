@@ -8,6 +8,7 @@ use bevy::{
 };
 
 use glow::{HasContext, PixelUnpackData};
+use wgpu_types::TextureViewDimension;
 
 use crate::{BevyGlContext, render::RenderSet};
 
@@ -33,7 +34,8 @@ impl Plugin for PrepareImagePlugin {
 
 #[derive(Default)]
 pub struct GpuImages {
-    pub mapping: HashMap<AssetId<Image>, glow::Texture>,
+    // u32 is target glow::TEXTURE_2D or glow::TEXTURE_CUBE_MAP
+    pub mapping: HashMap<AssetId<Image>, (glow::Texture, u32)>,
     pub updated_this_frame: bool,
     pub placeholder: Option<glow::Texture>,
     pub gl: Option<Rc<glow::Context>>,
@@ -43,7 +45,7 @@ impl Drop for GpuImages {
     fn drop(&mut self) {
         unsafe {
             for texture in self.mapping.values() {
-                self.gl.as_ref().unwrap().delete_texture(*texture);
+                self.gl.as_ref().unwrap().delete_texture(texture.0);
             }
         }
     }
@@ -69,7 +71,7 @@ pub fn send_images_to_gpu(
             }
             AssetEvent::Removed { id } => {
                 if let Some(tex) = gpu_images.mapping.remove(id) {
-                    unsafe { ctx.gl.delete_texture(tex) };
+                    unsafe { ctx.gl.delete_texture(tex.0) };
                 }
                 continue;
             }
@@ -108,9 +110,13 @@ pub fn send_images_to_gpu(
             if bevy_image.data.is_none() {
                 continue;
             }
+            let Some(target) = get_dimension_target(bevy_image) else {
+                continue;
+            };
             let texture = unsafe {
                 let texture = ctx.gl.create_texture().unwrap();
-                ctx.gl.bind_texture(glow::TEXTURE_2D, Some(texture));
+
+                ctx.gl.bind_texture(target, Some(texture));
                 let mip_level_count = bevy_image.texture_descriptor.mip_level_count;
                 let sampler = match &bevy_image.sampler {
                     ImageSampler::Default => &default_sampler.0,
@@ -140,34 +146,48 @@ pub fn send_images_to_gpu(
                 };
 
                 ctx.gl
-                    .tex_parameter_i32(glow::TEXTURE_2D, glow::TEXTURE_MIN_FILTER, min_filter);
+                    .tex_parameter_i32(target, glow::TEXTURE_MIN_FILTER, min_filter);
                 ctx.gl
-                    .tex_parameter_i32(glow::TEXTURE_2D, glow::TEXTURE_MAG_FILTER, mag_filter);
+                    .tex_parameter_i32(target, glow::TEXTURE_MAG_FILTER, mag_filter);
 
                 #[cfg(not(target_arch = "wasm32"))]
                 {
                     ctx.gl
-                        .tex_parameter_i32(glow::TEXTURE_2D, glow::TEXTURE_BASE_LEVEL, 0);
+                        .tex_parameter_i32(target, glow::TEXTURE_BASE_LEVEL, 0);
                     ctx.gl.tex_parameter_i32(
-                        glow::TEXTURE_2D,
+                        target,
                         glow::TEXTURE_MAX_LEVEL,
                         (mip_level_count - 1) as i32,
                     );
                 }
 
-                transfer_image_data(bevy_image, &ctx);
+                transfer_image_data(bevy_image, target, &ctx);
                 // TODO make configurable
-                set_anisotropy(&ctx.gl, glow::TEXTURE_2D, 16);
+                set_anisotropy(&ctx.gl, target, 16);
                 texture
             };
-            if let Some(old) = gpu_images.mapping.insert(handle, texture) {
-                unsafe { ctx.gl.delete_texture(old) };
+            if let Some(old) = gpu_images.mapping.insert(handle, (texture, target)) {
+                unsafe { ctx.gl.delete_texture(old.0) };
             }
         }
     }
 }
 
-fn transfer_image_data(image: &bevy::prelude::Image, ctx: &BevyGlContext) {
+fn get_dimension_target(image: &Image) -> Option<u32> {
+    let view = image.texture_view_descriptor.clone().unwrap_or_default();
+    let dimension = view.dimension.unwrap_or_default();
+    let target = match dimension {
+        TextureViewDimension::D1 => return None,
+        TextureViewDimension::D2 => glow::TEXTURE_2D,
+        TextureViewDimension::D2Array => return None,
+        TextureViewDimension::Cube => glow::TEXTURE_CUBE_MAP,
+        TextureViewDimension::CubeArray => return None,
+        TextureViewDimension::D3 => return None,
+    };
+    Some(target)
+}
+
+fn transfer_image_data(image: &bevy::prelude::Image, target: u32, ctx: &BevyGlContext) {
     let dim = match image.texture_descriptor.dimension {
         wgpu_types::TextureDimension::D1 => 1,
         wgpu_types::TextureDimension::D2 => 2,
@@ -186,6 +206,50 @@ fn transfer_image_data(image: &bevy::prelude::Image, ctx: &BevyGlContext) {
         image.texture_descriptor.size.height,
         image.texture_descriptor.size.depth_or_array_layers,
     );
+
+    let cube_targets = [
+        glow::TEXTURE_CUBE_MAP_POSITIVE_X,
+        glow::TEXTURE_CUBE_MAP_NEGATIVE_X,
+        glow::TEXTURE_CUBE_MAP_POSITIVE_Y,
+        glow::TEXTURE_CUBE_MAP_NEGATIVE_Y,
+        glow::TEXTURE_CUBE_MAP_POSITIVE_Z,
+        glow::TEXTURE_CUBE_MAP_NEGATIVE_Z,
+    ];
+
+    #[cfg(not(target_arch = "wasm32"))]
+    let rgb_format = glow::RGBA8;
+    #[cfg(target_arch = "wasm32")]
+    let rgb_format = glow::RGBA;
+
+    let internal_format = match image.texture_descriptor.format {
+        TextureFormat::Rgba8Unorm => rgb_format,
+        TextureFormat::Rgba8UnormSrgb => rgb_format,
+        TextureFormat::Rgb9e5Ufloat => glow::RGB9_E5,
+        _ => {
+            warn!("unimplemented format {:?}", image.texture_descriptor.format);
+            return;
+        }
+    };
+
+    let pixel_format = match image.texture_descriptor.format {
+        TextureFormat::Rgba8Unorm => glow::RGBA,
+        TextureFormat::Rgba8UnormSrgb => glow::RGBA,
+        TextureFormat::Rgb9e5Ufloat => glow::RGB,
+        _ => {
+            warn!("unimplemented format {:?}", image.texture_descriptor.format);
+            return;
+        }
+    };
+
+    let pixel_type = match image.texture_descriptor.format {
+        TextureFormat::Rgba8Unorm => glow::UNSIGNED_BYTE,
+        TextureFormat::Rgba8UnormSrgb => glow::UNSIGNED_BYTE,
+        TextureFormat::Rgb9e5Ufloat => glow::UNSIGNED_INT_5_9_9_9_REV,
+        _ => {
+            warn!("unimplemented format {:?}", image.texture_descriptor.format);
+            return;
+        }
+    };
 
     // https://github.com/gfx-rs/wgpu/blob/17fcb194258b05205d21001e8473762141ebda26/wgpu/src/util/device.rs#L15
     for mip_level in 0..mip_level_count as usize {
@@ -217,40 +281,42 @@ fn transfer_image_data(image: &bevy::prelude::Image, ctx: &BevyGlContext) {
                 .unwrap();
             let _buffer_row_length = block_width * (bytes_per_row / block_size);
 
-            #[cfg(not(target_arch = "wasm32"))]
-            let internal_format = glow::RGBA8 as i32;
-            #[cfg(target_arch = "wasm32")]
-            let internal_format = glow::RGBA as i32;
+            if target != glow::TEXTURE_CUBE_MAP && array_layer != 0 {
+                binary_offset = end_offset;
+                continue;
+            }
+            // Only the first array layer is supported
+            unsafe {
+                if let Some(data) = &image.data {
+                    ctx.gl.tex_image_2d(
+                        if target == glow::TEXTURE_CUBE_MAP {
+                            cube_targets[array_layer as usize]
+                        } else {
+                            glow::TEXTURE_2D
+                        },
+                        mip_level as i32,
+                        internal_format as i32,
+                        mip_size.0 as i32,
+                        mip_size.1 as i32,
+                        0,
+                        pixel_format,
+                        pixel_type,
+                        PixelUnpackData::Slice(Some(&data[binary_offset..end_offset])),
+                    );
 
-            if array_layer == 0 {
-                // Only the first array layer is supported
-                unsafe {
-                    if let Some(data) = &image.data {
-                        ctx.gl.tex_image_2d(
-                            glow::TEXTURE_2D,
-                            mip_level as i32,
-                            internal_format,
-                            mip_size.0 as i32,
-                            mip_size.1 as i32,
-                            0,
-                            glow::RGBA,
-                            glow::UNSIGNED_BYTE,
-                            PixelUnpackData::Slice(Some(&data[binary_offset..end_offset])),
-                        );
-
-                        #[cfg(target_arch = "wasm32")]
-                        {
-                            // TODO wasm seems to have issues when the mips are manually set.
-                            // Here we just do the first and let the driver generate the rest.
-                            // This may have unexpected results if the user was putting different data in each mip.
-                            if mip_level_count > 0 {
-                                ctx.gl.generate_mipmap(glow::TEXTURE_2D);
-                                return;
-                            }
+                    #[cfg(target_arch = "wasm32")]
+                    {
+                        // TODO wasm seems to have issues when the mips are manually set.
+                        // Here we just do the first and let the driver generate the rest.
+                        // This may have unexpected results if the user was putting different data in each mip.
+                        if mip_level_count > 0 {
+                            ctx.gl.generate_mipmap(glow::TEXTURE_2D);
+                            return;
                         }
                     }
-                };
-            }
+                }
+            };
+
             binary_offset = end_offset;
         }
     }

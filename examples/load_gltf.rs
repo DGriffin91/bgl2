@@ -95,13 +95,13 @@ fn setup(
         },
     ));
 
-    //commands.spawn(SceneRoot(
-    //    asset_server.load("models/bistro_exterior/BistroExterior.gltf#Scene0"),
-    //));
-    //commands.spawn((
-    //    SceneRoot(asset_server.load("models/bistro_interior_wine/BistroInterior_Wine.gltf#Scene0")),
-    //    Transform::from_xyz(0.0, 0.3, -0.2),
-    //));
+    commands.spawn(SceneRoot(
+        asset_server.load("models/bistro_exterior/BistroExterior.gltf#Scene0"),
+    ));
+    commands.spawn((
+        SceneRoot(asset_server.load("models/bistro_interior_wine/BistroInterior_Wine.gltf#Scene0")),
+        Transform::from_xyz(0.0, 0.3, -0.2),
+    ));
 
     commands.spawn((
         Transform::from_rotation(Quat::from_euler(EulerRot::XYZ, PI * -0.35, PI * -0.13, 0.0)),
@@ -137,7 +137,13 @@ fn render_std_mat(
         &Aabb,
         &MeshMaterial3d<StandardMaterial>,
     )>,
-    camera: Single<(Entity, &Camera, &GlobalTransform, &Projection)>,
+    camera: Single<(
+        Entity,
+        &Camera,
+        &GlobalTransform,
+        &Projection,
+        Option<&EnvironmentMapLight>,
+    )>,
     mut ctx: NonSendMut<BevyGlContext>,
     mut gpu_meshes: NonSendMut<GPUMeshBufferMap>,
     materials: Res<Assets<StandardMaterial>>,
@@ -148,7 +154,7 @@ fn render_std_mat(
     bevy_window: Single<&Window>,
     directional_lights: Query<&Transform, With<DirectionalLight>>,
 ) {
-    let (_entity, _camera, cam_global_trans, cam_proj) = *camera;
+    let (_entity, _camera, cam_global_trans, cam_proj, env_light) = *camera;
     let phase = **phase;
 
     let view_position;
@@ -195,6 +201,13 @@ fn render_std_mat(
     tex!(build, base_color_texture);
     tex!(build, normal_map_texture);
     tex!(build, metallic_roughness_texture);
+
+    let env_light = env_light.unwrap();
+
+    let spec_env = env_light.specular_map.clone();
+    build.tex("specular_map", move |_| Tex::Bevy(Some(spec_env.clone())));
+    let diffuse_env = env_light.diffuse_map.clone();
+    build.tex("diffuse_map", move |_| Tex::Bevy(Some(diffuse_env.clone())));
 
     if let Some(shadow) = &shadow {
         let shadow_texture = shadow.texture;

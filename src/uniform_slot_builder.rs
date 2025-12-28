@@ -112,11 +112,13 @@ impl<'a, T> UniformSlotBuilder<'a, T> {
         }
         for (i, (location, previous_texture, f)) in self.texture_slots.iter_mut().enumerate() {
             let mut texture = self.gpu_images.placeholder.unwrap();
+            let mut target = glow::TEXTURE_2D;
             match f(material) {
                 Tex::Bevy(image_h) => {
                     if let Some(image_h) = image_h {
                         if let Some(t) = self.gpu_images.mapping.get(&image_h.id()) {
-                            texture = *t;
+                            texture = t.0;
+                            target = t.1;
                         }
                     }
                 }
@@ -132,7 +134,7 @@ impl<'a, T> UniformSlotBuilder<'a, T> {
                 }
                 // TODO needs to use info from the texture to actually setup correctly
                 self.ctx.gl.active_texture(glow::TEXTURE0 + i as u32);
-                self.ctx.gl.bind_texture(glow::TEXTURE_2D, Some(texture));
+                self.ctx.gl.bind_texture(target, Some(texture));
                 self.ctx.gl.uniform_1_i32(Some(&location), i as i32);
                 *previous_texture = Some(texture);
             }
