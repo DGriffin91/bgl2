@@ -1,3 +1,4 @@
+
 //#include agx
 
 varying vec4 clip_position;
@@ -42,12 +43,6 @@ float DecodeFloatRGBA(vec4 rgba) {
 }
 
 #include shadow_sampling
-
-#ifndef SHADER_TEXTURE_LOD
-vec4 textureCubeLod(samplerCube tex, vec3 dir, float lod) {
-    return textureCube(tex, dir, lod); // TODO what does WebGL 1 support?
-}
-#endif
 
 // http://www.mikktspace.com/
 vec3 apply_normal_mapping(vec3 ws_normal, vec4 ws_tangent, vec2 uv) {

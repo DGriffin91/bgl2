@@ -253,6 +253,16 @@ fn transfer_image_data(image: &bevy::prelude::Image, target: u32, ctx: &BevyGlCo
 
     // https://github.com/gfx-rs/wgpu/blob/17fcb194258b05205d21001e8473762141ebda26/wgpu/src/util/device.rs#L15
     for mip_level in 0..mip_level_count as usize {
+        if mip_level > 0 {
+            #[cfg(target_arch = "wasm32")]
+            unsafe {
+                // TODO wasm seems to have issues when the mips are manually set.
+                // Here we just do the first and let the driver generate the rest.
+                // This may have unexpected results if the user was putting different data in each mip.
+                ctx.gl.generate_mipmap(target);
+                return;
+            }
+        }
         for array_layer in 0..array_layer_count {
             // https://github.com/bevyengine/bevy/blob/160bcc787c9b2f8dacafbf9dca7d7a6b2349386a/crates/bevy_render/src/texture/dds.rs#L318
             let mip_size = mip_level_size(size3d, mip_level, dim);
@@ -303,17 +313,6 @@ fn transfer_image_data(image: &bevy::prelude::Image, target: u32, ctx: &BevyGlCo
                         pixel_type,
                         PixelUnpackData::Slice(Some(&data[binary_offset..end_offset])),
                     );
-
-                    #[cfg(target_arch = "wasm32")]
-                    {
-                        // TODO wasm seems to have issues when the mips are manually set.
-                        // Here we just do the first and let the driver generate the rest.
-                        // This may have unexpected results if the user was putting different data in each mip.
-                        if mip_level_count > 0 {
-                            ctx.gl.generate_mipmap(glow::TEXTURE_2D);
-                            return;
-                        }
-                    }
                 }
             };
 

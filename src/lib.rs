@@ -84,7 +84,7 @@ impl BevyGlContext {
         }
 
         #[cfg(not(target_arch = "wasm32"))]
-        let mut ctx = {
+        let ctx = {
             let vsync = match bevy_window.present_mode {
                 bevy::window::PresentMode::AutoVsync => true,
                 bevy::window::PresentMode::AutoNoVsync => false,
@@ -189,7 +189,7 @@ impl BevyGlContext {
 
             unsafe { gl.viewport(0, 0, width as i32, height as i32) };
 
-            let ctx = BevyGlContext {
+            let mut ctx = BevyGlContext {
                 gl: Rc::new(gl),
                 gl_context: Some(gl_context),
                 gl_surface: Some(gl_surface),
@@ -199,10 +199,11 @@ impl BevyGlContext {
                 shader_snippets: Default::default(),
                 has_glsl_cube_lod: true,
             };
+            ctx.test_for_glsl_lod();
             ctx
         };
         #[cfg(target_arch = "wasm32")]
-        let mut ctx = {
+        let ctx = {
             use wasm_bindgen::JsCast;
             let canvas = winit_window.canvas().unwrap();
 
@@ -218,6 +219,13 @@ impl BevyGlContext {
                 .unwrap()
                 .dyn_into::<web_sys::WebGlRenderingContext>()
                 .unwrap();
+
+            let has_glsl_cube_lod = webgl_context
+                .get_extension("EXT_shader_texture_lod")
+                .ok()
+                .flatten()
+                .is_some();
+
             let gl = glow::Context::from_webgl1_context(webgl_context);
             unsafe { gl.viewport(0, 0, width as i32, height as i32) };
             BevyGlContext {
@@ -225,10 +233,9 @@ impl BevyGlContext {
                 shader_cache: Default::default(),
                 shader_cache_map: Default::default(),
                 shader_snippets: Default::default(),
-                has_glsl_lod: true,
+                has_glsl_cube_lod,
             }
         };
-        ctx.test_for_glsl_lod();
         ctx
     }
 
@@ -367,11 +374,22 @@ impl BevyGlContext {
                     }
                 });
 
-                //let ext = self.gl.supported_extensions();
-                //#[cfg(not(target_arch = "wasm32"))]
-                //if ext.contains("GL_ARB_shader_texture_lod") {
-                if self.has_glsl_cube_lod {
-                    preamble.push_str("#define SHADER_TEXTURE_LOD\n");
+                if *shader_type == glow::FRAGMENT_SHADER {
+                    //let ext = self.gl.supported_extensions();
+                    //#[cfg(not(target_arch = "wasm32"))]
+                    //if ext.contains("GL_ARB_shader_texture_lod") {
+                    if self.has_glsl_cube_lod {
+                        #[cfg(target_arch = "wasm32")]
+                        {
+                            preamble.push_str("#extension GL_EXT_shader_texture_lod : enable\n");
+                            preamble.push_str("vec4 textureCubeLod(samplerCube tex, vec3 dir, float lod) { return textureCubeLodEXT(tex, dir, lod); }\n");
+                        }
+                    } else {
+                        #[cfg(not(target_arch = "wasm32"))]
+                        {
+                            preamble.push_str("vec4 textureCubeLod(samplerCube tex, vec3 dir, float lod) { return textureCube(tex, dir, lod); }\n");
+                        }
+                    }
                 }
 
                 let mut expanded_shader_source = String::with_capacity(shader_source.len() * 2);
