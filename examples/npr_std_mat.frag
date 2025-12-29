@@ -42,6 +42,10 @@ float DecodeFloatRGBA(vec4 rgba) {
     return clamp(dot(rgba, vec4(1.0, 1.0 / 255.0, 1.0 / 65025.0, 1.0 / 16581375.0)), 0.0, 1.0);
 }
 
+vec3 rgbe2rgb(vec4 rgbe) {
+    return (rgbe.rgb * pow(2.0, rgbe.a * 255.0 - 128.0));
+}
+
 #include shadow_sampling
 
 // http://www.mikktspace.com/
@@ -124,10 +128,14 @@ void main() {
     specular_color = mix(specular_color, specular_color * color.rgb, vec3(metallic));
 
     float mip_levels = 8.0; // TODO put in uniform
-    vec3 specular_env_color = textureCubeLod(specular_map, reflect(V, normal), perceptual_roughness_tex * mip_levels).rgb;
-    specular_color += specular_env_color * specular_intensity;
-    vec3 diffuse_env_color = textureCubeLod(diffuse_map, normal, 0.0).rgb;
-    diffuse_color += color.rgb * diffuse_env_color * (1.0 - metallic);
+    vec4 specular_env_color = textureCubeLod(specular_map, reflect(V, normal), perceptual_roughness_tex * mip_levels);
+    vec4 diffuse_env_color = textureCubeLod(diffuse_map, normal, 0.0);
+    #ifdef WEBGL1
+    specular_env_color.rgb = rgbe2rgb(specular_env_color);
+    diffuse_env_color.rgb = rgbe2rgb(diffuse_env_color);
+    #endif
+    specular_color += specular_env_color.rgb * specular_intensity;
+    diffuse_color += color.rgb * diffuse_env_color.rgb * (1.0 - metallic);
 
     lambert = max(lambert, 0.0);
     gl_FragColor = vec4(diffuse_color + specular_color, color.a);

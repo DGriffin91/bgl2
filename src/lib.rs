@@ -374,6 +374,9 @@ impl BevyGlContext {
                     }
                 });
 
+                #[cfg(target_arch = "wasm32")]
+                preamble.push_str(&format!("#define WEBGL1\n"));
+
                 if *shader_type == glow::FRAGMENT_SHADER {
                     //let ext = self.gl.supported_extensions();
                     //#[cfg(not(target_arch = "wasm32"))]
@@ -449,6 +452,7 @@ impl BevyGlContext {
             .insert(String::from(name), String::from(src));
     }
 
+    #[allow(dead_code)]
     fn test_for_glsl_lod(&mut self) {
         self.has_glsl_cube_lod = self
             .shader("void main() { gl_Position = vec4(0.0); }",

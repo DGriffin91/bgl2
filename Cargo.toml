@@ -25,6 +25,7 @@ winit = "0.30.12"
 notify = "8.2.0"
 anyhow = "1.0.100"
 itertools = "0.14.0"
+shared_exponent_formats = { git = "https://github.com/DGriffin91/shared_exponent_formats", rev = "0bc593747201f121706491a4745451832086f5b0" }
 
 [target.'cfg(not(any(target_arch = "wasm32")))'.dependencies]
 glutin = "0.32.3"
@@ -43,6 +44,7 @@ wasm-bindgen = { version = "0.2" }
 #bevy_mod_mipmap_generator = { git = "https://github.com/DGriffin91/bevy_mod_mipmap_generator" }
 bevy_basic_camera = { git = "https://github.com/DGriffin91/bevy_basic_camera", branch = "bevy18" }
 bevy_mod_mipmap_generator = { git = "https://github.com/DGriffin91/bevy_mod_mipmap_generator", branch = "bevy18" }
+
 
 # Enable optimization in debug mode
 [profile.dev]

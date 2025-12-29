@@ -224,7 +224,10 @@ fn transfer_image_data(image: &bevy::prelude::Image, target: u32, ctx: &BevyGlCo
     let internal_format = match image.texture_descriptor.format {
         TextureFormat::Rgba8Unorm => rgb_format,
         TextureFormat::Rgba8UnormSrgb => rgb_format,
+        #[cfg(not(target_arch = "wasm32"))]
         TextureFormat::Rgb9e5Ufloat => glow::RGB9_E5,
+        #[cfg(target_arch = "wasm32")]
+        TextureFormat::Rgb9e5Ufloat => rgb_format, // Not supported by WebGL1 so we convert to RGBE
         _ => {
             warn!("unimplemented format {:?}", image.texture_descriptor.format);
             return;
@@ -234,7 +237,10 @@ fn transfer_image_data(image: &bevy::prelude::Image, target: u32, ctx: &BevyGlCo
     let pixel_format = match image.texture_descriptor.format {
         TextureFormat::Rgba8Unorm => glow::RGBA,
         TextureFormat::Rgba8UnormSrgb => glow::RGBA,
+        #[cfg(not(target_arch = "wasm32"))]
         TextureFormat::Rgb9e5Ufloat => glow::RGB,
+        #[cfg(target_arch = "wasm32")]
+        TextureFormat::Rgb9e5Ufloat => glow::RGBA,
         _ => {
             warn!("unimplemented format {:?}", image.texture_descriptor.format);
             return;
@@ -244,11 +250,38 @@ fn transfer_image_data(image: &bevy::prelude::Image, target: u32, ctx: &BevyGlCo
     let pixel_type = match image.texture_descriptor.format {
         TextureFormat::Rgba8Unorm => glow::UNSIGNED_BYTE,
         TextureFormat::Rgba8UnormSrgb => glow::UNSIGNED_BYTE,
+        #[cfg(not(target_arch = "wasm32"))]
         TextureFormat::Rgb9e5Ufloat => glow::UNSIGNED_INT_5_9_9_9_REV,
+        #[cfg(target_arch = "wasm32")]
+        TextureFormat::Rgb9e5Ufloat => glow::UNSIGNED_BYTE,
         _ => {
             warn!("unimplemented format {:?}", image.texture_descriptor.format);
             return;
         }
+    };
+
+    let Some(image_data) = &image.data else {
+        return;
+    };
+
+    #[allow(unused)]
+    let mut converted_rgbe: Option<Vec<u32>> = None;
+    #[cfg(target_arch = "wasm32")]
+    if image.texture_descriptor.format == TextureFormat::Rgb9e5Ufloat {
+        // rgb9e5 Not supported by WebGL1 so we convert to RGBE
+        use shared_exponent_formats::rgb9e5::rgb9e5_to_vec3;
+        converted_rgbe = Some(
+            bytemuck::cast_slice::<u8, u32>(image_data)
+                .iter()
+                .map(|c| float2rgbe(rgb9e5_to_vec3(*c)))
+                .collect::<Vec<u32>>(),
+        );
+    }
+
+    let image_data = if let Some(converted_rgbe) = &converted_rgbe {
+        bytemuck::cast_slice::<u32, u8>(converted_rgbe)
+    } else {
+        image_data
     };
 
     // https://github.com/gfx-rs/wgpu/blob/17fcb194258b05205d21001e8473762141ebda26/wgpu/src/util/device.rs#L15
@@ -297,23 +330,21 @@ fn transfer_image_data(image: &bevy::prelude::Image, target: u32, ctx: &BevyGlCo
             }
             // Only the first array layer is supported
             unsafe {
-                if let Some(data) = &image.data {
-                    ctx.gl.tex_image_2d(
-                        if target == glow::TEXTURE_CUBE_MAP {
-                            cube_targets[array_layer as usize]
-                        } else {
-                            glow::TEXTURE_2D
-                        },
-                        mip_level as i32,
-                        internal_format as i32,
-                        mip_size.0 as i32,
-                        mip_size.1 as i32,
-                        0,
-                        pixel_format,
-                        pixel_type,
-                        PixelUnpackData::Slice(Some(&data[binary_offset..end_offset])),
-                    );
-                }
+                ctx.gl.tex_image_2d(
+                    if target == glow::TEXTURE_CUBE_MAP {
+                        cube_targets[array_layer as usize]
+                    } else {
+                        glow::TEXTURE_2D
+                    },
+                    mip_level as i32,
+                    internal_format as i32,
+                    mip_size.0 as i32,
+                    mip_size.1 as i32,
+                    0,
+                    pixel_format,
+                    pixel_type,
+                    PixelUnpackData::Slice(Some(&image_data[binary_offset..end_offset])),
+                );
             };
 
             binary_offset = end_offset;
@@ -373,5 +404,45 @@ fn set_anisotropy(gl: &glow::Context, target: u32, requested: u32) {
                 (requested as f32).clamp(1.0, max),
             );
         }
+    }
+}
+
+pub fn frexpf(x: f32) -> (f32, i32) {
+    let mut y = x.to_bits();
+    let ee: i32 = ((y >> 23) & 0xff) as i32;
+
+    if ee == 0 {
+        if x != 0.0 {
+            let x1p64 = f32::from_bits(0x5f800000);
+            let (x, e) = frexpf(x * x1p64);
+            return (x, e - 64);
+        } else {
+            return (x, 0);
+        }
+    } else if ee == 0xff {
+        return (x, 0);
+    }
+
+    let e = ee - 0x7e;
+    y &= 0x807fffff;
+    y |= 0x3f000000;
+    (f32::from_bits(y), e)
+}
+
+// https://www.graphics.cornell.edu/~bjw/rgbe.html
+#[allow(unused)]
+fn float2rgbe(color: [f32; 3]) -> u32 {
+    let vmax = color[0].max(color[1]).max(color[2]);
+    if vmax < 1e-32 {
+        0
+    } else {
+        let (m, e) = frexpf(vmax);
+        let scale = m * 256.0 / vmax;
+        u32::from_le_bytes([
+            (color[0] * scale) as u8,
+            (color[1] * scale) as u8,
+            (color[2] * scale) as u8,
+            (e + 128) as u8,
+        ])
     }
 }
