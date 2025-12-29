@@ -78,6 +78,10 @@ fn setup(
 ) {
     ctx.shader_snippets
         .insert(String::from("agx"), String::from(include_str!("agx.glsl")));
+    ctx.shader_snippets.insert(
+        String::from("shadow_sampling"),
+        String::from(include_str!("shadow_sampling.glsl")),
+    );
 
     commands.spawn((
         Camera3d::default(),
@@ -95,13 +99,13 @@ fn setup(
         },
     ));
 
-    commands.spawn(SceneRoot(
-        asset_server.load("models/bistro_exterior/BistroExterior.gltf#Scene0"),
-    ));
-    commands.spawn((
-        SceneRoot(asset_server.load("models/bistro_interior_wine/BistroInterior_Wine.gltf#Scene0")),
-        Transform::from_xyz(0.0, 0.3, -0.2),
-    ));
+    //commands.spawn(SceneRoot(
+    //    asset_server.load("models/bistro_exterior/BistroExterior.gltf#Scene0"),
+    //));
+    //commands.spawn((
+    //    SceneRoot(asset_server.load("models/bistro_interior_wine/BistroInterior_Wine.gltf#Scene0")),
+    //    Transform::from_xyz(0.0, 0.3, -0.2),
+    //));
 
     commands.spawn((
         Transform::from_rotation(Quat::from_euler(EulerRot::XYZ, PI * -0.35, PI * -0.13, 0.0)),

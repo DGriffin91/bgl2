@@ -41,6 +41,7 @@ pub struct BevyGlContext {
     pub shader_cache: Vec<glow::Program>,
     pub shader_cache_map: HashMap<u64, (ShaderIndex, Watchers)>,
     pub shader_snippets: HashMap<String, String>,
+    pub has_glsl_cube_lod: bool, // TODO move
 }
 
 impl Drop for BevyGlContext {
@@ -83,7 +84,7 @@ impl BevyGlContext {
         }
 
         #[cfg(not(target_arch = "wasm32"))]
-        {
+        let mut ctx = {
             let vsync = match bevy_window.present_mode {
                 bevy::window::PresentMode::AutoVsync => true,
                 bevy::window::PresentMode::AutoNoVsync => false,
@@ -188,7 +189,7 @@ impl BevyGlContext {
 
             unsafe { gl.viewport(0, 0, width as i32, height as i32) };
 
-            BevyGlContext {
+            let ctx = BevyGlContext {
                 gl: Rc::new(gl),
                 gl_context: Some(gl_context),
                 gl_surface: Some(gl_surface),
@@ -196,10 +197,12 @@ impl BevyGlContext {
                 shader_cache: Default::default(),
                 shader_cache_map: Default::default(),
                 shader_snippets: Default::default(),
-            }
-        }
+                has_glsl_cube_lod: true,
+            };
+            ctx
+        };
         #[cfg(target_arch = "wasm32")]
-        {
+        let mut ctx = {
             use wasm_bindgen::JsCast;
             let canvas = winit_window.canvas().unwrap();
 
@@ -222,8 +225,11 @@ impl BevyGlContext {
                 shader_cache: Default::default(),
                 shader_cache_map: Default::default(),
                 shader_snippets: Default::default(),
+                has_glsl_lod: true,
             }
-        }
+        };
+        ctx.test_for_glsl_lod();
+        ctx
     }
 
     pub fn use_cached_program(&self, index: ShaderIndex) {
@@ -361,6 +367,13 @@ impl BevyGlContext {
                     }
                 });
 
+                //let ext = self.gl.supported_extensions();
+                //#[cfg(not(target_arch = "wasm32"))]
+                //if ext.contains("GL_ARB_shader_texture_lod") {
+                if self.has_glsl_cube_lod {
+                    preamble.push_str("#define SHADER_TEXTURE_LOD\n");
+                }
+
                 let mut expanded_shader_source = String::with_capacity(shader_source.len() * 2);
                 let mut already_included_snippets = HashSet::new();
 
@@ -370,7 +383,7 @@ impl BevyGlContext {
                         if let Some(snippet) = self.shader_snippets.get(snippet_name) {
                             if already_included_snippets.insert(snippet_name) {
                                 // TODO index snippets and use source-string-number
-                                expanded_shader_source.push_str(&format!("#line -1 1\n"));
+                                expanded_shader_source.push_str(&format!("#line 0 1\n"));
                                 expanded_shader_source.push_str(snippet);
                                 expanded_shader_source.push_str("\n");
                                 expanded_shader_source.push_str(&format!("#line {i} 0\n"));
@@ -411,6 +424,20 @@ impl BevyGlContext {
 
             Ok(program)
         }
+    }
+
+    pub fn add_snippet(&mut self, name: &str, src: &str) {
+        self.shader_snippets
+            .insert(String::from(name), String::from(src));
+    }
+
+    fn test_for_glsl_lod(&mut self) {
+        self.has_glsl_cube_lod = self
+            .shader("void main() { gl_Position = vec4(0.0); }",
+                "uniform samplerCube cube; void main() { gl_FragColor = textureCubeLod(cube, vec3(1.0), 0.0); }",
+                Default::default()
+            )
+            .is_ok();
     }
 
     pub fn gen_vbo(&self, data: &[u8], usage: u32) -> Buffer {
