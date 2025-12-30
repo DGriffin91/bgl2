@@ -1,3 +1,4 @@
+pub mod egui_plugin;
 pub mod faststack;
 pub mod mesh_util;
 pub mod prepare_image;
@@ -12,7 +13,7 @@ use bevy::platform::collections::HashSet;
 use std::hash::Hash;
 use std::hash::Hasher;
 use std::path::Path;
-use std::rc::Rc;
+use std::sync::Arc;
 
 use bevy::{platform::collections::HashMap, prelude::*};
 
@@ -31,7 +32,7 @@ use crate::watchers::Watchers;
 pub type ShaderIndex = u32;
 
 pub struct BevyGlContext {
-    pub gl: Rc<glow::Context>,
+    pub gl: Arc<glow::Context>,
     #[cfg(not(target_arch = "wasm32"))]
     pub gl_context: Option<glutin::context::PossiblyCurrentContext>,
     #[cfg(not(target_arch = "wasm32"))]
@@ -190,7 +191,7 @@ impl BevyGlContext {
             unsafe { gl.viewport(0, 0, width as i32, height as i32) };
 
             let mut ctx = BevyGlContext {
-                gl: Rc::new(gl),
+                gl: Arc::new(gl),
                 gl_context: Some(gl_context),
                 gl_surface: Some(gl_surface),
                 gl_display: Some(gl_display),
@@ -229,7 +230,7 @@ impl BevyGlContext {
             let gl = glow::Context::from_webgl1_context(webgl_context);
             unsafe { gl.viewport(0, 0, width as i32, height as i32) };
             BevyGlContext {
-                gl: Rc::new(gl),
+                gl: Arc::new(gl),
                 shader_cache: Default::default(),
                 shader_cache_map: Default::default(),
                 shader_snippets: Default::default(),

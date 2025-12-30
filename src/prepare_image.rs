@@ -1,4 +1,4 @@
-use std::rc::Rc;
+use std::sync::Arc;
 
 use bevy::{
     image::{ImageFilterMode, ImageSampler, ImageSamplerDescriptor},
@@ -38,7 +38,7 @@ pub struct GpuImages {
     pub mapping: HashMap<AssetId<Image>, (glow::Texture, u32)>,
     pub updated_this_frame: bool,
     pub placeholder: Option<glow::Texture>,
-    pub gl: Option<Rc<glow::Context>>,
+    pub gl: Option<Arc<glow::Context>>,
 }
 
 impl Drop for GpuImages {

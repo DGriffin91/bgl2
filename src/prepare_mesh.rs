@@ -5,8 +5,8 @@ use bevy::{
 };
 use bytemuck::cast_slice;
 use glow::{Context, HasContext};
-use std::hash::Hasher;
-use std::{hash::Hash, rc::Rc};
+use std::hash::Hash;
+use std::{hash::Hasher, sync::Arc};
 
 use crate::{
     AttribType, BevyGlContext, ShaderIndex,
@@ -59,7 +59,7 @@ pub struct BufferRef {
 pub struct GPUMeshBufferMap {
     pub buffers: Vec<Option<(GpuMeshBufferSet, HashSet<AssetId<Mesh>>)>>,
     pub map: HashMap<AssetId<Mesh>, BufferRef>,
-    pub gl: Option<Rc<glow::Context>>,
+    pub gl: Option<Arc<glow::Context>>,
     pub last_bind: Option<(ShaderIndex, usize)>, //shader_index, buffer_index
 }
 

@@ -26,6 +26,7 @@ pub enum RenderSet {
     RenderShadow,
     RenderOpaque,
     RenderTransparent,
+    RenderUi,
     Present,
 }
 
@@ -52,6 +53,7 @@ impl Plugin for OpenGLRenderPlugin {
                 RenderSet::RenderShadow,
                 RenderSet::RenderOpaque,
                 RenderSet::RenderTransparent,
+                RenderSet::RenderUi,
                 RenderSet::Present,
             )
                 .chain()

@@ -14,22 +14,29 @@ bevy = { version = "0.18.0-rc.1", default-features = false, features = [
     "jpeg"
 ] }
 #bevy = { version = "0.17" }
-wgpu-types = "27.0" #Needed for bevy interop types since bevy doesn't re-export everything
-#wgpu-types = "26.0" #Needed for bevy interop types since bevy doesn't re-export everything
+wgpu-types = "27" #Needed for bevy interop types since bevy doesn't re-export everything
+#wgpu-types = "26" #Needed for bevy interop types since bevy doesn't re-export everything
 
+egui_glow = "0.33"
+bevy_egui = { git = "https://github.com/ptsd/bevy_egui", branch = "bevy-0.18", default-features = false, features = [
+    "manage_clipboard",
+    "open_url",
+    "default_fonts",
+    "bytemuck",
+] }
 
-bytemuck = "1.24.0"
-glow = "0.16.0"
-raw-window-handle = "0.6.2"
-winit = "0.30.12"
-notify = "8.2.0"
-anyhow = "1.0.100"
-itertools = "0.14.0"
+bytemuck = "1.24"
+glow = "0.16"
+raw-window-handle = "0.6"
+winit = "0.30"
+notify = "8.2"
+anyhow = "1.0"
+itertools = "0.14"
 shared_exponent_formats = { git = "https://github.com/DGriffin91/shared_exponent_formats", rev = "0bc593747201f121706491a4745451832086f5b0" }
 
 [target.'cfg(not(any(target_arch = "wasm32")))'.dependencies]
-glutin = "0.32.3"
-glutin-winit = "0.5.0"
+glutin = "0.32"
+glutin-winit = "0.5"
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 web-sys = { version = "0.3", features = [
