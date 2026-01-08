@@ -4,18 +4,19 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-bevy = { version = "0.18.0-rc.1", default-features = false, features = [
+bevy = { version = "0.18.0-rc.2", default-features = false, features = [
     "default_app",
     "common_api",
     "bevy_gltf",
     "ktx2",
     "zstd_rust",
-    "gamepad",
-    "jpeg"
+    "jpeg",
+    "bevy_camera_controller",
+    "free_camera",
 ] }
-#bevy = { version = "0.17" }
+bevy_dylib = "0.18.0-rc.2"
+
 wgpu-types = "27" #Needed for bevy interop types since bevy doesn't re-export everything
-#wgpu-types = "26" #Needed for bevy interop types since bevy doesn't re-export everything
 
 egui_glow = "0.33"
 bevy_egui = { git = "https://github.com/ptsd/bevy_egui", branch = "bevy-0.18", default-features = false, features = [
@@ -47,9 +48,6 @@ web-sys = { version = "0.3", features = [
 wasm-bindgen = { version = "0.2" }
 
 [dev-dependencies]
-#bevy_basic_camera = { git = "https://github.com/DGriffin91/bevy_basic_camera" }
-#bevy_mod_mipmap_generator = { git = "https://github.com/DGriffin91/bevy_mod_mipmap_generator" }
-bevy_basic_camera = { git = "https://github.com/DGriffin91/bevy_basic_camera", branch = "bevy18" }
 bevy_mod_mipmap_generator = { git = "https://github.com/DGriffin91/bevy_mod_mipmap_generator", branch = "bevy18" }
 
 

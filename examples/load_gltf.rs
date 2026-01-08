@@ -2,6 +2,7 @@ use std::f32::consts::PI;
 
 use bevy::{
     camera::primitives::Aabb,
+    camera_controller::free_camera::{FreeCamera, FreeCameraPlugin},
     diagnostic::{FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin},
     light::{CascadeShadowConfigBuilder, light_consts::lux},
     prelude::*,
@@ -9,7 +10,6 @@ use bevy::{
     window::PresentMode,
     winit::{UpdateMode, WinitSettings},
 };
-use bevy_basic_camera::{CameraController, CameraControllerPlugin};
 use bevy_mod_mipmap_generator::{MipmapGeneratorPlugin, generate_mipmaps};
 use bevy_opengl::{
     BevyGlContext,
@@ -50,7 +50,7 @@ fn main() {
             })
             .set(ImagePlugin::default_nearest()),
         OpenGLRenderPlugin,
-        CameraControllerPlugin,
+        FreeCameraPlugin,
         LogDiagnosticsPlugin::default(),
         FrameTimeDiagnosticsPlugin::default(),
     ));
@@ -92,11 +92,7 @@ fn setup(
             intensity: 250.0,
             ..default()
         },
-        CameraController {
-            orbit_mode: true,
-            orbit_focus: Vec3::new(0.0, 0.3, 0.0),
-            ..default()
-        },
+        FreeCamera::default(),
     ));
 
     //commands.spawn(SceneRoot(
