@@ -21,7 +21,7 @@ use bevy_opengl::{
     },
     tex,
     uniform_slot_builder::{Tex, UniformSlotBuilder},
-    upload, val,
+    upload, upload_slice, val,
 };
 use itertools::Either;
 
@@ -95,13 +95,13 @@ fn setup(
         FreeCamera::default(),
     ));
 
-    //commands.spawn(SceneRoot(
-    //    asset_server.load("models/bistro_exterior/BistroExterior.gltf#Scene0"),
-    //));
-    //commands.spawn((
-    //    SceneRoot(asset_server.load("models/bistro_interior_wine/BistroInterior_Wine.gltf#Scene0")),
-    //    Transform::from_xyz(0.0, 0.3, -0.2),
-    //));
+    commands.spawn(SceneRoot(
+        asset_server.load("models/bistro_exterior/BistroExterior.gltf#Scene0"),
+    ));
+    commands.spawn((
+        SceneRoot(asset_server.load("models/bistro_interior_wine/BistroInterior_Wine.gltf#Scene0")),
+        Transform::from_xyz(0.0, 0.3, -0.2),
+    ));
 
     commands.spawn((
         Transform::from_rotation(Quat::from_euler(EulerRot::XYZ, PI * -0.35, PI * -0.13, 0.0)),
@@ -121,6 +121,15 @@ fn setup(
             overlap_proportion: 0.2,
         }
         .build(),
+    ));
+    commands.spawn((
+        PointLight {
+            shadows_enabled: false,
+            intensity: 10000.0,
+            color: Color::linear_rgb(1.0, 0.0, 1.0),
+            ..default()
+        },
+        Transform::from_xyz(1.0, 1.0, 1.0),
     ));
     commands.spawn(SceneRoot(asset_server.load(
         GltfAssetLabel::Scene(0).from_asset("models/FlightHelmet/FlightHelmet.gltf"),
@@ -144,6 +153,7 @@ fn render_std_mat(
         &Projection,
         Option<&EnvironmentMapLight>,
     )>,
+    point_lights: Query<(&PointLight, &GlobalTransform)>,
     mut ctx: NonSendMut<BevyGlContext>,
     mut gpu_meshes: NonSendMut<GPUMeshBufferMap>,
     materials: Res<Assets<StandardMaterial>>,
@@ -233,6 +243,19 @@ fn render_std_mat(
         bevy_window.physical_height().max(1) as f32,
     );
     upload!(build, view_resolution);
+
+    let mut point_light_position_range = Vec::new();
+    let mut point_light_color_radius = Vec::new();
+
+    for (light, trans) in &point_lights {
+        point_light_position_range.push(trans.translation().extend(light.range));
+        point_light_color_radius.push(light.color.to_linear().to_vec3().extend(light.radius));
+    }
+
+    let light_count = point_light_position_range.len() as i32;
+    upload!(build, light_count);
+    upload_slice!(build, point_light_position_range);
+    upload_slice!(build, point_light_color_radius);
 
     let iter = match phase {
         RenderPhase::Shadow | RenderPhase::Opaque => Either::Left(mesh_entities.iter()),

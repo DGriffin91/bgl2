@@ -183,3 +183,10 @@ macro_rules! upload {
         $obj.upload(stringify!($field), $field)
     };
 }
+
+#[macro_export]
+macro_rules! upload_slice {
+    ($obj:expr, $field:ident) => {
+        $obj.upload(stringify!($field), $field.as_slice())
+    };
+}

@@ -658,7 +658,7 @@ pub fn shader_key(vertex: &Path, fragment: &Path, shader_defs: &[(&str, &str)]) 
     hasher.finish()
 }
 
-pub trait UniformValue: Sized + 'static {
+pub trait UniformValue: Sized {
     fn upload(&self, ctx: &BevyGlContext, loc: &glow::UniformLocation);
     fn read_raw(&self, out: &mut StackStack<u32, 16>);
 }
@@ -683,6 +683,18 @@ impl UniformValue for f32 {
     }
 }
 
+impl UniformValue for &[f32] {
+    fn upload(&self, ctx: &BevyGlContext, loc: &glow::UniformLocation) {
+        unsafe {
+            ctx.gl
+                .uniform_1_f32_slice(Some(&loc), &bytemuck::cast_slice(self))
+        };
+    }
+    fn read_raw(&self, _out: &mut StackStack<u32, 16>) {
+        unimplemented!("read_raw for slices not supported");
+    }
+}
+
 impl UniformValue for i32 {
     fn upload(&self, ctx: &BevyGlContext, loc: &glow::UniformLocation) {
         unsafe { ctx.gl.uniform_1_i32(Some(&loc), *self) };
@@ -703,6 +715,18 @@ impl UniformValue for Vec2 {
     }
 }
 
+impl UniformValue for &[Vec2] {
+    fn upload(&self, ctx: &BevyGlContext, loc: &glow::UniformLocation) {
+        unsafe {
+            ctx.gl
+                .uniform_2_f32_slice(Some(&loc), &bytemuck::cast_slice(self))
+        };
+    }
+    fn read_raw(&self, _out: &mut StackStack<u32, 16>) {
+        unimplemented!("read_raw for slices not supported");
+    }
+}
+
 impl UniformValue for Vec3 {
     fn upload(&self, ctx: &BevyGlContext, loc: &glow::UniformLocation) {
         unsafe { ctx.gl.uniform_3_f32_slice(Some(&loc), &self.to_array()) };
@@ -713,6 +737,18 @@ impl UniformValue for Vec3 {
     }
 }
 
+impl UniformValue for &[Vec3] {
+    fn upload(&self, ctx: &BevyGlContext, loc: &glow::UniformLocation) {
+        unsafe {
+            ctx.gl
+                .uniform_3_f32_slice(Some(&loc), &bytemuck::cast_slice(self))
+        };
+    }
+    fn read_raw(&self, _out: &mut StackStack<u32, 16>) {
+        unimplemented!("read_raw for slices not supported");
+    }
+}
+
 impl UniformValue for Vec4 {
     fn upload(&self, ctx: &BevyGlContext, loc: &glow::UniformLocation) {
         unsafe { ctx.gl.uniform_4_f32_slice(Some(&loc), &self.to_array()) };
@@ -720,6 +756,18 @@ impl UniformValue for Vec4 {
     fn read_raw(&self, out: &mut StackStack<u32, 16>) {
         out.clear();
         self.to_array().iter().for_each(|n| out.push(n.to_bits()));
+    }
+}
+
+impl UniformValue for &[Vec4] {
+    fn upload(&self, ctx: &BevyGlContext, loc: &glow::UniformLocation) {
+        unsafe {
+            ctx.gl
+                .uniform_4_f32_slice(Some(&loc), &bytemuck::cast_slice(self))
+        };
+    }
+    fn read_raw(&self, _out: &mut StackStack<u32, 16>) {
+        unimplemented!("read_raw for slices not supported");
     }
 }
 
