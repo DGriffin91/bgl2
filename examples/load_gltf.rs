@@ -6,9 +6,8 @@ use bevy::{
     diagnostic::{FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin},
     light::{CascadeShadowConfigBuilder, light_consts::lux},
     prelude::*,
-    render::{RenderPlugin, settings::WgpuSettings},
     window::PresentMode,
-    winit::{UpdateMode, WinitSettings},
+    winit::WinitSettings,
 };
 use bevy_mod_mipmap_generator::{MipmapGeneratorPlugin, generate_mipmaps};
 use bevy_opengl::{
@@ -17,50 +16,32 @@ use bevy_opengl::{
     prepare_mesh::GPUMeshBufferMap,
     queue_tex, queue_val,
     render::{
-        DeferredAlphaBlendDraws, DirectionalLightInfo, OpenGLRenderPlugin, RenderPhase,
-        RenderRunner, RenderSet,
+        DeferredAlphaBlendDraws, DirectionalLightInfo, OpenGLRenderPlugin, RenderPhase, RenderSet,
+        default_plugins_no_render_backend, register_render_system,
     },
+    shader_cached,
     uniform_slot_builder::UniformSlotBuilder,
 };
 use itertools::Either;
 
 fn main() {
     let mut app = App::new();
-    app.insert_resource(WinitSettings {
-        focused_mode: UpdateMode::Continuous,
-        unfocused_mode: UpdateMode::Continuous,
-    })
-    .add_plugins((
-        DefaultPlugins
-            .set(RenderPlugin {
-                render_creation: WgpuSettings {
-                    backends: None,
-                    ..default()
-                }
-                .into(),
-                ..default()
-            })
-            .set(WindowPlugin {
+    app.insert_resource(WinitSettings::continuous())
+        .add_plugins((
+            default_plugins_no_render_backend().set(WindowPlugin {
                 primary_window: Some(Window {
                     present_mode: PresentMode::Immediate,
                     ..default()
                 }),
                 ..default()
             }),
-        OpenGLRenderPlugin,
-        FreeCameraPlugin,
-        LogDiagnosticsPlugin::default(),
-        FrameTimeDiagnosticsPlugin::default(),
-    ));
+            OpenGLRenderPlugin,
+            FreeCameraPlugin,
+            LogDiagnosticsPlugin::default(),
+            FrameTimeDiagnosticsPlugin::default(),
+        ));
 
-    {
-        let world = app.world_mut();
-        let render_std_mat_id = world.register_system(render_std_mat);
-        world
-            .get_resource_mut::<RenderRunner>()
-            .unwrap()
-            .register::<StandardMaterial>(render_std_mat_id);
-    }
+    register_render_system::<StandardMaterial, _>(app.world_mut(), render_std_mat);
 
     app.add_plugins(MipmapGeneratorPlugin)
         .add_systems(Update, generate_mipmaps::<StandardMaterial>)
@@ -68,18 +49,13 @@ fn main() {
         .run();
 }
 
-/// set up a simple 3D scene
 fn setup(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
     mut ctx: NonSendMut<BevyGlContext>,
 ) {
-    ctx.shader_snippets
-        .insert(String::from("agx"), String::from(include_str!("agx.glsl")));
-    ctx.shader_snippets.insert(
-        String::from("shadow_sampling"),
-        String::from(include_str!("shadow_sampling.glsl")),
-    );
+    ctx.add_snippet("agx", include_str!("agx.glsl"));
+    ctx.add_snippet("shadow_sampling", include_str!("shadow_sampling.glsl"));
 
     commands.spawn((
         Camera3d::default(),
@@ -194,8 +170,7 @@ fn render_std_mat(
         }
     }
     let shader_index =
-        bevy_opengl::shader_cached!(ctx, "npr_std_mat.vert", "npr_std_mat.frag", &[shadow_def])
-            .unwrap();
+        shader_cached!(ctx, "npr_std_mat.vert", "npr_std_mat.frag", &[shadow_def]).unwrap();
     gpu_meshes.reset_bind_cache();
     ctx.use_cached_program(shader_index);
 

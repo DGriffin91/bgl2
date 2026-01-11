@@ -6,6 +6,7 @@ use bevy::{
     light::{Cascades, SimulationLightSystems, cascade::Cascade},
     platform::collections::HashMap,
     prelude::*,
+    render::{RenderPlugin, settings::WgpuSettings},
     window::WindowResized,
     winit::WINIT_WINDOWS,
 };
@@ -382,4 +383,26 @@ pub fn init_gl(world: &mut World, params: &mut SystemState<Query<(Entity, &mut W
 
         world.insert_non_send_resource(ctx);
     });
+}
+
+pub fn register_render_system<T: 'static, M>(
+    world: &mut World,
+    system: impl IntoSystem<(), (), M> + 'static,
+) {
+    let render_std_mat_id = world.register_system(system);
+    world
+        .get_resource_mut::<RenderRunner>()
+        .unwrap()
+        .register::<T>(render_std_mat_id);
+}
+
+pub fn default_plugins_no_render_backend() -> bevy::app::PluginGroupBuilder {
+    DefaultPlugins.set(RenderPlugin {
+        render_creation: WgpuSettings {
+            backends: None,
+            ..default()
+        }
+        .into(),
+        ..default()
+    })
 }

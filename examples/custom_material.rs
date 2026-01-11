@@ -10,7 +10,7 @@ use bevy_opengl::{
     prepare_image::GpuImages,
     prepare_mesh::GPUMeshBufferMap,
     queue_val,
-    render::{OpenGLRenderPlugin, RenderPhase, RenderRunner, RenderSet},
+    render::{OpenGLRenderPlugin, RenderPhase, RenderSet, register_render_system},
     uniform_slot_builder::UniformSlotBuilder,
 };
 
@@ -18,38 +18,33 @@ fn main() {
     let mut app = App::new();
     app.insert_resource(WinitSettings::continuous())
         .add_plugins((
-            DefaultPlugins
-                .set(RenderPlugin {
-                    render_creation: WgpuSettings {
-                        backends: None,
-                        ..default()
-                    }
-                    .into(),
-                    ..default()
-                })
-                .set(WindowPlugin {
-                    primary_window: Some(Window {
-                        present_mode: PresentMode::Immediate,
-                        ..default()
-                    }),
+            default_plugins_no_render_backend().set(WindowPlugin {
+                primary_window: Some(Window {
+                    present_mode: PresentMode::Immediate,
                     ..default()
                 }),
+                ..default()
+            }),
             OpenGLRenderPlugin,
             LogDiagnosticsPlugin::default(),
             FrameTimeDiagnosticsPlugin::default(),
         ));
 
-    {
-        let world = app.world_mut();
-        let render_std_mat_id = world.register_system(render_std_mat);
-        world
-            .get_resource_mut::<RenderRunner>()
-            .unwrap()
-            .register::<StandardMaterial>(render_std_mat_id);
-    }
+    register_render_system::<StandardMaterial, _>(app.world_mut(), render_custom_mat);
 
     app.add_systems(Startup, setup.in_set(RenderSet::Pipeline))
         .run();
+}
+
+fn default_plugins_no_render_backend() -> bevy::app::PluginGroupBuilder {
+    DefaultPlugins.set(RenderPlugin {
+        render_creation: WgpuSettings {
+            backends: None,
+            ..default()
+        }
+        .into(),
+        ..default()
+    })
 }
 
 /// set up a simple 3D scene
@@ -87,7 +82,7 @@ struct CustomMaterial {
 #[derive(Component, Deref, DerefMut)]
 struct CustomMaterialHandle(Entity);
 
-fn render_std_mat(
+fn render_custom_mat(
     mesh_entities: Query<(
         &ViewVisibility,
         &GlobalTransform,

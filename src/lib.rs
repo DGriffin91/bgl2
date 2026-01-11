@@ -448,7 +448,7 @@ impl BevyGlContext {
         }
     }
 
-    pub fn add_snippet(&mut self, name: &str, src: &str) {
+    pub fn add_snippet(&mut self, name: &str, src: &'static str) {
         self.shader_snippets
             .insert(String::from(name), String::from(src));
     }
