@@ -47,8 +47,7 @@ fn main() {
                     ..default()
                 }),
                 ..default()
-            })
-            .set(ImagePlugin::default_nearest()),
+            }),
         OpenGLRenderPlugin,
         FreeCameraPlugin,
         LogDiagnosticsPlugin::default(),

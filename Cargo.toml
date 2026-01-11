@@ -50,6 +50,10 @@ wasm-bindgen = { version = "0.2" }
 [dev-dependencies]
 bevy_mod_mipmap_generator = { git = "https://github.com/DGriffin91/bevy_mod_mipmap_generator", branch = "bevy18" }
 
+[profile.release-with-debug]
+inherits = "release"
+debug = true
+
 
 # Enable optimization in debug mode
 [profile.dev]
