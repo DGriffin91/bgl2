@@ -3,7 +3,7 @@ use bevy::{
     render::{RenderPlugin, settings::WgpuSettings},
 };
 use bevy_egui::{EguiContexts, EguiPrimaryContextPass, egui};
-use bevy_opengl::{egui_plugin::GlowEguiPlugin, render::OpenGLRenderPlugin};
+use bevy_opengl::{egui_plugin::GlowEguiPlugin, render::OpenGLRenderPlugins};
 
 fn main() {
     App::new()
@@ -16,7 +16,7 @@ fn main() {
                 .into(),
                 ..default()
             }),
-            OpenGLRenderPlugin,
+            OpenGLRenderPlugins,
         ))
         .add_plugins(GlowEguiPlugin::default())
         // Systems that create Egui widgets should be run during the `CoreSet::Update` set,

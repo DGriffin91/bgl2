@@ -10,7 +10,7 @@ use bevy_opengl::{
     prepare_image::GpuImages,
     prepare_mesh::GPUMeshBufferMap,
     queue_val,
-    render::{OpenGLRenderPlugin, RenderPhase, RenderSet, register_render_system},
+    render::{OpenGLRenderPlugins, RenderPhase, RenderSet, register_render_system},
     uniform_slot_builder::UniformSlotBuilder,
 };
 
@@ -25,7 +25,7 @@ fn main() {
                 }),
                 ..default()
             }),
-            OpenGLRenderPlugin,
+            OpenGLRenderPlugins,
             LogDiagnosticsPlugin::default(),
             FrameTimeDiagnosticsPlugin::default(),
         ));

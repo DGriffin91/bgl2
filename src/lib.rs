@@ -1,6 +1,9 @@
 pub mod egui_plugin;
 pub mod faststack;
 pub mod mesh_util;
+pub mod phase_opaque;
+pub mod phase_shadow;
+pub mod phase_transparent;
 pub mod prepare_image;
 pub mod prepare_mesh;
 pub mod render;

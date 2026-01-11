@@ -12,12 +12,14 @@ use bevy::{
 use bevy_mod_mipmap_generator::{MipmapGeneratorPlugin, generate_mipmaps};
 use bevy_opengl::{
     BevyGlContext, load_gl_tex, load_slice, load_tex, load_val,
+    phase_shadow::DirectionalLightInfo,
+    phase_transparent::DeferredAlphaBlendDraws,
     prepare_image::GpuImages,
     prepare_mesh::GPUMeshBufferMap,
     queue_tex, queue_val,
     render::{
-        DeferredAlphaBlendDraws, DirectionalLightInfo, OpenGLRenderPlugin, RenderPhase, RenderSet,
-        default_plugins_no_render_backend, register_render_system,
+        OpenGLRenderPlugins, RenderPhase, RenderSet, default_plugins_no_render_backend,
+        register_render_system,
     },
     shader_cached,
     uniform_slot_builder::UniformSlotBuilder,
@@ -35,7 +37,7 @@ fn main() {
                 }),
                 ..default()
             }),
-            OpenGLRenderPlugin,
+            OpenGLRenderPlugins,
             FreeCameraPlugin,
             LogDiagnosticsPlugin::default(),
             FrameTimeDiagnosticsPlugin::default(),
