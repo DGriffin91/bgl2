@@ -63,7 +63,8 @@ impl<'a, T> UniformSlotBuilder<'a, T> {
         }
     }
 
-    pub fn val<V, F>(&mut self, name: &str, f: F)
+    /// if location is found queues setting the value when build.run() is called.
+    pub fn queue_val<V, F>(&mut self, name: &str, f: F)
     where
         V: UniformValue,
         F: Fn(&T) -> V + 'static,
@@ -82,13 +83,13 @@ impl<'a, T> UniformSlotBuilder<'a, T> {
                           temp_value: &mut StackStack<u32, 16>| {
                         let v: V = f(material);
                         if !slot.init {
-                            v.upload(ctx, &slot.location);
+                            v.load(ctx, &slot.location);
                             slot.init = true;
                         } else {
                             v.read_raw(temp_value);
                             if temp_value != &slot.previous {
                                 std::mem::swap(&mut slot.previous, temp_value);
-                                v.upload(ctx, &slot.location);
+                                v.load(ctx, &slot.location);
                             }
                         }
                     },
@@ -97,7 +98,8 @@ impl<'a, T> UniformSlotBuilder<'a, T> {
         }
     }
 
-    pub fn tex<F>(&mut self, name: &str, f: F)
+    /// if location is found queues setting the texture when build.run() is called.
+    pub fn queue_tex<F>(&mut self, name: &str, f: F)
     where
         F: Fn(&T) -> Tex + 'static,
     {
@@ -151,42 +153,66 @@ impl<'a, T> UniformSlotBuilder<'a, T> {
     }
 
     /// Uploads immediately if location is found
-    pub fn upload<V>(&mut self, name: &str, v: V)
+    pub fn load<V>(&mut self, name: &str, v: V)
     where
         V: UniformValue,
     {
         if let Some(location) = self.get_uniform_location(name) {
-            v.upload(&self.ctx, &location);
+            v.load(&self.ctx, &location);
         }
     }
 }
 
 #[macro_export]
-macro_rules! val {
+/// if location is found queues setting the value when build.run() is called.
+macro_rules! queue_val {
     ($obj:expr, $field:ident) => {
-        $obj.val(stringify!($field), |m| m.$field)
+        $obj.queue_val(stringify!($field), |m| m.$field)
     };
 }
 
 #[macro_export]
-macro_rules! tex {
+/// if location is found queues setting the texture when build.run() is called.
+macro_rules! queue_tex {
     ($obj:expr, $field:ident) => {
-        $obj.tex(stringify!($field), |m| {
+        $obj.queue_tex(stringify!($field), |m| {
             $crate::uniform_slot_builder::Tex::Bevy(m.$field.clone())
         })
     };
 }
 
 #[macro_export]
-macro_rules! upload {
+/// Sets texture immediately if location is found
+macro_rules! load_tex {
     ($obj:expr, $field:ident) => {
-        $obj.upload(stringify!($field), $field)
+        $obj.queue_tex(stringify!($field), move |_| {
+            $crate::uniform_slot_builder::Tex::Bevy(Some($field.clone()))
+        })
     };
 }
 
 #[macro_export]
-macro_rules! upload_slice {
+/// Sets texture immediately if location is found
+macro_rules! load_gl_tex {
     ($obj:expr, $field:ident) => {
-        $obj.upload(stringify!($field), $field.as_slice())
+        $obj.queue_tex(stringify!($field), move |_| {
+            $crate::uniform_slot_builder::Tex::Gl($field)
+        })
+    };
+}
+
+#[macro_export]
+/// Sets value immediately if location is found
+macro_rules! load_val {
+    ($obj:expr, $field:ident) => {
+        $obj.load(stringify!($field), $field)
+    };
+}
+
+#[macro_export]
+/// Sets value immediately if location is found
+macro_rules! load_slice {
+    ($obj:expr, $field:ident) => {
+        $obj.load(stringify!($field), $field.as_slice())
     };
 }

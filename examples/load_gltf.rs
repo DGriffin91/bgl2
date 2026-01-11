@@ -12,16 +12,15 @@ use bevy::{
 };
 use bevy_mod_mipmap_generator::{MipmapGeneratorPlugin, generate_mipmaps};
 use bevy_opengl::{
-    BevyGlContext,
+    BevyGlContext, load_gl_tex, load_slice, load_tex, load_val,
     prepare_image::GpuImages,
     prepare_mesh::GPUMeshBufferMap,
+    queue_tex, queue_val,
     render::{
         DeferredAlphaBlendDraws, DirectionalLightInfo, OpenGLRenderPlugin, RenderPhase,
         RenderRunner, RenderSet,
     },
-    tex,
-    uniform_slot_builder::{Tex, UniformSlotBuilder},
-    upload, upload_slice, val,
+    uniform_slot_builder::UniformSlotBuilder,
 };
 use itertools::Either;
 
@@ -202,46 +201,46 @@ fn render_std_mat(
 
     let mut build = UniformSlotBuilder::<StandardMaterial>::new(&ctx, &gpu_images, shader_index);
 
-    val!(build, flip_normal_map_y);
-    val!(build, double_sided);
-    val!(build, perceptual_roughness);
-    val!(build, metallic);
+    queue_val!(build, flip_normal_map_y);
+    queue_val!(build, double_sided);
+    queue_val!(build, perceptual_roughness);
+    queue_val!(build, metallic);
 
-    tex!(build, base_color_texture);
-    tex!(build, normal_map_texture);
-    tex!(build, metallic_roughness_texture);
+    queue_tex!(build, base_color_texture);
+    queue_tex!(build, normal_map_texture);
+    queue_tex!(build, metallic_roughness_texture);
 
     let env_light = env_light.unwrap();
 
-    let spec_env = env_light.specular_map.clone();
-    build.tex("specular_map", move |_| Tex::Bevy(Some(spec_env.clone())));
-    let diffuse_env = env_light.diffuse_map.clone();
-    build.tex("diffuse_map", move |_| Tex::Bevy(Some(diffuse_env.clone())));
+    let specular_map = env_light.specular_map.clone();
+    load_tex!(build, specular_map);
+    let diffuse_map = env_light.diffuse_map.clone();
+    load_tex!(build, diffuse_map);
 
     if let Some(shadow) = &shadow {
-        let shadow_texture = shadow.texture;
-        build.tex("shadow_texture", move |_| Tex::Gl(shadow_texture));
+        let shadow_texture = shadow.texture.clone();
+        load_gl_tex!(build, shadow_texture);
         let shadow_clip_from_world = shadow.cascade.clip_from_world;
-        upload!(build, shadow_clip_from_world);
+        load_val!(build, shadow_clip_from_world);
     }
 
     if let Some(trans) = directional_lights.iter().next() {
-        build.upload("directional_light_dir_to_light", trans.back().as_vec3());
+        build.load("directional_light_dir_to_light", trans.back().as_vec3());
     } else {
-        build.upload("directional_light_dir_to_light", Vec3::ZERO);
+        build.load("directional_light_dir_to_light", Vec3::ZERO);
     }
 
-    build.val("alpha_blend", |m| material_alpha_blend(m));
-    build.val("base_color", |m| m.base_color.to_linear().to_vec4());
+    build.queue_val("alpha_blend", |m| material_alpha_blend(m));
+    build.queue_val("base_color", |m| m.base_color.to_linear().to_vec4());
 
-    upload!(build, world_from_view);
-    upload!(build, view_position);
+    load_val!(build, world_from_view);
+    load_val!(build, view_position);
 
     let view_resolution = vec2(
         bevy_window.physical_width().max(1) as f32,
         bevy_window.physical_height().max(1) as f32,
     );
-    upload!(build, view_resolution);
+    load_val!(build, view_resolution);
 
     let mut point_light_position_range = Vec::new();
     let mut point_light_color_radius = Vec::new();
@@ -252,9 +251,9 @@ fn render_std_mat(
     }
 
     let light_count = point_light_position_range.len() as i32;
-    upload!(build, light_count);
-    upload_slice!(build, point_light_position_range);
-    upload_slice!(build, point_light_color_radius);
+    load_val!(build, light_count);
+    load_slice!(build, point_light_position_range);
+    load_slice!(build, point_light_color_radius);
 
     let iter = match phase {
         RenderPhase::Shadow | RenderPhase::Opaque => Either::Left(mesh_entities.iter()),
@@ -290,8 +289,8 @@ fn render_std_mat(
             }
         }
 
-        upload!(build, world_from_local);
-        upload!(build, clip_from_local);
+        load_val!(build, world_from_local);
+        load_val!(build, clip_from_local);
 
         build.run(material);
         gpu_meshes.draw_mesh(&ctx, mesh.id(), shader_index);

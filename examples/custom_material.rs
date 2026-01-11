@@ -6,12 +6,12 @@ use bevy::{
     winit::WinitSettings,
 };
 use bevy_opengl::{
-    BevyGlContext,
+    BevyGlContext, load_val,
     prepare_image::GpuImages,
     prepare_mesh::GPUMeshBufferMap,
+    queue_val,
     render::{OpenGLRenderPlugin, RenderPhase, RenderRunner, RenderSet},
     uniform_slot_builder::UniformSlotBuilder,
-    upload, val,
 };
 
 fn main() {
@@ -122,7 +122,7 @@ fn render_std_mat(
 
     let mut build = UniformSlotBuilder::<CustomMaterial>::new(&ctx, &gpu_images, shader_index);
 
-    val!(build, color);
+    queue_val!(build, color);
 
     for (view_vis, transform, mesh, material_h) in mesh_entities.iter() {
         if !view_vis.get() {
@@ -135,7 +135,7 @@ fn render_std_mat(
         let world_from_local = transform.to_matrix();
         let clip_from_local = clip_from_world * world_from_local;
 
-        upload!(build, clip_from_local);
+        load_val!(build, clip_from_local);
 
         build.run(material);
         gpu_meshes.draw_mesh(&ctx, mesh.id(), shader_index);

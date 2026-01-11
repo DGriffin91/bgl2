@@ -129,13 +129,13 @@ void main() {
     vec3 specular_color;
     vec3 diffuse_color;
 
+    float shininess = mix(0.0, 64.0, (1.0 - roughness));
     {
         // Directional Light
         // https://en.wikipedia.org/wiki/Blinn%E2%80%93Phong_reflection_model
         float lambert = max(dot(light_dir, normal), 0.0);
 
         vec3 half_dir = normalize(light_dir + view_dir);
-        float shininess = mix(0.0, 64.0, (1.0 - roughness));
         float spec_angle = max(dot(half_dir, normal), 0.0);
         float specular = pow(spec_angle, shininess);
         specular = specular * pow(min(lambert + 1.0, 1.0), 4.0); // Fade out spec TODO improve
