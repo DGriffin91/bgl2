@@ -1,6 +1,9 @@
 
 //#include agx
 
+#define MAX_POINT_LIGHTS 32
+#define POINT_LIGHT_PRE_EXPOSE 0.0001
+
 varying vec4 clip_position;
 varying vec3 ws_position;
 varying vec4 tangent;
@@ -32,8 +35,8 @@ uniform samplerCube diffuse_map;
 uniform sampler2D shadow_texture;
 
 uniform int light_count;
-uniform vec4 point_light_position_range[32];
-uniform vec4 point_light_color_radius[32];
+uniform vec4 point_light_position_range[MAX_POINT_LIGHTS];
+uniform vec4 point_light_color_radius[MAX_POINT_LIGHTS];
 
 // https://aras-p.info/blog/2009/07/30/encoding-floats-to-rgba-the-final/
 vec4 EncodeFloatRGBA(float v) {
@@ -159,16 +162,26 @@ void main() {
         diffuse_color += color.rgb * diffuse_env_color.rgb * (1.0 - metallic);
     }
 
+
     // Point Lights
+#ifdef WEBGL1
+    for (int i = 0; i < MAX_POINT_LIGHTS; i++) {
+#else
     for (int i = 0; i < light_count; i++) {
+#endif //WEBGL1
         vec4 light_position_range = point_light_position_range[i];
         vec3 to_light = light_position_range.xyz - ws_position;
         float distance = length(to_light);
-        if (distance > light_position_range.w) {
+        bool in_range = distance < light_position_range.w;
+#ifdef WEBGL1
+        in_range = in_range && (i < MAX_POINT_LIGHTS);
+#endif
+        if (!in_range) {
             continue;
         }
 
         vec4 light_color_radius = point_light_color_radius[i];
+        vec3 light_color = light_color_radius.rgb * POINT_LIGHT_PRE_EXPOSE;
 
         vec3 light_dir = normalize(to_light);
         vec3 half_dir = normalize(light_dir + view_dir);
@@ -176,7 +189,7 @@ void main() {
         float attenuation = get_distance_attenuation(distance, light_position_range.w);
         float lambert = max(dot(light_dir, normal), 0.0);
 
-        diffuse_color += color.rgb * (1.0 - metallic) * light_color_radius.rgb * lambert * attenuation;
+        diffuse_color += color.rgb * (1.0 - metallic) * light_color * lambert * attenuation;
 
         float spec_angle = max(dot(half_dir, normal), 0.0);
         vec3 specular = pow(spec_angle, shininess) * light_color * specular_intensity;

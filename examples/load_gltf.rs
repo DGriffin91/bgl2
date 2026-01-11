@@ -101,7 +101,8 @@ fn setup(
     commands.spawn((
         PointLight {
             shadows_enabled: false,
-            intensity: 10000.0,
+            intensity: 1000.0,
+            range: 10.0,
             color: Color::linear_rgb(1.0, 0.0, 1.0),
             ..default()
         },
@@ -224,7 +225,8 @@ fn render_std_mat(
 
     for (light, trans) in &point_lights {
         point_light_position_range.push(trans.translation().extend(light.range));
-        point_light_color_radius.push(light.color.to_linear().to_vec3().extend(light.radius));
+        point_light_color_radius
+            .push((light.color.to_linear().to_vec3() * light.intensity).extend(light.radius));
     }
 
     let light_count = point_light_position_range.len() as i32;

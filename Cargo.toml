@@ -3,6 +3,9 @@ name = "bevy_opengl"
 version = "0.1.0"
 edition = "2024"
 
+[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
+bevy_dylib = "0.18.0-rc.2"
+
 [dependencies]
 bevy = { version = "0.18.0-rc.2", default-features = false, features = [
     "default_app",
@@ -14,7 +17,6 @@ bevy = { version = "0.18.0-rc.2", default-features = false, features = [
     "bevy_camera_controller",
     "free_camera",
 ] }
-bevy_dylib = "0.18.0-rc.2"
 
 wgpu-types = "27" #Needed for bevy interop types since bevy doesn't re-export everything
 
@@ -53,7 +55,6 @@ bevy_mod_mipmap_generator = { git = "https://github.com/DGriffin91/bevy_mod_mipm
 [profile.release-with-debug]
 inherits = "release"
 debug = true
-
 
 # Enable optimization in debug mode
 [profile.dev]
