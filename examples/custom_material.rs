@@ -100,11 +100,11 @@ fn render_custom_mat(
     let phase = **phase;
 
     let clip_from_world = match phase {
-        RenderPhase::Shadow | RenderPhase::Transparent => {
-            return;
-        }
         RenderPhase::Opaque => {
             cam_proj.get_clip_from_view() * cam_global_trans.to_matrix().inverse()
+        }
+        _ => {
+            return;
         }
     };
 

@@ -16,8 +16,8 @@ use glutin::surface::GlSurface;
 
 use crate::{
     BevyGlContext, phase_opaque::OpaquePhasePlugin, phase_shadow::ShadowPhasePlugin,
-    phase_transparent::TransparentPhasePlugin, prepare_image::PrepareImagePlugin,
-    prepare_mesh::PrepareMeshPlugin,
+    phase_transparent::TransparentPhasePlugin, plane_reflect::PlaneReflectPlugin,
+    prepare_image::PrepareImagePlugin, prepare_mesh::PrepareMeshPlugin,
 };
 
 #[derive(Debug, Hash, PartialEq, Eq, Clone, SystemSet)]
@@ -28,6 +28,8 @@ pub enum RenderSet {
     Prepare,
     PrepareView,
     RenderShadow,
+    RenderReflectOpaque,
+    RenderReflectTransparent,
     RenderOpaque,
     RenderTransparent,
     RenderUi,
@@ -43,6 +45,7 @@ impl Plugin for OpenGLRenderPlugins {
             ShadowPhasePlugin,
             OpaquePhasePlugin,
             TransparentPhasePlugin,
+            PlaneReflectPlugin,
         ));
     }
 }
@@ -67,6 +70,8 @@ impl Plugin for OpenGLMinimalRenderPlugin {
                 RenderSet::Prepare,
                 RenderSet::PrepareView,
                 RenderSet::RenderShadow,
+                RenderSet::RenderReflectOpaque,
+                RenderSet::RenderReflectTransparent,
                 RenderSet::RenderOpaque,
                 RenderSet::RenderTransparent,
                 RenderSet::RenderUi,
@@ -111,6 +116,8 @@ fn present(
 #[derive(Resource, Default, PartialEq, Eq, Clone, Copy)]
 pub enum RenderPhase {
     Shadow,
+    ReflectOpaque,
+    ReflectTransparent,
     #[default]
     Opaque,
     Transparent,

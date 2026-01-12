@@ -33,6 +33,8 @@ uniform samplerCube specular_map;
 uniform samplerCube diffuse_map;
 
 uniform sampler2D shadow_texture;
+uniform sampler2D reflect_texture;
+uniform bool read_reflection;
 
 uniform int light_count;
 uniform vec4 point_light_position_range[MAX_POINT_LIGHTS];
@@ -83,11 +85,13 @@ float get_distance_attenuation(float distance, float range) {
 void main() {
     vec4 color = base_color * texture2D(base_color_texture, uv_0);
 
+
     if (!alpha_blend && (color.a < 0.5)) {
         discard;
     }
 
     vec3 ndc_position = clip_position.xyz / clip_position.w;
+    vec2 screen_uv = ndc_position.xy * 0.5 + 0.5;
 
     #ifdef RENDER_SHADOW
     gl_FragColor = EncodeFloatRGBA(clamp(ndc_position.z * 0.5 + 0.5, 0.0, 1.0));
@@ -149,18 +153,32 @@ void main() {
         specular_color += mix(dir_light_specular, dir_light_specular * color.rgb, vec3(metallic));
     }
 
+
+
     {
-        // Environment map
+        // Environment map / reflection
         float mip_levels = 8.0; // TODO put in uniform
-        vec4 specular_env_color = textureCubeLod(specular_map, reflect(V, normal), perceptual_roughness_tex * mip_levels);
+
         vec4 diffuse_env_color = textureCubeLod(diffuse_map, normal, 0.0);
         #ifdef WEBGL1
-        specular_env_color.rgb = rgbe2rgb(specular_env_color);
         diffuse_env_color.rgb = rgbe2rgb(diffuse_env_color);
         #endif
-        specular_color += specular_env_color.rgb * specular_intensity;
         diffuse_color += color.rgb * diffuse_env_color.rgb * (1.0 - metallic);
+
+        vec3 env_specular;
+        if (read_reflection && perceptual_roughness < 0.2) {
+            vec3 sharp_reflection_color = texture2D(reflect_texture, screen_uv).rgb;
+            env_specular = sharp_reflection_color.rgb * specular_intensity;
+        } else {
+            vec4 specular_env_color = textureCubeLod(specular_map, reflect(V, normal), perceptual_roughness_tex * mip_levels);
+            #ifdef WEBGL1
+            specular_env_color.rgb = rgbe2rgb(specular_env_color);
+            #endif
+            env_specular = specular_env_color.rgb * specular_intensity;
+        }
+        specular_color += mix(env_specular, env_specular * color.rgb, vec3(metallic));
     }
+
 
 
     // Point Lights

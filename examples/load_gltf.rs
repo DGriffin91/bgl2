@@ -11,9 +11,10 @@ use bevy::{
 };
 use bevy_mod_mipmap_generator::{MipmapGeneratorPlugin, generate_mipmaps};
 use bevy_opengl::{
-    BevyGlContext, load_gl_tex, load_slice, load_tex, load_val,
+    BevyGlContext, UniformValue, load_gl_tex, load_slice, load_tex, load_val,
     phase_shadow::DirectionalLightInfo,
     phase_transparent::DeferredAlphaBlendDraws,
+    plane_reflect::{PlaneReflectionTexture, ReflectionPlane},
     prepare_image::GpuImages,
     prepare_mesh::GPUMeshBufferMap,
     queue_tex, queue_val,
@@ -55,6 +56,8 @@ fn setup(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
     mut ctx: NonSendMut<BevyGlContext>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
     ctx.add_snippet("agx", include_str!("agx.glsl"));
     ctx.add_snippet("shadow_sampling", include_str!("shadow_sampling.glsl"));
@@ -71,13 +74,13 @@ fn setup(
         FreeCamera::default(),
     ));
 
-    commands.spawn(SceneRoot(
-        asset_server.load("models/bistro_exterior/BistroExterior.gltf#Scene0"),
-    ));
-    commands.spawn((
-        SceneRoot(asset_server.load("models/bistro_interior_wine/BistroInterior_Wine.gltf#Scene0")),
-        Transform::from_xyz(0.0, 0.3, -0.2),
-    ));
+    //commands.spawn(SceneRoot(
+    //    asset_server.load("models/bistro_exterior/BistroExterior.gltf#Scene0"),
+    //));
+    //commands.spawn((
+    //    SceneRoot(asset_server.load("models/bistro_interior_wine/BistroInterior_Wine.gltf#Scene0")),
+    //    Transform::from_xyz(0.0, 0.3, -0.2),
+    //));
 
     commands.spawn((
         Transform::from_rotation(Quat::from_euler(EulerRot::XYZ, PI * -0.35, PI * -0.13, 0.0)),
@@ -92,7 +95,7 @@ fn setup(
         CascadeShadowConfigBuilder {
             num_cascades: 1,
             minimum_distance: 0.1,
-            maximum_distance: 70.0,
+            maximum_distance: 5.0,
             first_cascade_far_bound: 70.0,
             overlap_proportion: 0.2,
         }
@@ -111,8 +114,26 @@ fn setup(
     commands.spawn(SceneRoot(asset_server.load(
         GltfAssetLabel::Scene(0).from_asset("models/FlightHelmet/FlightHelmet.gltf"),
     )));
-    commands.spawn(SceneRoot(asset_server.load("models/Wood/wood.gltf#Scene0")));
+    //commands.spawn(SceneRoot(asset_server.load("models/Wood/wood.gltf#Scene0")));
+    commands.spawn((
+        Mesh3d(meshes.add(Plane3d::default().mesh().size(50.0, 50.0))),
+        Transform::from_translation(vec3(0.0, 0.0, 0.0)),
+        ReflectionPlane::default(),
+        MeshMaterial3d(materials.add(StandardMaterial {
+            base_color: Color::BLACK,
+            perceptual_roughness: 0.0,
+            ..default()
+        })),
+        SkipReflection,
+        ReadReflection,
+    ));
 }
+
+#[derive(Component, Default)]
+struct SkipReflection;
+
+#[derive(Component, Default)]
+struct ReadReflection;
 
 fn render_std_mat(
     mesh_entities: Query<(
@@ -122,6 +143,8 @@ fn render_std_mat(
         &Mesh3d,
         &Aabb,
         &MeshMaterial3d<StandardMaterial>,
+        Has<SkipReflection>,
+        Has<ReadReflection>,
     )>,
     camera: Single<(
         Entity,
@@ -140,12 +163,14 @@ fn render_std_mat(
     gpu_images: NonSend<GpuImages>,
     bevy_window: Single<&Window>,
     directional_lights: Query<&Transform, With<DirectionalLight>>,
+    reflect: Option<Single<&ReflectionPlane>>,
+    reflect_texture: Option<Res<PlaneReflectionTexture>>,
 ) {
     let (_entity, _camera, cam_global_trans, cam_proj, env_light) = *camera;
     let phase = **phase;
 
     let view_position;
-    let world_from_view;
+    let mut world_from_view;
     let view_from_world;
     let clip_from_world;
     let shadow_def;
@@ -163,10 +188,18 @@ fn render_std_mat(
                 return;
             }
         }
-        RenderPhase::Opaque | RenderPhase::Transparent => {
+        RenderPhase::ReflectTransparent
+        | RenderPhase::ReflectOpaque
+        | RenderPhase::Opaque
+        | RenderPhase::Transparent => {
             view_position = cam_global_trans.translation();
             let clip_from_view = cam_proj.get_clip_from_view();
             world_from_view = cam_global_trans.to_matrix();
+            if phase == RenderPhase::ReflectTransparent || phase == RenderPhase::ReflectOpaque {
+                if let Some(reflect) = reflect {
+                    world_from_view = reflect.0 * world_from_view;
+                }
+            }
             view_from_world = world_from_view.inverse();
             clip_from_world = clip_from_view * view_from_world;
             shadow_def = shadow.as_ref().map_or(("", ""), |_| ("SAMPLE_SHADOW", ""));
@@ -233,16 +266,23 @@ fn render_std_mat(
     load_val!(build, light_count);
     load_slice!(build, point_light_position_range);
     load_slice!(build, point_light_color_radius);
+    let reflection_bool_location = build.get_uniform_location("read_reflection");
 
     let iter = match phase {
-        RenderPhase::Shadow | RenderPhase::Opaque => Either::Left(mesh_entities.iter()),
-        RenderPhase::Transparent => {
+        RenderPhase::ReflectTransparent | RenderPhase::Transparent => {
             Either::Right(mesh_entities.iter_many(transparent_draws.take()))
         }
+        _ => Either::Left(mesh_entities.iter()),
     };
 
-    for (entity, view_vis, transform, mesh, aabb, material_h) in iter {
+    for (entity, view_vis, transform, mesh, aabb, material_h, skip_reflect, read_reflect) in iter {
         if phase != RenderPhase::Shadow && !view_vis.get() {
+            continue;
+        }
+
+        if skip_reflect
+            && (phase == RenderPhase::ReflectOpaque || phase == RenderPhase::ReflectTransparent)
+        {
             continue;
         }
 
@@ -266,6 +306,18 @@ fn render_std_mat(
             if phase != RenderPhase::Transparent {
                 continue;
             }
+        }
+
+        let mut read_reflect_bool = false;
+        if read_reflect && (phase == RenderPhase::Opaque || phase == RenderPhase::Transparent) {
+            if let Some(reflect_texture) = &reflect_texture {
+                let reflect_texture = reflect_texture.texture.clone();
+                load_gl_tex!(build, reflect_texture);
+                read_reflect_bool = true;
+            }
+        }
+        if let Some(ref reflection_bool_location) = reflection_bool_location {
+            read_reflect_bool.load(&ctx, &reflection_bool_location);
         }
 
         load_val!(build, world_from_local);

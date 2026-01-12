@@ -5,6 +5,7 @@ use glow::HasContext;
 
 use crate::{
     BevyGlContext,
+    plane_reflect::ReflectionPlane,
     render::{RenderPhase, RenderRunner, RenderSet},
 };
 
@@ -18,7 +19,10 @@ impl Plugin for TransparentPhasePlugin {
         );
         app.add_systems(
             PostUpdate,
-            render_transparent.in_set(RenderSet::RenderTransparent),
+            (
+                render_reflect_transparent.in_set(RenderSet::RenderReflectTransparent),
+                render_transparent.in_set(RenderSet::RenderTransparent),
+            ),
         );
     }
 }
@@ -49,7 +53,21 @@ fn clear_alpha_blend_draws(world: &mut World) {
         .clear();
 }
 
+fn render_reflect_transparent(world: &mut World) {
+    let mut planes = world.query::<&ReflectionPlane>();
+    if planes.iter(world).len() == 0 {
+        return;
+    }
+    *world.get_resource_mut::<RenderPhase>().unwrap() = RenderPhase::ReflectTransparent;
+    transparent(world);
+}
+
 fn render_transparent(world: &mut World) {
+    *world.get_resource_mut::<RenderPhase>().unwrap() = RenderPhase::Transparent;
+    transparent(world);
+}
+
+fn transparent(world: &mut World) {
     world
         .get_non_send_resource_mut::<BevyGlContext>()
         .unwrap()
@@ -109,4 +127,10 @@ fn render_transparent(world: &mut World) {
     let ctx = world.non_send_resource::<BevyGlContext>();
     unsafe { ctx.gl.bind_vertex_array(None) };
     world.insert_resource(runner);
+
+    world
+        .get_resource_mut::<DeferredAlphaBlendDraws>()
+        .unwrap()
+        .deferred
+        .clear();
 }
