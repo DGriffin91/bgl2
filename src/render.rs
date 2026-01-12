@@ -11,6 +11,7 @@ use bevy::{
     winit::WINIT_WINDOWS,
 };
 
+use bevy_egui::egui::ahash::HashSet;
 #[cfg(not(target_arch = "wasm32"))]
 use glutin::surface::GlSurface;
 
@@ -26,7 +27,6 @@ pub enum RenderSet {
     Pipeline,
     Acquire,
     Prepare,
-    PrepareView,
     RenderShadow,
     RenderReflectOpaque,
     RenderReflectTransparent,
@@ -68,7 +68,6 @@ impl Plugin for OpenGLMinimalRenderPlugin {
                 RenderSet::Pipeline,
                 RenderSet::Acquire,
                 RenderSet::Prepare,
-                RenderSet::PrepareView,
                 RenderSet::RenderShadow,
                 RenderSet::RenderReflectOpaque,
                 RenderSet::RenderReflectTransparent,
@@ -162,12 +161,16 @@ impl RenderPhase {
 
 #[derive(Default, Resource)]
 pub struct RenderRunner {
-    pub registry: HashMap<TypeId, SystemId>,
+    pub render_registry: HashMap<TypeId, SystemId>,
+    pub prepare_registry: HashSet<SystemId>,
 }
 
 impl RenderRunner {
-    pub fn register<T: 'static>(&mut self, system: SystemId) {
-        self.registry.insert(TypeId::of::<T>(), system);
+    pub fn register_render<T: 'static>(&mut self, system: SystemId) {
+        self.render_registry.insert(TypeId::of::<T>(), system);
+    }
+    pub fn register_prepare(&mut self, system: SystemId) {
+        self.prepare_registry.insert(system);
     }
 }
 
@@ -194,11 +197,20 @@ pub fn register_render_system<T: 'static, M>(
     world: &mut World,
     system: impl IntoSystem<(), (), M> + 'static,
 ) {
-    let render_std_mat_id = world.register_system(system);
+    let system_id = world.register_system(system);
     world
         .get_resource_mut::<RenderRunner>()
         .unwrap()
-        .register::<T>(render_std_mat_id);
+        .register_render::<T>(system_id);
+}
+
+/// Systems registered here are run at the start of each phase
+pub fn register_prepare_system<M>(world: &mut World, system: impl IntoSystem<(), (), M> + 'static) {
+    let system_id = world.register_system(system);
+    world
+        .get_resource_mut::<RenderRunner>()
+        .unwrap()
+        .register_prepare(system_id);
 }
 
 pub fn default_plugins_no_render_backend() -> bevy::app::PluginGroupBuilder {

@@ -104,6 +104,9 @@ fn transparent(world: &mut World) {
     let Some(runner) = world.remove_resource::<RenderRunner>() else {
         return;
     };
+    for system in &runner.prepare_registry {
+        let _ = world.run_system(*system);
+    }
 
     {
         let mut draws = world.get_resource_mut::<DeferredAlphaBlendDraws>().unwrap();
@@ -142,7 +145,7 @@ fn transparent(world: &mut World) {
         }
 
         if let Some(current_type_id) = current_type_id {
-            let _ = world.run_system(*runner.registry.get(&current_type_id).unwrap());
+            let _ = world.run_system(*runner.render_registry.get(&current_type_id).unwrap());
         } else {
             break;
         }

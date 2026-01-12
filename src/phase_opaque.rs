@@ -47,8 +47,12 @@ fn opaque(world: &mut World) {
         return;
     };
 
+    for system in &runner.prepare_registry {
+        let _ = world.run_system(*system);
+    }
+
     // Systems fill in phase data while they draw opaque
-    for (_type_id, system) in &runner.registry {
+    for (_type_id, system) in &runner.render_registry {
         let _ = world.run_system(*system);
     }
 

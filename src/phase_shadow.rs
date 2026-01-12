@@ -87,7 +87,11 @@ fn render_shadow(world: &mut World) {
         return;
     };
 
-    for (_type_id, system) in &runner.registry {
+    for system in &runner.prepare_registry {
+        let _ = world.run_system(*system);
+    }
+
+    for (_type_id, system) in &runner.render_registry {
         let _ = world.run_system(*system);
     }
 

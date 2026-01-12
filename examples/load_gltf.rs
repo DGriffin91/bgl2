@@ -20,7 +20,7 @@ use bevy_opengl::{
     queue_tex, queue_val,
     render::{
         OpenGLRenderPlugins, RenderPhase, RenderSet, default_plugins_no_render_backend,
-        register_render_system,
+        register_prepare_system, register_render_system,
     },
     shader_cached,
     uniform_slot_builder::UniformSlotBuilder,
@@ -42,12 +42,13 @@ fn main() {
             FreeCameraPlugin,
             LogDiagnosticsPlugin::default(),
             FrameTimeDiagnosticsPlugin::default(),
+            MipmapGeneratorPlugin,
         ));
 
+    register_prepare_system(app.world_mut(), prepare_view);
     register_render_system::<StandardMaterial, _>(app.world_mut(), render_std_mat);
 
-    app.add_plugins(MipmapGeneratorPlugin)
-        .add_systems(Update, generate_mipmaps::<StandardMaterial>)
+    app.add_systems(Update, generate_mipmaps::<StandardMaterial>)
         .add_systems(Startup, setup.in_set(RenderSet::Pipeline))
         .run();
 }
@@ -74,13 +75,13 @@ fn setup(
         FreeCamera::default(),
     ));
 
-    //commands.spawn(SceneRoot(
-    //    asset_server.load("models/bistro_exterior/BistroExterior.gltf#Scene0"),
-    //));
-    //commands.spawn((
-    //    SceneRoot(asset_server.load("models/bistro_interior_wine/BistroInterior_Wine.gltf#Scene0")),
-    //    Transform::from_xyz(0.0, 0.3, -0.2),
-    //));
+    commands.spawn(SceneRoot(
+        asset_server.load("models/bistro_exterior/BistroExterior.gltf#Scene0"),
+    ));
+    commands.spawn((
+        SceneRoot(asset_server.load("models/bistro_interior_wine/BistroInterior_Wine.gltf#Scene0")),
+        Transform::from_xyz(0.0, 0.3, -0.2),
+    ));
 
     commands.spawn((
         Transform::from_rotation(Quat::from_euler(EulerRot::XYZ, PI * -0.35, PI * -0.13, 0.0)),
@@ -135,54 +136,36 @@ struct SkipReflection;
 #[derive(Component, Default)]
 struct ReadReflection;
 
-fn render_std_mat(
-    mesh_entities: Query<(
-        Entity,
-        &ViewVisibility,
-        &GlobalTransform,
-        &Mesh3d,
-        &Aabb,
-        &MeshMaterial3d<StandardMaterial>,
-        Has<SkipReflection>,
-        Has<ReadReflection>,
-    )>,
-    camera: Single<(
-        Entity,
-        &Camera,
-        &GlobalTransform,
-        &Projection,
-        Option<&EnvironmentMapLight>,
-    )>,
-    point_lights: Query<(&PointLight, &GlobalTransform)>,
-    mut ctx: NonSendMut<BevyGlContext>,
-    mut gpu_meshes: NonSendMut<GPUMeshBufferMap>,
-    materials: Res<Assets<StandardMaterial>>,
+#[derive(Component, Clone)]
+struct ViewUniforms {
+    position: Vec3,
+    world_from_view: Mat4,
+    from_world: Mat4,
+    clip_from_world: Mat4,
+}
+
+// Runs at each view transition: Before shadows, before reflections, etc..
+fn prepare_view(
+    mut commands: Commands,
     phase: If<Res<RenderPhase>>,
-    mut transparent_draws: ResMut<DeferredAlphaBlendDraws>,
+    camera: Single<(Entity, &Camera, &GlobalTransform, &Projection)>,
     shadow: Option<Res<DirectionalLightInfo>>,
-    gpu_images: NonSend<GpuImages>,
-    bevy_window: Single<&Window>,
-    directional_lights: Query<&Transform, With<DirectionalLight>>,
     reflect: Option<Single<&ReflectionPlane>>,
-    reflect_texture: Option<Res<PlaneReflectionTexture>>,
 ) {
-    let (_entity, _camera, cam_global_trans, cam_proj, env_light) = *camera;
-    let phase = **phase;
+    let (camera_entity, _camera, cam_global_trans, cam_proj) = *camera;
 
     let view_position;
     let mut world_from_view;
     let view_from_world;
     let clip_from_world;
-    let shadow_def;
 
-    if phase == RenderPhase::Shadow {
+    if **phase == RenderPhase::Shadow {
         if let Some(shadow) = &shadow {
             view_position = shadow.cascade.world_from_cascade.project_point3(Vec3::ZERO);
             //clip_from_view = shadow.cascade.clip_from_cascade;
             world_from_view = shadow.cascade.world_from_cascade;
             view_from_world = world_from_view.inverse();
             clip_from_world = shadow.cascade.clip_from_world;
-            shadow_def = ("RENDER_SHADOW", "");
         } else {
             return;
         }
@@ -197,6 +180,48 @@ fn render_std_mat(
         }
         view_from_world = world_from_view.inverse();
         clip_from_world = clip_from_view * view_from_world;
+    }
+
+    commands.entity(camera_entity).insert(ViewUniforms {
+        position: view_position,
+        world_from_view,
+        from_world: view_from_world,
+        clip_from_world,
+    });
+}
+
+fn render_std_mat(
+    mesh_entities: Query<(
+        Entity,
+        &ViewVisibility,
+        &GlobalTransform,
+        &Mesh3d,
+        &Aabb,
+        &MeshMaterial3d<StandardMaterial>,
+        Has<SkipReflection>,
+        Has<ReadReflection>,
+    )>,
+    camera: Single<(&ViewUniforms, Option<&EnvironmentMapLight>)>,
+    point_lights: Query<(&PointLight, &GlobalTransform)>,
+    mut ctx: NonSendMut<BevyGlContext>,
+    mut gpu_meshes: NonSendMut<GPUMeshBufferMap>,
+    materials: Res<Assets<StandardMaterial>>,
+    phase: If<Res<RenderPhase>>,
+    mut transparent_draws: ResMut<DeferredAlphaBlendDraws>,
+    shadow: Option<Res<DirectionalLightInfo>>,
+    gpu_images: NonSend<GpuImages>,
+    bevy_window: Single<&Window>,
+    directional_lights: Query<&Transform, With<DirectionalLight>>,
+    reflect_texture: Option<Res<PlaneReflectionTexture>>,
+) {
+    let (view, env_light) = *camera;
+    let phase = **phase;
+
+    let shadow_def;
+
+    if phase == RenderPhase::Shadow {
+        shadow_def = shadow.as_ref().map_or(("", ""), |_| ("RENDER_SHADOW", ""));
+    } else {
         shadow_def = shadow.as_ref().map_or(("", ""), |_| ("SAMPLE_SHADOW", ""));
     }
 
@@ -239,8 +264,8 @@ fn render_std_mat(
     build.queue_val("alpha_blend", |m| material_alpha_blend(m));
     build.queue_val("base_color", |m| m.base_color.to_linear().to_vec4());
 
-    load_val!(build, world_from_view);
-    load_val!(build, view_position);
+    build.load("world_from_view", view.world_from_view);
+    build.load("view_position", view.position);
 
     let view_resolution = vec2(
         bevy_window.physical_width().max(1) as f32,
@@ -289,7 +314,7 @@ fn render_std_mat(
             continue;
         };
         let world_from_local = transform.to_matrix();
-        let clip_from_local = clip_from_world * world_from_local;
+        let clip_from_local = view.clip_from_world * world_from_local;
 
         // If in opaque phase we must defer any alpha blend draws so they can be sorted and run in order.
         if !transparent_draws.maybe_defer::<StandardMaterial>(
@@ -298,7 +323,7 @@ fn render_std_mat(
             entity,
             transform,
             aabb,
-            &view_from_world,
+            &view.from_world,
             &world_from_local,
         ) {
             continue;
