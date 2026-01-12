@@ -230,11 +230,11 @@ fn render_std_mat(
         load_val!(build, shadow_clip_from_world);
     }
 
-    if let Some(trans) = directional_lights.iter().next() {
-        build.load("directional_light_dir_to_light", trans.back().as_vec3());
-    } else {
-        build.load("directional_light_dir_to_light", Vec3::ZERO);
-    }
+    let trans = directional_lights
+        .iter()
+        .next()
+        .map_or(Vec3::ZERO, |t| t.back().as_vec3());
+    build.load("directional_light_dir_to_light", trans);
 
     build.queue_val("alpha_blend", |m| material_alpha_blend(m));
     build.queue_val("base_color", |m| m.base_color.to_linear().to_vec4());
