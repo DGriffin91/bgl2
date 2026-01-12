@@ -12,6 +12,7 @@ use bevy::{
 use bevy_mod_mipmap_generator::{MipmapGeneratorPlugin, generate_mipmaps};
 use bevy_opengl::{
     BevyGlContext, UniformValue, load_gl_tex, load_slice, load_tex, load_val,
+    mesh_util::octahedral_encode,
     phase_shadow::DirectionalLightInfo,
     phase_transparent::DeferredAlphaBlendDraws,
     plane_reflect::{PlaneReflectionTexture, ReflectionPlane},
@@ -82,6 +83,9 @@ fn setup(
         SceneRoot(asset_server.load("models/bistro_interior_wine/BistroInterior_Wine.gltf#Scene0")),
         Transform::from_xyz(0.0, 0.3, -0.2),
     ));
+    commands.spawn(SceneRoot(
+        asset_server.load("models/BistroExteriorFakeGI.gltf#Scene0"),
+    ));
 
     commands.spawn((
         Transform::from_rotation(Quat::from_euler(EulerRot::XYZ, PI * -0.35, PI * -0.13, 0.0)),
@@ -96,26 +100,16 @@ fn setup(
         CascadeShadowConfigBuilder {
             num_cascades: 1,
             minimum_distance: 0.1,
-            maximum_distance: 5.0,
+            maximum_distance: 50.0,
             first_cascade_far_bound: 70.0,
             overlap_proportion: 0.2,
         }
         .build(),
     ));
-    commands.spawn((
-        PointLight {
-            shadows_enabled: false,
-            intensity: 1000.0,
-            range: 10.0,
-            color: Color::linear_rgb(1.0, 0.0, 1.0),
-            ..default()
-        },
-        Transform::from_xyz(1.0, 1.0, 1.0),
-    ));
     commands.spawn(SceneRoot(asset_server.load(
         GltfAssetLabel::Scene(0).from_asset("models/FlightHelmet/FlightHelmet.gltf"),
     )));
-    //commands.spawn(SceneRoot(asset_server.load("models/Wood/wood.gltf#Scene0")));
+    commands.spawn(SceneRoot(asset_server.load("models/Wood/wood.gltf#Scene0")));
     commands.spawn((
         Mesh3d(meshes.add(Plane3d::default().mesh().size(50.0, 50.0))),
         Transform::from_translation(vec3(0.0, 0.0, 0.0)),
@@ -203,6 +197,7 @@ fn render_std_mat(
     )>,
     camera: Single<(&ViewUniforms, Option<&EnvironmentMapLight>)>,
     point_lights: Query<(&PointLight, &GlobalTransform)>,
+    spot_lights: Query<(&SpotLight, &GlobalTransform)>,
     mut ctx: NonSendMut<BevyGlContext>,
     mut gpu_meshes: NonSendMut<GPUMeshBufferMap>,
     materials: Res<Assets<StandardMaterial>>,
@@ -263,6 +258,7 @@ fn render_std_mat(
 
     build.queue_val("alpha_blend", |m| material_alpha_blend(m));
     build.queue_val("base_color", |m| m.base_color.to_linear().to_vec4());
+    build.queue_val("has_normal_map", |m| m.normal_map_texture.is_some());
 
     build.load("world_from_view", view.world_from_view);
     build.load("view_position", view.position);
@@ -275,17 +271,27 @@ fn render_std_mat(
 
     let mut point_light_position_range = Vec::new();
     let mut point_light_color_radius = Vec::new();
+    let mut spot_light_dir_offset_scale = Vec::new();
 
     for (light, trans) in &point_lights {
         point_light_position_range.push(trans.translation().extend(light.range));
         point_light_color_radius
             .push((light.color.to_linear().to_vec3() * light.intensity).extend(light.radius));
+        spot_light_dir_offset_scale.push(vec4(1.0, 0.0, 2.0, 1.0));
+    }
+
+    for (light, trans) in &spot_lights {
+        point_light_position_range.push(trans.translation().extend(light.range));
+        point_light_color_radius
+            .push((light.color.to_linear().to_vec3() * light.intensity).extend(light.radius));
+        spot_light_dir_offset_scale.push(spot_dir_offset_scale(light, trans));
     }
 
     let light_count = point_light_position_range.len() as i32;
     load_val!(build, light_count);
     load_slice!(build, point_light_position_range);
     load_slice!(build, point_light_color_radius);
+    load_slice!(build, spot_light_dir_offset_scale);
 
     let reflect_bool = build.get_uniform_location("read_reflection");
     if let Some(reflect_texture) = &reflect_texture {
@@ -339,6 +345,16 @@ fn render_std_mat(
         build.run(material);
         gpu_meshes.draw_mesh(&ctx, mesh.id(), shader_index);
     }
+}
+
+fn spot_dir_offset_scale(light: &SpotLight, trans: &GlobalTransform) -> Vec4 {
+    // https://github.com/bevyengine/bevy/blob/abb8c353f49a6fe9e039e82adbe1040488ad910a/crates/bevy_pbr/src/render/light.rs#L846
+    let cos_outer = light.outer_angle.cos();
+    let spot_scale = 1.0 / (light.inner_angle.cos() - cos_outer).max(1e-4);
+    let spot_offset = -cos_outer * spot_scale;
+    octahedral_encode(trans.forward().as_vec3())
+        .extend(spot_offset)
+        .extend(spot_scale)
 }
 
 fn material_alpha_blend(material: &StandardMaterial) -> bool {

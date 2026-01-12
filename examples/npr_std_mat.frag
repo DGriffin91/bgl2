@@ -28,6 +28,7 @@ uniform int flags;
 
 uniform sampler2D base_color_texture;
 uniform sampler2D normal_map_texture;
+uniform bool has_normal_map;
 uniform sampler2D metallic_roughness_texture;
 uniform samplerCube specular_map;
 uniform samplerCube diffuse_map;
@@ -39,6 +40,22 @@ uniform bool read_reflection;
 uniform int light_count;
 uniform vec4 point_light_position_range[MAX_POINT_LIGHTS];
 uniform vec4 point_light_color_radius[MAX_POINT_LIGHTS];
+uniform vec4 spot_light_dir_offset_scale[MAX_POINT_LIGHTS];
+
+// For decoding normals or unit direction vectors from octahedral coordinates.
+vec3 octahedral_decode(vec2 v) {
+    vec2 f = v * 2.0 - 1.0;
+    vec3 n = vec3(f.x, f.y, 1.0 - abs(f.x) - abs(f.y));
+    float t = clamp(-n.z, 0.0, 1.0);
+    vec2 w = vec2(t);
+    if (n.x > 0.0) {
+        w.x = -w.x;
+    }
+    if (n.y > 0.0) {
+        w.y = -w.y;
+    }
+    return normalize(vec3(n.x + w.x, n.y + w.y, n.z));
+}
 
 // https://aras-p.info/blog/2009/07/30/encoding-floats-to-rgba-the-final/
 vec4 EncodeFloatRGBA(float v) {
@@ -131,7 +148,10 @@ void main() {
     float perceptual_roughness_tex = metallic_roughness.g * perceptual_roughness; // TODO better name
     float roughness = perceptual_roughness_tex * perceptual_roughness_tex;
 
-    vec3 normal = apply_normal_mapping(vert_normal, tangent, uv_0);
+    vec3 normal = vert_normal;
+    if (has_normal_map) {
+        normal = apply_normal_mapping(vert_normal, tangent, uv_0);
+    }
 
     vec3 specular_color;
     vec3 diffuse_color;
@@ -201,17 +221,28 @@ void main() {
         vec4 light_color_radius = point_light_color_radius[i];
         vec3 light_color = light_color_radius.rgb * POINT_LIGHT_PRE_EXPOSE;
 
-        vec3 light_dir = normalize(to_light);
-        vec3 half_dir = normalize(light_dir + view_dir);
+        vec3 to_light_dir = normalize(to_light);
+        vec3 half_dir = normalize(to_light_dir + view_dir);
 
-        float attenuation = get_distance_attenuation(distance, light_position_range.w);
-        float lambert = max(dot(light_dir, normal), 0.0);
+        float dist_attenuation = get_distance_attenuation(distance, light_position_range.w);
+        float lambert = max(dot(to_light_dir, normal), 0.0);
 
-        diffuse_color += color.rgb * (1.0 - metallic) * light_color * lambert * attenuation;
+        float spot_attenuation = 1.0;
+        {
+            // https://google.github.io/filament/Filament.html#listing_glslpunctuallight
+            vec4 light_dir_offset_scale = spot_light_dir_offset_scale[i];
+            vec3 spot_dir = octahedral_decode(light_dir_offset_scale.xy);
+            float spot_offset = light_dir_offset_scale.z;
+            float spot_scale = light_dir_offset_scale.w;
+            float attenuation = clamp(dot(-spot_dir, to_light_dir) * spot_scale + spot_offset, 0.0, 1.0);
+            spot_attenuation = attenuation * attenuation;
+        }
+
+        diffuse_color += color.rgb * (1.0 - metallic) * light_color * lambert * dist_attenuation * spot_attenuation;
 
         float spec_angle = max(dot(half_dir, normal), 0.0);
         vec3 specular = pow(spec_angle, shininess) * light_color * specular_intensity;
-        specular_color += mix(specular, specular * color.rgb, vec3(metallic)) * attenuation;
+        specular_color += mix(specular, specular * color.rgb, vec3(metallic)) * dist_attenuation * spot_attenuation;
     }
 
     gl_FragColor = vec4(diffuse_color + specular_color, color.a);
