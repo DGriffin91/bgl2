@@ -175,36 +175,31 @@ fn render_std_mat(
     let clip_from_world;
     let shadow_def;
 
-    match phase {
-        RenderPhase::Shadow => {
-            if let Some(shadow) = &shadow {
-                view_position = shadow.cascade.world_from_cascade.project_point3(Vec3::ZERO);
-                //clip_from_view = shadow.cascade.clip_from_cascade;
-                world_from_view = shadow.cascade.world_from_cascade;
-                view_from_world = world_from_view.inverse();
-                clip_from_world = shadow.cascade.clip_from_world;
-                shadow_def = ("RENDER_SHADOW", "");
-            } else {
-                return;
-            }
-        }
-        RenderPhase::ReflectTransparent
-        | RenderPhase::ReflectOpaque
-        | RenderPhase::Opaque
-        | RenderPhase::Transparent => {
-            view_position = cam_global_trans.translation();
-            let clip_from_view = cam_proj.get_clip_from_view();
-            world_from_view = cam_global_trans.to_matrix();
-            if phase == RenderPhase::ReflectTransparent || phase == RenderPhase::ReflectOpaque {
-                if let Some(reflect) = reflect {
-                    world_from_view = reflect.0 * world_from_view;
-                }
-            }
+    if phase == RenderPhase::Shadow {
+        if let Some(shadow) = &shadow {
+            view_position = shadow.cascade.world_from_cascade.project_point3(Vec3::ZERO);
+            //clip_from_view = shadow.cascade.clip_from_cascade;
+            world_from_view = shadow.cascade.world_from_cascade;
             view_from_world = world_from_view.inverse();
-            clip_from_world = clip_from_view * view_from_world;
-            shadow_def = shadow.as_ref().map_or(("", ""), |_| ("SAMPLE_SHADOW", ""));
+            clip_from_world = shadow.cascade.clip_from_world;
+            shadow_def = ("RENDER_SHADOW", "");
+        } else {
+            return;
         }
+    } else {
+        view_position = cam_global_trans.translation();
+        let clip_from_view = cam_proj.get_clip_from_view();
+        world_from_view = cam_global_trans.to_matrix();
+        if let Some(reflect) = reflect
+            && phase.reflection()
+        {
+            world_from_view = reflect.0 * world_from_view;
+        }
+        view_from_world = world_from_view.inverse();
+        clip_from_world = clip_from_view * view_from_world;
+        shadow_def = shadow.as_ref().map_or(("", ""), |_| ("SAMPLE_SHADOW", ""));
     }
+
     let shader_index =
         shader_cached!(ctx, "npr_std_mat.vert", "npr_std_mat.frag", &[shadow_def]).unwrap();
     gpu_meshes.reset_bind_cache();
@@ -266,23 +261,27 @@ fn render_std_mat(
     load_val!(build, light_count);
     load_slice!(build, point_light_position_range);
     load_slice!(build, point_light_color_radius);
-    let reflection_bool_location = build.get_uniform_location("read_reflection");
 
-    let iter = match phase {
-        RenderPhase::ReflectTransparent | RenderPhase::Transparent => {
-            Either::Right(mesh_entities.iter_many(transparent_draws.take()))
+    let reflect_bool = build.get_uniform_location("read_reflection");
+    if let Some(reflect_texture) = &reflect_texture {
+        if reflect_bool.is_some() {
+            let reflect_texture = reflect_texture.texture.clone();
+            load_gl_tex!(build, reflect_texture);
         }
-        _ => Either::Left(mesh_entities.iter()),
+    }
+
+    let iter = if phase.transparent() {
+        Either::Right(mesh_entities.iter_many(transparent_draws.take()))
+    } else {
+        Either::Left(mesh_entities.iter())
     };
 
     for (entity, view_vis, transform, mesh, aabb, material_h, skip_reflect, read_reflect) in iter {
-        if phase != RenderPhase::Shadow && !view_vis.get() {
+        if phase.can_use_camera_frustum_cull() && !view_vis.get() {
             continue;
         }
 
-        if skip_reflect
-            && (phase == RenderPhase::ReflectOpaque || phase == RenderPhase::ReflectTransparent)
-        {
+        if skip_reflect && phase.reflection() {
             continue;
         }
 
@@ -292,33 +291,22 @@ fn render_std_mat(
         let world_from_local = transform.to_matrix();
         let clip_from_local = clip_from_world * world_from_local;
 
-        // If in opaque phase and must defer any alpha blend draws so they can be sorted and run in order.
-        if material_alpha_blend(material) {
-            if phase == RenderPhase::Opaque {
-                let ws_radius = transform.radius_vec3a(aabb.half_extents);
-                let ws_center = world_from_local.transform_point3a(aabb.center);
-                transparent_draws.defer::<StandardMaterial>(
-                    // Use closest point on bounding sphere
-                    view_from_world.project_point3a(ws_center).z + ws_radius,
-                    entity,
-                );
-            }
-            if phase != RenderPhase::Transparent {
-                continue;
-            }
+        // If in opaque phase we must defer any alpha blend draws so they can be sorted and run in order.
+        if !transparent_draws.maybe_defer::<StandardMaterial>(
+            material_alpha_blend(material),
+            phase,
+            entity,
+            transform,
+            aabb,
+            &view_from_world,
+            &world_from_local,
+        ) {
+            continue;
         }
 
-        let mut read_reflect_bool = false;
-        if read_reflect && (phase == RenderPhase::Opaque || phase == RenderPhase::Transparent) {
-            if let Some(reflect_texture) = &reflect_texture {
-                let reflect_texture = reflect_texture.texture.clone();
-                load_gl_tex!(build, reflect_texture);
-                read_reflect_bool = true;
-            }
-        }
-        if let Some(ref reflection_bool_location) = reflection_bool_location {
-            read_reflect_bool.load(&ctx, &reflection_bool_location);
-        }
+        reflect_bool
+            .clone()
+            .map(|loc| (read_reflect && phase.read_reflect()).load(&ctx, &loc));
 
         load_val!(build, world_from_local);
         load_val!(build, clip_from_local);

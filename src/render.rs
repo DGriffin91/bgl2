@@ -123,6 +123,43 @@ pub enum RenderPhase {
     Transparent,
 }
 
+impl RenderPhase {
+    pub fn can_use_camera_frustum_cull(&self) -> bool {
+        match self {
+            RenderPhase::Shadow | RenderPhase::ReflectOpaque | RenderPhase::ReflectTransparent => {
+                false
+            }
+            RenderPhase::Opaque | RenderPhase::Transparent => true,
+        }
+    }
+    pub fn reflection(&self) -> bool {
+        match self {
+            RenderPhase::ReflectOpaque | RenderPhase::ReflectTransparent => true,
+            RenderPhase::Shadow | RenderPhase::Opaque | RenderPhase::Transparent => false,
+        }
+    }
+    pub fn opaque(&self) -> bool {
+        match self {
+            RenderPhase::ReflectOpaque | RenderPhase::Opaque => true,
+            _ => false,
+        }
+    }
+    pub fn transparent(&self) -> bool {
+        match self {
+            RenderPhase::ReflectTransparent | RenderPhase::Transparent => true,
+            _ => false,
+        }
+    }
+    pub fn read_reflect(&self) -> bool {
+        match self {
+            RenderPhase::Shadow | RenderPhase::ReflectOpaque | RenderPhase::ReflectTransparent => {
+                false
+            }
+            RenderPhase::Opaque | RenderPhase::Transparent => true,
+        }
+    }
+}
+
 #[derive(Default, Resource)]
 pub struct RenderRunner {
     pub registry: HashMap<TypeId, SystemId>,

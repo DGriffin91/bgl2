@@ -182,7 +182,8 @@ macro_rules! queue_tex {
 }
 
 #[macro_export]
-/// Sets texture immediately if location is found
+/// if location is found queues setting the texture when build.run() is called.
+/// This isn't immediate to maintain texture slot consistency. TODO rename?
 macro_rules! load_tex {
     ($obj:expr, $field:ident) => {
         $obj.queue_tex(stringify!($field), move |_| {
@@ -192,7 +193,8 @@ macro_rules! load_tex {
 }
 
 #[macro_export]
-/// Sets texture immediately if location is found
+/// if location is found queues setting the texture when build.run() is called.
+/// This isn't immediate to maintain texture slot consistency. TODO rename?
 macro_rules! load_gl_tex {
     ($obj:expr, $field:ident) => {
         $obj.queue_tex(stringify!($field), move |_| {

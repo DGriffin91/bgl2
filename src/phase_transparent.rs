@@ -1,4 +1,4 @@
-use bevy::prelude::*;
+use bevy::{camera::primitives::Aabb, prelude::*};
 use std::any::TypeId;
 
 use glow::HasContext;
@@ -37,6 +37,33 @@ impl DeferredAlphaBlendDraws {
     // Defer an entity to be drawn in the alpha blend phase
     pub fn defer<T: ?Sized + 'static>(&mut self, distance: f32, entity: Entity) {
         self.deferred.push((distance, entity, TypeId::of::<T>()));
+    }
+
+    // Returns whether to draw or not depending on phase.
+    // If in opaque phase we must defer any alpha blend draws so they can be sorted and run in order.
+    pub fn maybe_defer<T: ?Sized + 'static>(
+        &mut self,
+        transparent_draw: bool,
+        phase: RenderPhase,
+        entity: Entity,
+        transform: &GlobalTransform,
+        aabb: &Aabb,
+        view_from_world: &Mat4,
+        world_from_local: &Mat4,
+    ) -> bool {
+        if !transparent_draw {
+            return true;
+        }
+        if phase.opaque() {
+            let ws_radius = transform.radius_vec3a(aabb.half_extents);
+            let ws_center = world_from_local.transform_point3a(aabb.center);
+            self.defer::<T>(
+                // Use closest point on bounding sphere
+                view_from_world.project_point3a(ws_center).z + ws_radius,
+                entity,
+            );
+        }
+        phase.transparent()
     }
 
     // Take the current set of alpha blend entities to be drawn
