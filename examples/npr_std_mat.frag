@@ -102,7 +102,6 @@ float get_distance_attenuation(float distance, float range) {
 void main() {
     vec4 color = base_color * texture2D(base_color_texture, uv_0);
 
-
     if (!alpha_blend && (color.a < 0.5)) {
         discard;
     }
@@ -173,8 +172,6 @@ void main() {
         specular_color += mix(dir_light_specular, dir_light_specular * color.rgb, vec3(metallic));
     }
 
-
-
     {
         // Environment map / reflection
         float mip_levels = 8.0; // TODO put in uniform
@@ -199,56 +196,54 @@ void main() {
         specular_color += mix(env_specular, env_specular * color.rgb, vec3(metallic));
     }
 
-
-
     // Point Lights
-#ifdef WEBGL1
+    #ifdef WEBGL1
     for (int i = 0; i < MAX_POINT_LIGHTS; i++) {
-#else
-    for (int i = 0; i < light_count; i++) {
-#endif //WEBGL1
-        vec4 light_position_range = point_light_position_range[i];
-        vec3 to_light = light_position_range.xyz - ws_position;
-        float distance = length(to_light);
-        bool in_range = distance < light_position_range.w;
-#ifdef WEBGL1
-        in_range = in_range && (i < MAX_POINT_LIGHTS);
-#endif
-        if (!in_range) {
-            continue;
+        #else
+        for (int i = 0; i < light_count; i++) {
+            #endif //WEBGL1
+            vec4 light_position_range = point_light_position_range[i];
+            vec3 to_light = light_position_range.xyz - ws_position;
+            float distance = length(to_light);
+            bool in_range = distance < light_position_range.w;
+            #ifdef WEBGL1
+            in_range = in_range && (i < MAX_POINT_LIGHTS);
+            #endif
+            if (!in_range) {
+                continue;
+            }
+
+            vec4 light_color_radius = point_light_color_radius[i];
+            vec3 light_color = light_color_radius.rgb * POINT_LIGHT_PRE_EXPOSE;
+
+            vec3 to_light_dir = normalize(to_light);
+            vec3 half_dir = normalize(to_light_dir + view_dir);
+
+            float dist_attenuation = get_distance_attenuation(distance, light_position_range.w);
+            float lambert = max(dot(to_light_dir, normal), 0.0);
+
+            float spot_attenuation = 1.0;
+            {
+                // https://google.github.io/filament/Filament.html#listing_glslpunctuallight
+                vec4 light_dir_offset_scale = spot_light_dir_offset_scale[i];
+                vec3 spot_dir = octahedral_decode(light_dir_offset_scale.xy);
+                float spot_offset = light_dir_offset_scale.z;
+                float spot_scale = light_dir_offset_scale.w;
+                float attenuation = clamp(dot(-spot_dir, to_light_dir) * spot_scale + spot_offset, 0.0, 1.0);
+                spot_attenuation = attenuation * attenuation;
+            }
+
+            diffuse_color += color.rgb * (1.0 - metallic) * light_color * lambert * dist_attenuation * spot_attenuation;
+
+            float spec_angle = max(dot(half_dir, normal), 0.0);
+            vec3 specular = pow(spec_angle, shininess) * light_color * specular_intensity;
+            specular_color += mix(specular, specular * color.rgb, vec3(metallic)) * dist_attenuation * spot_attenuation;
         }
 
-        vec4 light_color_radius = point_light_color_radius[i];
-        vec3 light_color = light_color_radius.rgb * POINT_LIGHT_PRE_EXPOSE;
+        gl_FragColor = vec4(diffuse_color + specular_color, color.a);
+        //gl_FragColor.rgb = pow(agx_tonemapping(gl_FragColor.rgb), vec3(2.2)); //Convert back to linear
+        gl_FragColor.rgb = gl_FragColor.rgb * 0.4;
+        gl_FragColor = clamp(gl_FragColor, vec4(0.0), vec4(1.0));
 
-        vec3 to_light_dir = normalize(to_light);
-        vec3 half_dir = normalize(to_light_dir + view_dir);
-
-        float dist_attenuation = get_distance_attenuation(distance, light_position_range.w);
-        float lambert = max(dot(to_light_dir, normal), 0.0);
-
-        float spot_attenuation = 1.0;
-        {
-            // https://google.github.io/filament/Filament.html#listing_glslpunctuallight
-            vec4 light_dir_offset_scale = spot_light_dir_offset_scale[i];
-            vec3 spot_dir = octahedral_decode(light_dir_offset_scale.xy);
-            float spot_offset = light_dir_offset_scale.z;
-            float spot_scale = light_dir_offset_scale.w;
-            float attenuation = clamp(dot(-spot_dir, to_light_dir) * spot_scale + spot_offset, 0.0, 1.0);
-            spot_attenuation = attenuation * attenuation;
-        }
-
-        diffuse_color += color.rgb * (1.0 - metallic) * light_color * lambert * dist_attenuation * spot_attenuation;
-
-        float spec_angle = max(dot(half_dir, normal), 0.0);
-        vec3 specular = pow(spec_angle, shininess) * light_color * specular_intensity;
-        specular_color += mix(specular, specular * color.rgb, vec3(metallic)) * dist_attenuation * spot_attenuation;
+        #endif // NOT RENDER_SHADOW
     }
-
-    gl_FragColor = vec4(diffuse_color + specular_color, color.a);
-    //gl_FragColor.rgb = pow(agx_tonemapping(gl_FragColor.rgb), vec3(2.2)); //Convert back to linear
-    gl_FragColor.rgb = gl_FragColor.rgb * 0.4;
-    gl_FragColor = clamp(gl_FragColor, vec4(0.0), vec4(1.0));
-
-    #endif // NOT RENDER_SHADOW
-}
