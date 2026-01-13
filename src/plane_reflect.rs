@@ -28,6 +28,7 @@ fn update_reflect_tex(
     }
     let width = bevy_window.physical_width().max(1);
     let height = bevy_window.physical_height().max(1);
+
     if let Some(shadow_tex) = shadow_tex {
         if plane_reflection.is_some() {
             if shadow_tex.width != width || shadow_tex.height != height {
@@ -74,6 +75,16 @@ impl PlaneReflectionTexture {
                 glow::TEXTURE_2D,
                 glow::TEXTURE_MAG_FILTER,
                 glow::LINEAR as i32,
+            );
+            gl.tex_parameter_i32(
+                glow::TEXTURE_2D,
+                glow::TEXTURE_WRAP_S,
+                glow::CLAMP_TO_EDGE as i32,
+            );
+            gl.tex_parameter_i32(
+                glow::TEXTURE_2D,
+                glow::TEXTURE_WRAP_T,
+                glow::CLAMP_TO_EDGE as i32,
             );
             gl.tex_image_2d(
                 glow::TEXTURE_2D,

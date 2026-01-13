@@ -115,8 +115,8 @@ fn setup(
         Transform::from_translation(vec3(0.0, 0.0, 0.0)),
         ReflectionPlane::default(),
         MeshMaterial3d(materials.add(StandardMaterial {
-            base_color: Color::BLACK,
-            perceptual_roughness: 0.5,
+            base_color: Color::srgb_u8(64, 64, 64),
+            perceptual_roughness: 0.1,
             ..default()
         })),
         SkipReflection,

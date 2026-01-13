@@ -10,6 +10,7 @@ use bevy::{
     window::WindowResized,
     winit::WINIT_WINDOWS,
 };
+use glow::HasContext;
 
 use bevy_egui::egui::ahash::HashSet;
 #[cfg(not(target_arch = "wasm32"))]
@@ -89,17 +90,17 @@ impl Plugin for OpenGLMinimalRenderPlugin {
 fn present(
     ctx: NonSend<BevyGlContext>,
     resized: MessageReader<WindowResized>,
-    #[allow(unused)] bevy_window: Single<&Window>,
+    mut bevy_window: Single<(Entity, &mut Window)>,
 ) {
     ctx.swap();
+    #[allow(unused)]
+    let (bevy_window_entity, bevy_window) = &mut *bevy_window;
+    let width = bevy_window.physical_width().max(1);
+    let height = bevy_window.physical_height().max(1);
     if resized.len() > 0 {
-        // TODO support wasm?
         #[cfg(not(target_arch = "wasm32"))]
         {
-            use glow::HasContext;
             use std::num::NonZeroU32;
-            let width = bevy_window.physical_width().max(1);
-            let height = bevy_window.physical_height().max(1);
             //let present_mode = bevy_window.present_mode; // TODO update
             unsafe { ctx.gl.viewport(0, 0, width as i32, height as i32) };
             unsafe { ctx.gl.scissor(0, 0, width as i32, height as i32) };
@@ -108,6 +109,20 @@ fn present(
                 NonZeroU32::new(width).unwrap(),
                 NonZeroU32::new(height).unwrap(),
             );
+        }
+        #[cfg(target_arch = "wasm32")]
+        {
+            use winit::platform::web::WindowExtWebSys;
+            WINIT_WINDOWS.with_borrow(|winit_windows| {
+                let Some(winit_window) = winit_windows.get_window(*bevy_window_entity) else {
+                    warn!("No Window Found");
+                    return;
+                };
+                winit_window.canvas().unwrap().set_width(width);
+                winit_window.canvas().unwrap().set_height(height);
+                unsafe { ctx.gl.viewport(0, 0, width as i32, height as i32) };
+                unsafe { ctx.gl.scissor(0, 0, width as i32, height as i32) };
+            });
         }
     }
 }
