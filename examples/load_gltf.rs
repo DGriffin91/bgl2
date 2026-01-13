@@ -77,14 +77,16 @@ fn setup(
     ));
 
     //commands.spawn(SceneRoot(
-    //    asset_server.load("models/bistro_exterior/BistroExterior.gltf#Scene0"),
+    //    asset_server.load("models/bistro/bistro_exterior/BistroExterior.gltf#Scene0"),
     //));
     //commands.spawn((
-    //    SceneRoot(asset_server.load("models/bistro_interior_wine/BistroInterior_Wine.gltf#Scene0")),
+    //    SceneRoot(
+    //        asset_server.load("models/bistro/bistro_interior_wine/BistroInterior_Wine.gltf#Scene0"),
+    //    ),
     //    Transform::from_xyz(0.0, 0.3, -0.2),
     //));
     //commands.spawn(SceneRoot(
-    //    asset_server.load("models/BistroExteriorFakeGI.gltf#Scene0"),
+    //    asset_server.load("models/bistro/BistroExteriorFakeGI.gltf#Scene0"),
     //));
 
     commands.spawn((
