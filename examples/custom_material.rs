@@ -1,4 +1,5 @@
 use bevy::{
+    asset::RenderAssetUsages,
     diagnostic::{FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin},
     prelude::*,
     render::{RenderPlugin, settings::WgpuSettings},
@@ -7,12 +8,13 @@ use bevy::{
 };
 use bevy_opengl::{
     BevyGlContext, load_val,
-    prepare_image::GpuImages,
+    prepare_image::{GpuImages, bevy_image_to_gl_texture},
     prepare_mesh::GPUMeshBufferMap,
-    queue_val,
+    queue_tex, queue_val,
     render::{OpenGLRenderPlugins, RenderPhase, RenderSet, register_render_system},
     uniform_slot_builder::UniformSlotBuilder,
 };
+use wgpu_types::{Extent3d, TextureDimension, TextureFormat};
 
 fn main() {
     let mut app = App::new();
@@ -48,16 +50,18 @@ fn default_plugins_no_render_backend() -> bevy::app::PluginGroupBuilder {
 }
 
 /// set up a simple 3D scene
-fn setup(mut commands: Commands, mut meshes: ResMut<Assets<Mesh>>) {
+fn setup(mut commands: Commands, mut meshes: ResMut<Assets<Mesh>>, ctx: NonSend<BevyGlContext>) {
     for x in -10..10 {
         for y in -10..10 {
             for z in -10..10 {
                 let p = vec3(x as f32, y as f32, z as f32);
                 let color = (p + 10.0) / 20.0;
                 let linear_rgb = LinearRgba::rgb(color.x, color.y, color.z);
+                let bevy_image = create_test_image(linear_rgb.to_u8_array());
                 let material_id = commands
                     .spawn(CustomMaterial {
                         color: linear_rgb.to_vec4(),
+                        emissive: bevy_image_to_gl_texture(&ctx, None, &bevy_image).unwrap().0,
                     })
                     .id();
                 commands.spawn((
@@ -74,9 +78,24 @@ fn setup(mut commands: Commands, mut meshes: ResMut<Assets<Mesh>>) {
     ));
 }
 
+fn create_test_image(color: [u8; 4]) -> Image {
+    Image::new(
+        Extent3d {
+            width: 1,
+            height: 1,
+            ..default()
+        },
+        TextureDimension::D2,
+        color.to_vec(),
+        TextureFormat::Rgba8UnormSrgb,
+        RenderAssetUsages::all(),
+    )
+}
+
 #[derive(Component)]
 struct CustomMaterial {
     color: Vec4,
+    emissive: glow::Texture,
 }
 
 #[derive(Component, Deref, DerefMut)]
@@ -118,6 +137,7 @@ fn render_custom_mat(
     let mut build = UniformSlotBuilder::<CustomMaterial>::new(&ctx, &gpu_images, shader_index);
 
     queue_val!(build, color);
+    queue_tex!(build, emissive);
 
     for (view_vis, transform, mesh, material_h) in mesh_entities.iter() {
         if !view_vis.get() {

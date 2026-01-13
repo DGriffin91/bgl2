@@ -18,6 +18,32 @@ pub enum Tex {
     Gl(glow::Texture),
 }
 
+#[cfg(not(target_arch = "wasm32"))]
+impl From<glow::NativeTexture> for Tex {
+    fn from(tex: glow::NativeTexture) -> Self {
+        Tex::Gl(tex)
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+impl From<glow::WebTextureKey> for Tex {
+    fn from(tex: glow::WebTextureKey) -> Self {
+        Tex::Gl(tex)
+    }
+}
+
+impl From<Option<Handle<Image>>> for Tex {
+    fn from(handle: Option<Handle<Image>>) -> Self {
+        Tex::Bevy(handle)
+    }
+}
+
+impl From<Handle<Image>> for Tex {
+    fn from(handle: Handle<Image>) -> Self {
+        Tex::Bevy(Some(handle))
+    }
+}
+
 pub struct UniformSlotBuilder<'a, T> {
     pub ctx: &'a BevyGlContext,
     pub gpu_images: &'a GpuImages,
@@ -175,9 +201,7 @@ macro_rules! queue_val {
 /// if location is found queues setting the texture when build.run() is called.
 macro_rules! queue_tex {
     ($obj:expr, $field:ident) => {
-        $obj.queue_tex(stringify!($field), |m| {
-            $crate::uniform_slot_builder::Tex::Bevy(m.$field.clone())
-        })
+        $obj.queue_tex(stringify!($field), |m| m.$field.clone().into())
     };
 }
 
@@ -186,20 +210,7 @@ macro_rules! queue_tex {
 /// This isn't immediate to maintain texture slot consistency. TODO rename?
 macro_rules! load_tex {
     ($obj:expr, $field:ident) => {
-        $obj.queue_tex(stringify!($field), move |_| {
-            $crate::uniform_slot_builder::Tex::Bevy(Some($field.clone()))
-        })
-    };
-}
-
-#[macro_export]
-/// if location is found queues setting the texture when build.run() is called.
-/// This isn't immediate to maintain texture slot consistency. TODO rename?
-macro_rules! load_gl_tex {
-    ($obj:expr, $field:ident) => {
-        $obj.queue_tex(stringify!($field), move |_| {
-            $crate::uniform_slot_builder::Tex::Gl($field)
-        })
+        $obj.queue_tex(stringify!($field), move |_| $field.clone().into())
     };
 }
 

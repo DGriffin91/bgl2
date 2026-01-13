@@ -110,66 +110,81 @@ pub fn send_images_to_gpu(
             if bevy_image.data.is_none() {
                 continue;
             }
-            let Some(target) = get_dimension_target(bevy_image) else {
+
+            let Some((texture, target)) =
+                bevy_image_to_gl_texture(&ctx, Some(default_sampler.0.clone()), bevy_image)
+            else {
                 continue;
             };
-            let texture = unsafe {
-                let texture = ctx.gl.create_texture().unwrap();
 
-                ctx.gl.bind_texture(target, Some(texture));
-                let mip_level_count = bevy_image.texture_descriptor.mip_level_count;
-                let sampler = match &bevy_image.sampler {
-                    ImageSampler::Default => &default_sampler.0,
-                    ImageSampler::Descriptor(s) => &s,
-                };
-
-                let min_filter = match &sampler.min_filter {
-                    ImageFilterMode::Nearest => {
-                        if mip_level_count > 1 {
-                            glow::NEAREST_MIPMAP_NEAREST as i32
-                        } else {
-                            glow::NEAREST as i32
-                        }
-                    }
-                    ImageFilterMode::Linear => {
-                        if mip_level_count > 1 {
-                            glow::LINEAR_MIPMAP_LINEAR as i32
-                        } else {
-                            glow::LINEAR as i32
-                        }
-                    }
-                };
-
-                let mag_filter = match &sampler.mag_filter {
-                    ImageFilterMode::Nearest => glow::NEAREST as i32,
-                    ImageFilterMode::Linear => glow::LINEAR as i32,
-                };
-
-                ctx.gl
-                    .tex_parameter_i32(target, glow::TEXTURE_MIN_FILTER, min_filter);
-                ctx.gl
-                    .tex_parameter_i32(target, glow::TEXTURE_MAG_FILTER, mag_filter);
-
-                #[cfg(not(target_arch = "wasm32"))]
-                {
-                    ctx.gl
-                        .tex_parameter_i32(target, glow::TEXTURE_BASE_LEVEL, 0);
-                    ctx.gl.tex_parameter_i32(
-                        target,
-                        glow::TEXTURE_MAX_LEVEL,
-                        (mip_level_count - 1) as i32,
-                    );
-                }
-
-                transfer_image_data(bevy_image, target, &ctx);
-                // TODO make configurable
-                set_anisotropy(&ctx.gl, target, 16);
-                texture
-            };
             if let Some(old) = gpu_images.mapping.insert(handle, (texture, target)) {
                 unsafe { ctx.gl.delete_texture(old.0) };
             }
         }
+    }
+}
+
+/// Returns texture handle and target
+pub fn bevy_image_to_gl_texture(
+    ctx: &BevyGlContext,
+    default_sampler: Option<ImageSamplerDescriptor>,
+    bevy_image: &Image,
+) -> Option<(glow::Texture, u32)> {
+    let Some(target) = get_dimension_target(bevy_image) else {
+        return None;
+    };
+    unsafe {
+        let texture = ctx.gl.create_texture().unwrap();
+
+        ctx.gl.bind_texture(target, Some(texture));
+        let mip_level_count = bevy_image.texture_descriptor.mip_level_count;
+        let sampler = match &bevy_image.sampler {
+            ImageSampler::Default => default_sampler.unwrap_or(ImageSamplerDescriptor::linear()),
+            ImageSampler::Descriptor(s) => s.clone(),
+        };
+
+        let min_filter = match &sampler.min_filter {
+            ImageFilterMode::Nearest => {
+                if mip_level_count > 1 {
+                    glow::NEAREST_MIPMAP_NEAREST as i32
+                } else {
+                    glow::NEAREST as i32
+                }
+            }
+            ImageFilterMode::Linear => {
+                if mip_level_count > 1 {
+                    glow::LINEAR_MIPMAP_LINEAR as i32
+                } else {
+                    glow::LINEAR as i32
+                }
+            }
+        };
+
+        let mag_filter = match &sampler.mag_filter {
+            ImageFilterMode::Nearest => glow::NEAREST as i32,
+            ImageFilterMode::Linear => glow::LINEAR as i32,
+        };
+
+        ctx.gl
+            .tex_parameter_i32(target, glow::TEXTURE_MIN_FILTER, min_filter);
+        ctx.gl
+            .tex_parameter_i32(target, glow::TEXTURE_MAG_FILTER, mag_filter);
+
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            ctx.gl
+                .tex_parameter_i32(target, glow::TEXTURE_BASE_LEVEL, 0);
+            ctx.gl.tex_parameter_i32(
+                target,
+                glow::TEXTURE_MAX_LEVEL,
+                (mip_level_count - 1) as i32,
+            );
+        }
+
+        transfer_image_data(bevy_image, target, ctx);
+        // TODO make configurable
+        set_anisotropy(&ctx.gl, target, 16);
+        Some((texture, target))
     }
 }
 

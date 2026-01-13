@@ -11,7 +11,7 @@ use bevy::{
 };
 use bevy_mod_mipmap_generator::{MipmapGeneratorPlugin, generate_mipmaps};
 use bevy_opengl::{
-    BevyGlContext, UniformValue, load_gl_tex, load_slice, load_tex, load_val,
+    BevyGlContext, UniformValue, load_slice, load_tex, load_val,
     mesh_util::octahedral_encode,
     phase_shadow::DirectionalLightInfo,
     phase_transparent::DeferredAlphaBlendDraws,
@@ -245,7 +245,7 @@ fn render_std_mat(
 
     if let Some(shadow) = &shadow {
         let shadow_texture = shadow.texture.clone();
-        load_gl_tex!(build, shadow_texture);
+        load_tex!(build, shadow_texture);
         let shadow_clip_from_world = shadow.cascade.clip_from_world;
         load_val!(build, shadow_clip_from_world);
     }
@@ -297,7 +297,7 @@ fn render_std_mat(
     if let Some(reflect_texture) = &reflect_texture {
         if reflect_bool.is_some() {
             let reflect_texture = reflect_texture.texture.clone();
-            load_gl_tex!(build, reflect_texture);
+            load_tex!(build, reflect_texture);
         }
     }
 
