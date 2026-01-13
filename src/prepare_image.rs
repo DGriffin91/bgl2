@@ -170,6 +170,13 @@ pub fn bevy_image_to_gl_texture(
         ctx.gl
             .tex_parameter_i32(target, glow::TEXTURE_MAG_FILTER, mag_filter);
 
+        if target == glow::TEXTURE_CUBE_MAP && !ctx.has_cube_map_seamless {
+            let c2e = glow::CLAMP_TO_EDGE as i32;
+            ctx.gl.tex_parameter_i32(target, glow::TEXTURE_WRAP_S, c2e);
+            ctx.gl.tex_parameter_i32(target, glow::TEXTURE_WRAP_T, c2e);
+            ctx.gl.tex_parameter_i32(target, glow::TEXTURE_WRAP_R, c2e);
+        }
+
         #[cfg(not(target_arch = "wasm32"))]
         {
             ctx.gl

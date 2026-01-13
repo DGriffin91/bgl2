@@ -47,6 +47,7 @@ pub struct BevyGlContext {
     pub shader_cache_map: HashMap<u64, (ShaderIndex, Watchers)>,
     pub shader_snippets: HashMap<String, String>,
     pub has_glsl_cube_lod: bool, // TODO move
+    pub has_cube_map_seamless: bool,
 }
 
 impl Drop for BevyGlContext {
@@ -194,6 +195,16 @@ impl BevyGlContext {
 
             unsafe { gl.viewport(0, 0, width as i32, height as i32) };
 
+            let has_cube_map_seamless = if gl
+                .supported_extensions()
+                .contains("GL_ARB_seamless_cube_map")
+            {
+                unsafe { gl.enable(glow::TEXTURE_CUBE_MAP_SEAMLESS) };
+                true
+            } else {
+                false
+            };
+
             let mut ctx = BevyGlContext {
                 gl: Arc::new(gl),
                 gl_context: Some(gl_context),
@@ -203,6 +214,7 @@ impl BevyGlContext {
                 shader_cache_map: Default::default(),
                 shader_snippets: Default::default(),
                 has_glsl_cube_lod: true,
+                has_cube_map_seamless,
             };
             ctx.test_for_glsl_lod();
             ctx
@@ -239,6 +251,7 @@ impl BevyGlContext {
                 shader_cache_map: Default::default(),
                 shader_snippets: Default::default(),
                 has_glsl_cube_lod,
+                has_cube_map_seamless: false,
             }
         };
         ctx

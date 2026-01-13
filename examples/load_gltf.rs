@@ -76,16 +76,16 @@ fn setup(
         FreeCamera::default(),
     ));
 
-    commands.spawn(SceneRoot(
-        asset_server.load("models/bistro_exterior/BistroExterior.gltf#Scene0"),
-    ));
-    commands.spawn((
-        SceneRoot(asset_server.load("models/bistro_interior_wine/BistroInterior_Wine.gltf#Scene0")),
-        Transform::from_xyz(0.0, 0.3, -0.2),
-    ));
-    commands.spawn(SceneRoot(
-        asset_server.load("models/BistroExteriorFakeGI.gltf#Scene0"),
-    ));
+    //commands.spawn(SceneRoot(
+    //    asset_server.load("models/bistro_exterior/BistroExterior.gltf#Scene0"),
+    //));
+    //commands.spawn((
+    //    SceneRoot(asset_server.load("models/bistro_interior_wine/BistroInterior_Wine.gltf#Scene0")),
+    //    Transform::from_xyz(0.0, 0.3, -0.2),
+    //));
+    //commands.spawn(SceneRoot(
+    //    asset_server.load("models/BistroExteriorFakeGI.gltf#Scene0"),
+    //));
 
     commands.spawn((
         Transform::from_rotation(Quat::from_euler(EulerRot::XYZ, PI * -0.35, PI * -0.13, 0.0)),
@@ -109,14 +109,14 @@ fn setup(
     commands.spawn(SceneRoot(asset_server.load(
         GltfAssetLabel::Scene(0).from_asset("models/FlightHelmet/FlightHelmet.gltf"),
     )));
-    commands.spawn(SceneRoot(asset_server.load("models/Wood/wood.gltf#Scene0")));
+    //commands.spawn(SceneRoot(asset_server.load("models/Wood/wood.gltf#Scene0")));
     commands.spawn((
         Mesh3d(meshes.add(Plane3d::default().mesh().size(50.0, 50.0))),
         Transform::from_translation(vec3(0.0, 0.0, 0.0)),
         ReflectionPlane::default(),
         MeshMaterial3d(materials.add(StandardMaterial {
             base_color: Color::BLACK,
-            perceptual_roughness: 0.0,
+            perceptual_roughness: 0.5,
             ..default()
         })),
         SkipReflection,
