@@ -153,8 +153,8 @@ void main() {
         normal = apply_normal_mapping(vert_normal, tangent, uv_0);
     }
 
-    vec3 specular_color;
-    vec3 diffuse_color;
+    vec3 specular_color = vec3(0.0);
+    vec3 diffuse_color = vec3(0.0);
 
     float shininess = mix(0.0, 64.0, (1.0 - roughness));
     {
