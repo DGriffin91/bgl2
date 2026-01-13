@@ -39,9 +39,10 @@ fn render_opaque(world: &mut World) {
 
 // During the opaque pass the registered systems also write any transparent items to the DeferredAlphaBlendDraws.
 fn opaque(world: &mut World) {
+    let clear_color = world.resource::<ClearColor>().clone();
     let ctx = world.get_non_send_resource_mut::<BevyGlContext>().unwrap();
     ctx.start_opaque(true);
-    ctx.clear_color_and_depth();
+    ctx.clear_color_and_depth(Some(clear_color.to_srgba().to_vec4()));
 
     let Some(runner) = world.remove_resource::<RenderRunner>() else {
         return;

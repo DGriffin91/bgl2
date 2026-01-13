@@ -50,7 +50,7 @@ fn update_reflect_tex(
     }
 }
 
-/// Should accompany a Transfrom. The position and up of the transform will be used to determine the reflection plane.
+/// Should accompany a Transform. The position and up of the transform will be used to determine the reflection plane.
 #[derive(Component, Clone, Deref, DerefMut, Default)]
 pub struct ReflectionPlane(pub Mat4);
 

@@ -523,10 +523,14 @@ impl BevyGlContext {
         }
     }
 
-    pub fn clear_color_and_depth(&self) {
+    pub fn clear_color_and_depth(&self, color: Option<Vec4>) {
         unsafe {
             self.gl.depth_mask(true);
-            self.gl.clear_color(0.0, 0.0, 0.0, 1.0);
+            if let Some(color) = color {
+                self.gl.clear_color(color.x, color.y, color.z, color.w);
+            } else {
+                self.gl.clear_color(0.0, 0.0, 0.0, 1.0);
+            }
             self.gl.clear_depth_f32(0.0);
             self.gl
                 .clear(glow::COLOR_BUFFER_BIT | glow::DEPTH_BUFFER_BIT);

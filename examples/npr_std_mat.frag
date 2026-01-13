@@ -2,7 +2,8 @@
 //#include agx
 
 #define MAX_POINT_LIGHTS 32
-#define POINT_LIGHT_PRE_EXPOSE 0.0001
+#define POINT_LIGHT_PRE_EXPOSE 0.0002
+#define ENV_LIGHT_PRE_EXPOSE 0.003
 
 varying vec4 clip_position;
 varying vec3 ws_position;
@@ -32,10 +33,14 @@ uniform bool has_normal_map;
 uniform sampler2D metallic_roughness_texture;
 uniform samplerCube specular_map;
 uniform samplerCube diffuse_map;
+uniform float env_intensity;
 
 uniform sampler2D shadow_texture;
 uniform sampler2D reflect_texture;
 uniform bool read_reflection;
+uniform bool write_reflection;
+uniform vec3 reflection_plane_position;
+uniform vec3 reflection_plane_normal;
 
 uniform int light_count;
 uniform vec4 point_light_position_range[MAX_POINT_LIGHTS];
@@ -105,6 +110,11 @@ void main() {
     if (!alpha_blend && (color.a < 0.5)) {
         discard;
     }
+    if (write_reflection) {
+        if (dot(ws_position - reflection_plane_position, reflection_plane_normal) < 0.0) {
+            discard;
+        }
+    }
 
     vec3 ndc_position = clip_position.xyz / clip_position.w;
     vec2 screen_uv = ndc_position.xy * 0.5 + 0.5;
@@ -135,7 +145,7 @@ void main() {
     vec3 light_color = vec3(0.0);
     if (directional_light_dir_to_light != vec3(0.0)) {
         light_dir = normalize(directional_light_dir_to_light);
-        light_color = vec3(1.0, 0.9, 0.8) * 3.0;
+        light_color = vec3(1.0, 0.9, 0.8) * 6.0;
     }
 
     float specular_intensity = 1.0;
@@ -180,7 +190,7 @@ void main() {
         #ifdef WEBGL1
         diffuse_env_color.rgb = rgbe2rgb(diffuse_env_color);
         #endif
-        diffuse_color += color.rgb * diffuse_env_color.rgb * (1.0 - metallic);
+        diffuse_color += color.rgb * diffuse_env_color.rgb * (1.0 - metallic) * env_intensity * ENV_LIGHT_PRE_EXPOSE;
 
         vec3 env_specular;
         if (read_reflection && perceptual_roughness < 0.2) {
@@ -191,7 +201,7 @@ void main() {
             #ifdef WEBGL1
             specular_env_color.rgb = rgbe2rgb(specular_env_color);
             #endif
-            env_specular = specular_env_color.rgb * specular_intensity;
+            env_specular = specular_env_color.rgb * specular_intensity * env_intensity * ENV_LIGHT_PRE_EXPOSE;
         }
         specular_color += mix(env_specular, env_specular * color.rgb, vec3(metallic));
     }

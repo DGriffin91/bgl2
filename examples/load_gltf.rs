@@ -4,8 +4,9 @@ use bevy::{
     camera::primitives::Aabb,
     camera_controller::free_camera::{FreeCamera, FreeCameraPlugin},
     diagnostic::{FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin},
-    light::{CascadeShadowConfigBuilder, light_consts::lux},
+    light::CascadeShadowConfigBuilder,
     prelude::*,
+    scene::SceneInstanceReady,
     window::PresentMode,
     winit::WinitSettings,
 };
@@ -30,7 +31,8 @@ use itertools::Either;
 
 fn main() {
     let mut app = App::new();
-    app.insert_resource(WinitSettings::continuous())
+    app.insert_resource(ClearColor(Color::srgb(1.75 * 0.5, 1.9 * 0.5, 1.99 * 0.5)))
+        .insert_resource(WinitSettings::continuous())
         .add_plugins((
             default_plugins_no_render_backend().set(WindowPlugin {
                 primary_window: Some(Window {
@@ -64,66 +66,179 @@ fn setup(
     ctx.add_snippet("agx", include_str!("agx.glsl"));
     ctx.add_snippet("shadow_sampling", include_str!("shadow_sampling.glsl"));
 
+    // Camera
     commands.spawn((
         Camera3d::default(),
-        Transform::from_xyz(0.7, 0.7, 1.0).looking_at(Vec3::new(0.0, 0.3, 0.0), Vec3::Y),
+        Transform::from_xyz(-10.5, 1.7, -1.0).looking_at(Vec3::new(0.0, 3.5, 0.0), Vec3::Y),
+        Projection::Perspective(PerspectiveProjection {
+            fov: std::f32::consts::PI / 3.0,
+            ..default()
+        }),
         EnvironmentMapLight {
             diffuse_map: asset_server.load("environment_maps/pisa_diffuse_rgb9e5_zstd.ktx2"),
             specular_map: asset_server.load("environment_maps/pisa_specular_rgb9e5_zstd.ktx2"),
-            intensity: 250.0,
+            intensity: 1000.0,
             ..default()
         },
         FreeCamera::default(),
     ));
 
-    //commands.spawn(SceneRoot(
-    //    asset_server.load("models/bistro/bistro_exterior/BistroExterior.gltf#Scene0"),
-    //));
-    //commands.spawn((
-    //    SceneRoot(
-    //        asset_server.load("models/bistro/bistro_interior_wine/BistroInterior_Wine.gltf#Scene0"),
-    //    ),
-    //    Transform::from_xyz(0.0, 0.3, -0.2),
-    //));
-    //commands.spawn(SceneRoot(
-    //    asset_server.load("models/bistro/BistroExteriorFakeGI.gltf#Scene0"),
-    //));
+    // sponza
+    commands
+        .spawn(SceneRoot(asset_server.load(
+            "models/sponza/main_sponza/NewSponza_Main_glTF_002.gltf#Scene0",
+        )))
+        .observe(proc_scene);
 
-    commands.spawn((
-        Transform::from_rotation(Quat::from_euler(EulerRot::XYZ, PI * -0.35, PI * -0.13, 0.0)),
-        DirectionalLight {
-            color: Color::srgb(1.0, 0.87, 0.78),
-            illuminance: lux::FULL_DAYLIGHT,
-            shadows_enabled: true,
-            shadow_depth_bias: 0.2,
-            shadow_normal_bias: 0.2,
-            ..default()
-        },
-        CascadeShadowConfigBuilder {
-            num_cascades: 1,
-            minimum_distance: 0.1,
-            maximum_distance: 50.0,
-            first_cascade_far_bound: 70.0,
-            overlap_proportion: 0.2,
-        }
-        .build(),
-    ));
+    // curtains
+    commands
+        .spawn(SceneRoot(asset_server.load(
+            "models/sponza/PKG_A_Curtains/NewSponza_Curtains_glTF.gltf#Scene0",
+        )))
+        .observe(proc_scene);
+
     commands.spawn(SceneRoot(asset_server.load(
         GltfAssetLabel::Scene(0).from_asset("models/FlightHelmet/FlightHelmet.gltf"),
     )));
-    //commands.spawn(SceneRoot(asset_server.load("models/Wood/wood.gltf#Scene0")));
+
+    // Reflection plane
     commands.spawn((
         Mesh3d(meshes.add(Plane3d::default().mesh().size(50.0, 50.0))),
-        Transform::from_translation(vec3(0.0, 0.0, 0.0)),
+        Transform::from_translation(vec3(0.0, 0.2, 0.0)),
         ReflectionPlane::default(),
         MeshMaterial3d(materials.add(StandardMaterial {
-            base_color: Color::srgb_u8(64, 64, 64),
-            perceptual_roughness: 0.1,
+            base_color: Color::linear_rgba(0.0, 0.0, 0.0, 0.5),
+            perceptual_roughness: 0.0,
+            alpha_mode: AlphaMode::Blend,
             ..default()
         })),
         SkipReflection,
         ReadReflection,
     ));
+
+    // Sun
+    commands.spawn((
+        Transform::from_rotation(Quat::from_euler(EulerRot::XYZ, PI * -0.43, PI * -0.08, 0.0)),
+        DirectionalLight {
+            color: Color::srgb(1.0, 1.0, 0.99),
+            illuminance: 300000.0 * 0.2,
+            shadows_enabled: true,
+            shadow_depth_bias: 0.3,
+            shadow_normal_bias: 0.7,
+            ..default()
+        },
+        CascadeShadowConfigBuilder {
+            num_cascades: 1,
+            minimum_distance: 0.1,
+            maximum_distance: 40.0,
+            first_cascade_far_bound: 70.0,
+            overlap_proportion: 0.2,
+        }
+        .build(),
+    ));
+
+    let point_spot_mult = 1000.0;
+
+    // Sun Refl
+    commands.spawn((
+        Transform::from_xyz(2.0, -0.0, -2.0).looking_at(Vec3::new(0.0, 999.0, 0.0), Vec3::X),
+        SpotLight {
+            range: 15.0,
+            intensity: 700.0 * point_spot_mult,
+            color: Color::srgb(1.0, 0.97, 0.85),
+            shadows_enabled: false,
+            inner_angle: PI * 0.4,
+            outer_angle: PI * 0.5,
+            ..default()
+        },
+    ));
+
+    // Sun refl 2nd bounce / misc bounces
+    commands.spawn((
+        Transform::from_xyz(2.0, 5.5, -2.0).looking_at(Vec3::new(0.0, -999.0, 0.0), Vec3::X),
+        SpotLight {
+            range: 13.0,
+            intensity: 500.0 * point_spot_mult,
+            color: Color::srgb(1.0, 0.97, 0.85),
+            shadows_enabled: false,
+            inner_angle: PI * 0.3,
+            outer_angle: PI * 0.4,
+            ..default()
+        },
+    ));
+
+    // sky
+    // seems to be making blocky artifacts. Even if it's the only light.
+    commands.spawn((
+        PointLight {
+            color: Color::srgb(0.8, 0.9, 0.97),
+            intensity: 10000.0 * point_spot_mult,
+            shadows_enabled: false,
+            range: 24.0,
+            radius: 3.0,
+            ..default()
+        },
+        Transform::from_xyz(0.0, 30.0, 0.0),
+    ));
+
+    // sky refl
+    commands.spawn((
+        Transform::from_xyz(0.0, -2.0, 0.0).looking_at(Vec3::new(0.0, 999.0, 0.0), Vec3::X),
+        SpotLight {
+            range: 11.0,
+            intensity: 40.0 * point_spot_mult,
+            color: Color::srgb(0.8, 0.9, 0.97),
+            shadows_enabled: false,
+            inner_angle: PI * 0.46,
+            outer_angle: PI * 0.49,
+            ..default()
+        },
+    ));
+
+    // sky low
+    commands.spawn((
+        Transform::from_xyz(3.0, 2.0, 0.0).looking_at(Vec3::new(0.0, -999.0, 0.0), Vec3::X),
+        SpotLight {
+            range: 12.0,
+            radius: 0.0,
+            intensity: 600.0 * point_spot_mult,
+            color: Color::srgb(0.8, 0.9, 0.95),
+            shadows_enabled: false,
+            inner_angle: PI * 0.34,
+            outer_angle: PI * 0.5,
+            ..default()
+        },
+    ));
+}
+
+#[allow(clippy::type_complexity)]
+pub fn proc_scene(
+    scene_ready: On<SceneInstanceReady>,
+    mut commands: Commands,
+    children: Query<&Children>,
+    has_std_mat: Query<&MeshMaterial3d<StandardMaterial>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    lights: Query<Entity, Or<(With<PointLight>, With<DirectionalLight>, With<SpotLight>)>>,
+    cameras: Query<Entity, With<Camera>>,
+) {
+    for entity in children.iter_descendants(scene_ready.entity) {
+        // Sponza needs flipped normals
+        if let Ok(mat_h) = has_std_mat.get(entity) {
+            if let Some(mat) = materials.get_mut(mat_h) {
+                mat.flip_normal_map_y = true;
+            }
+        }
+
+        // Sponza has a bunch of lights by default
+        if lights.get(entity).is_ok() {
+            commands.entity(entity).despawn();
+        }
+
+        // Sponza has a bunch of cameras by default
+        if cameras.get(entity).is_ok() {
+            commands.entity(entity).despawn();
+        }
+    }
 }
 
 #[derive(Component, Default)]
@@ -210,6 +325,7 @@ fn render_std_mat(
     bevy_window: Single<&Window>,
     directional_lights: Query<&Transform, With<DirectionalLight>>,
     reflect_texture: Option<Res<PlaneReflectionTexture>>,
+    mut plane_reflection: Option<Single<(&mut ReflectionPlane, &GlobalTransform)>>,
 ) {
     let (view, env_light) = *camera;
     let phase = **phase;
@@ -244,6 +360,7 @@ fn render_std_mat(
     load_tex!(build, specular_map);
     let diffuse_map = env_light.diffuse_map.clone();
     load_tex!(build, diffuse_map);
+    build.load("env_intensity", env_light.intensity);
 
     if let Some(shadow) = &shadow {
         let shadow_texture = shadow.texture.clone();
@@ -295,12 +412,18 @@ fn render_std_mat(
     load_slice!(build, point_light_color_radius);
     load_slice!(build, spot_light_dir_offset_scale);
 
+    build.load("write_reflection", phase.reflection());
     let reflect_bool = build.get_uniform_location("read_reflection");
     if let Some(reflect_texture) = &reflect_texture {
         if reflect_bool.is_some() {
             let reflect_texture = reflect_texture.texture.clone();
             load_tex!(build, reflect_texture);
         }
+    }
+
+    if let Some(plane) = &mut plane_reflection {
+        build.load("reflection_plane_position", plane.1.translation());
+        build.load("reflection_plane_normal", plane.1.up().as_vec3());
     }
 
     let iter = if phase.transparent() {

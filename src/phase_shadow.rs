@@ -79,7 +79,7 @@ fn render_shadow(world: &mut World) {
     };
     let ctx = world.get_non_send_resource_mut::<BevyGlContext>().unwrap();
     ctx.start_opaque(true); // Reading from depth not supported so we need to write depth to color
-    ctx.clear_color_and_depth();
+    ctx.clear_color_and_depth(None);
 
     *world.get_resource_mut::<RenderPhase>().unwrap() = RenderPhase::Shadow;
 
