@@ -4,10 +4,10 @@ version = "0.1.0"
 edition = "2024"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
-bevy_dylib = "0.18.0-rc.2"
+bevy_dylib = "0.18.0"
 
 [dependencies]
-bevy = { version = "0.18.0-rc.2", default-features = false, features = [
+bevy = { version = "0.18.0", default-features = false, features = [
     "default_app",
     "common_api",
     "bevy_gltf",
@@ -50,7 +50,7 @@ web-sys = { version = "0.3", features = [
 wasm-bindgen = { version = "0.2" }
 
 [dev-dependencies]
-bevy_mod_mipmap_generator = { git = "https://github.com/DGriffin91/bevy_mod_mipmap_generator", branch = "bevy18" }
+bevy_mod_mipmap_generator = { git = "https://github.com/DGriffin91/bevy_mod_mipmap_generator" }
 argh = "0.1"
 
 [profile.release-with-debug]

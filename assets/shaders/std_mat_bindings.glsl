@@ -1,6 +1,4 @@
 #define MAX_POINT_LIGHTS 32
-#define POINT_LIGHT_PRE_EXPOSE 0.0002
-#define ENV_LIGHT_PRE_EXPOSE 0.003
 
 varying vec4 clip_position;
 varying vec3 ws_position;
@@ -11,6 +9,7 @@ varying vec2 uv_1;
 
 uniform mat4 shadow_clip_from_world;
 uniform vec3 directional_light_dir_to_light;
+uniform vec3 directional_light_color;
 
 uniform vec3 view_position;
 uniform vec2 view_resolution;

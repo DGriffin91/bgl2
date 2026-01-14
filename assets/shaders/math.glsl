@@ -1,3 +1,5 @@
+#define PI 3.14159274
+
 // For decoding normals or unit direction vectors from octahedral coordinates.
 vec3 octahedral_decode(vec2 v) {
     vec2 f = v * 2.0 - 1.0;

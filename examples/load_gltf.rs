@@ -4,9 +4,11 @@ use argh::FromArgs;
 use bevy::{
     camera::primitives::Aabb,
     camera_controller::free_camera::{FreeCamera, FreeCameraPlugin},
+    core_pipeline::tonemapping::Tonemapping,
     diagnostic::{FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin},
     light::CascadeShadowConfigBuilder,
     prelude::*,
+    render::{RenderPlugin, settings::WgpuSettings},
     scene::SceneInstanceReady,
     window::PresentMode,
     winit::WinitSettings,
@@ -22,45 +24,68 @@ use bevy_opengl::{
     prepare_mesh::GPUMeshBufferMap,
     queue_tex, queue_val,
     render::{
-        OpenGLRenderPlugins, RenderPhase, RenderSet, default_plugins_no_render_backend,
-        register_prepare_system, register_render_system,
+        OpenGLRenderPlugins, RenderPhase, RenderSet, register_prepare_system,
+        register_render_system,
     },
     shader_cached,
     uniform_slot_builder::UniformSlotBuilder,
 };
 use itertools::Either;
 
-#[derive(FromArgs, Resource, Clone)]
+#[derive(FromArgs, Resource, Clone, Default)]
 /// Config
 pub struct Args {
     /// render with npr shaders (non-physically based). Otherwise PBR shaders are used.
     #[argh(switch)]
     npr: bool,
+    /// use default bevy render backend (Also need to enable default plugins)
+    #[argh(switch)]
+    bevy: bool,
 }
 
 fn main() {
+    #[cfg(target_arch = "wasm32")]
+    let args: Args = Default::default();
+    #[cfg(not(target_arch = "wasm32"))]
     let args: Args = argh::from_env();
+
     let mut app = App::new();
-    app.insert_resource(args)
+    app.insert_resource(args.clone())
         .insert_resource(ClearColor(Color::srgb(1.75 * 0.5, 1.9 * 0.5, 1.99 * 0.5)))
         .insert_resource(WinitSettings::continuous())
+        .insert_resource(GlobalAmbientLight::NONE)
         .add_plugins((
-            default_plugins_no_render_backend().set(WindowPlugin {
-                primary_window: Some(Window {
-                    present_mode: PresentMode::Immediate,
+            DefaultPlugins
+                .set(RenderPlugin {
+                    render_creation: WgpuSettings {
+                        backends: if args.bevy {
+                            Some(wgpu_types::Backends::all())
+                        } else {
+                            None
+                        },
+                        ..default()
+                    }
+                    .into(),
+                    ..default()
+                })
+                .set(WindowPlugin {
+                    primary_window: Some(Window {
+                        present_mode: PresentMode::Immediate,
+                        ..default()
+                    }),
                     ..default()
                 }),
-                ..default()
-            }),
-            OpenGLRenderPlugins,
             FreeCameraPlugin,
             LogDiagnosticsPlugin::default(),
             FrameTimeDiagnosticsPlugin::default(),
             MipmapGeneratorPlugin,
         ));
 
-    register_prepare_system(app.world_mut(), prepare_view);
-    register_render_system::<StandardMaterial, _>(app.world_mut(), render_std_mat);
+    if !args.bevy {
+        app.add_plugins(OpenGLRenderPlugins);
+        register_prepare_system(app.world_mut(), prepare_view);
+        register_render_system::<StandardMaterial, _>(app.world_mut(), render_std_mat);
+    }
 
     app.add_systems(Update, generate_mipmaps::<StandardMaterial>)
         .add_systems(Startup, setup.in_set(RenderSet::Pipeline))
@@ -70,20 +95,22 @@ fn main() {
 fn setup(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
-    mut ctx: NonSendMut<BevyGlContext>,
+    mut ctx: Option<NonSendMut<BevyGlContext>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-    ctx.add_snippet("agx", include_str!("../assets/shaders/agx.glsl"));
-    ctx.add_snippet(
-        "std_mat_bindings",
-        include_str!("../assets/shaders/std_mat_bindings.glsl"),
-    );
-    ctx.add_snippet(
-        "shadow_sampling",
-        include_str!("../assets/shaders/shadow_sampling.glsl"),
-    );
-    ctx.add_snippet("math", include_str!("../assets/shaders/math.glsl"));
+    if let Some(ctx) = &mut ctx {
+        ctx.add_snippet("agx", include_str!("../assets/shaders/agx.glsl"));
+        ctx.add_snippet(
+            "std_mat_bindings",
+            include_str!("../assets/shaders/std_mat_bindings.glsl"),
+        );
+        ctx.add_snippet(
+            "shadow_sampling",
+            include_str!("../assets/shaders/shadow_sampling.glsl"),
+        );
+        ctx.add_snippet("math", include_str!("../assets/shaders/math.glsl"));
+    }
 
     // Camera
     commands.spawn((
@@ -96,10 +123,11 @@ fn setup(
         EnvironmentMapLight {
             diffuse_map: asset_server.load("environment_maps/pisa_diffuse_rgb9e5_zstd.ktx2"),
             specular_map: asset_server.load("environment_maps/pisa_specular_rgb9e5_zstd.ktx2"),
-            intensity: 1000.0,
+            intensity: 250.0,
             ..default()
         },
         FreeCamera::default(),
+        Tonemapping::AgX,
     ));
 
     // sponza
@@ -121,19 +149,19 @@ fn setup(
     )));
 
     // Reflection plane
-    commands.spawn((
-        Mesh3d(meshes.add(Plane3d::default().mesh().size(50.0, 50.0))),
-        Transform::from_translation(vec3(0.0, 0.2, 0.0)),
-        ReflectionPlane::default(),
-        MeshMaterial3d(materials.add(StandardMaterial {
-            base_color: Color::linear_rgba(0.0, 0.0, 0.0, 0.5),
-            perceptual_roughness: 0.0,
-            alpha_mode: AlphaMode::Blend,
-            ..default()
-        })),
-        SkipReflection,
-        ReadReflection,
-    ));
+    // commands.spawn((
+    //     Mesh3d(meshes.add(Plane3d::default().mesh().size(50.0, 50.0))),
+    //     Transform::from_translation(vec3(0.0, 0.1, 0.0)),
+    //     ReflectionPlane::default(),
+    //     MeshMaterial3d(materials.add(StandardMaterial {
+    //         base_color: Color::linear_rgba(0.0, 0.0, 0.0, 0.5),
+    //         perceptual_roughness: 0.1,
+    //         alpha_mode: AlphaMode::Blend,
+    //         ..default()
+    //     })),
+    //     SkipReflection,
+    //     ReadReflection,
+    // ));
 
     // Sun
     commands.spawn((
@@ -149,7 +177,7 @@ fn setup(
         CascadeShadowConfigBuilder {
             num_cascades: 1,
             minimum_distance: 0.1,
-            maximum_distance: 40.0,
+            maximum_distance: 25.0,
             first_cascade_far_bound: 70.0,
             overlap_proportion: 0.2,
         }
@@ -342,7 +370,7 @@ fn render_std_mat(
     shadow: Option<Res<DirectionalLightInfo>>,
     gpu_images: NonSend<GpuImages>,
     bevy_window: Single<&Window>,
-    directional_lights: Query<&Transform, With<DirectionalLight>>,
+    directional_lights: Query<(&Transform, &DirectionalLight)>,
     reflect_texture: Option<Res<PlaneReflectionTexture>>,
     mut plane_reflection: Option<Single<(&mut ReflectionPlane, &GlobalTransform)>>,
     args: Res<Args>,
@@ -361,7 +389,7 @@ fn render_std_mat(
     let shader_index = if args.npr {
         shader_cached!(
             ctx,
-            "../assets/shaders/npr_std_mat.vert",
+            "../assets/shaders/std_mat.vert",
             "../assets/shaders/npr_std_mat.frag",
             &[shadow_def]
         )
@@ -369,8 +397,8 @@ fn render_std_mat(
     } else {
         shader_cached!(
             ctx,
-            "../assets/shaders/npr_std_mat.vert",
-            "../assets/shaders/npr_std_mat.frag",
+            "../assets/shaders/std_mat.vert",
+            "../assets/shaders/pbr_std_mat.frag",
             &[shadow_def]
         )
         .unwrap()
@@ -405,11 +433,16 @@ fn render_std_mat(
         load_val!(build, shadow_clip_from_world);
     }
 
-    let trans = directional_lights
-        .iter()
-        .next()
-        .map_or(Vec3::ZERO, |t| t.back().as_vec3());
-    build.load("directional_light_dir_to_light", trans);
+    if let Some((trans, light)) = directional_lights.iter().next() {
+        build.load("directional_light_dir_to_light", -trans.forward().as_vec3());
+        build.load(
+            "directional_light_color",
+            light.color.to_linear().to_vec3() * light.illuminance,
+        );
+    } else {
+        build.load("directional_light_dir_to_light", Vec3::ZERO);
+        build.load("directional_light_color", Vec3::ZERO);
+    }
 
     build.queue_val("alpha_blend", |m| material_alpha_blend(m));
     build.queue_val("base_color", |m| m.base_color.to_linear().to_vec4());
