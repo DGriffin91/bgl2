@@ -51,6 +51,7 @@ wasm-bindgen = { version = "0.2" }
 
 [dev-dependencies]
 bevy_mod_mipmap_generator = { git = "https://github.com/DGriffin91/bevy_mod_mipmap_generator", branch = "bevy18" }
+argh = "0.1"
 
 [profile.release-with-debug]
 inherits = "release"

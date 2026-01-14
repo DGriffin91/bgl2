@@ -1,5 +1,6 @@
 use std::f32::consts::PI;
 
+use argh::FromArgs;
 use bevy::{
     camera::primitives::Aabb,
     camera_controller::free_camera::{FreeCamera, FreeCameraPlugin},
@@ -29,9 +30,19 @@ use bevy_opengl::{
 };
 use itertools::Either;
 
+#[derive(FromArgs, Resource, Clone)]
+/// Config
+pub struct Args {
+    /// render with npr shaders (non-physically based). Otherwise PBR shaders are used.
+    #[argh(switch)]
+    npr: bool,
+}
+
 fn main() {
+    let args: Args = argh::from_env();
     let mut app = App::new();
-    app.insert_resource(ClearColor(Color::srgb(1.75 * 0.5, 1.9 * 0.5, 1.99 * 0.5)))
+    app.insert_resource(args)
+        .insert_resource(ClearColor(Color::srgb(1.75 * 0.5, 1.9 * 0.5, 1.99 * 0.5)))
         .insert_resource(WinitSettings::continuous())
         .add_plugins((
             default_plugins_no_render_backend().set(WindowPlugin {
@@ -63,8 +74,16 @@ fn setup(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-    ctx.add_snippet("agx", include_str!("agx.glsl"));
-    ctx.add_snippet("shadow_sampling", include_str!("shadow_sampling.glsl"));
+    ctx.add_snippet("agx", include_str!("../assets/shaders/agx.glsl"));
+    ctx.add_snippet(
+        "std_mat_bindings",
+        include_str!("../assets/shaders/std_mat_bindings.glsl"),
+    );
+    ctx.add_snippet(
+        "shadow_sampling",
+        include_str!("../assets/shaders/shadow_sampling.glsl"),
+    );
+    ctx.add_snippet("math", include_str!("../assets/shaders/math.glsl"));
 
     // Camera
     commands.spawn((
@@ -326,6 +345,7 @@ fn render_std_mat(
     directional_lights: Query<&Transform, With<DirectionalLight>>,
     reflect_texture: Option<Res<PlaneReflectionTexture>>,
     mut plane_reflection: Option<Single<(&mut ReflectionPlane, &GlobalTransform)>>,
+    args: Res<Args>,
 ) {
     let (view, env_light) = *camera;
     let phase = **phase;
@@ -338,8 +358,24 @@ fn render_std_mat(
         shadow_def = shadow.as_ref().map_or(("", ""), |_| ("SAMPLE_SHADOW", ""));
     }
 
-    let shader_index =
-        shader_cached!(ctx, "npr_std_mat.vert", "npr_std_mat.frag", &[shadow_def]).unwrap();
+    let shader_index = if args.npr {
+        shader_cached!(
+            ctx,
+            "../assets/shaders/npr_std_mat.vert",
+            "../assets/shaders/npr_std_mat.frag",
+            &[shadow_def]
+        )
+        .unwrap()
+    } else {
+        shader_cached!(
+            ctx,
+            "../assets/shaders/npr_std_mat.vert",
+            "../assets/shaders/npr_std_mat.frag",
+            &[shadow_def]
+        )
+        .unwrap()
+    };
+
     gpu_meshes.reset_bind_cache();
     ctx.use_cached_program(shader_index);
 
