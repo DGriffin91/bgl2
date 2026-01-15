@@ -6,7 +6,10 @@ use bevy::{
     camera_controller::free_camera::{FreeCamera, FreeCameraPlugin},
     core_pipeline::tonemapping::Tonemapping,
     diagnostic::{FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin},
-    light::CascadeShadowConfigBuilder,
+    light::{
+        CascadeShadowConfigBuilder,
+        light_consts::lux::{DIRECT_SUNLIGHT, FULL_DAYLIGHT},
+    },
     prelude::*,
     render::{RenderPlugin, settings::WgpuSettings},
     scene::SceneInstanceReady,
@@ -51,8 +54,8 @@ fn main() {
 
     let mut app = App::new();
     app.insert_resource(args.clone())
-        //.insert_resource(ClearColor(Color::srgb(1.75 * 0.5, 1.9 * 0.5, 1.99 * 0.5)))
-        .insert_resource(ClearColor(Color::BLACK))
+        .insert_resource(ClearColor(Color::srgb(1.75 * 0.5, 1.9 * 0.5, 1.99 * 0.5)))
+        //.insert_resource(ClearColor(Color::BLACK))
         .insert_resource(WinitSettings::continuous())
         .insert_resource(GlobalAmbientLight::NONE)
         .add_plugins((
@@ -97,8 +100,8 @@ fn setup(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
     mut ctx: Option<NonSendMut<BevyGlContext>>,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut _meshes: ResMut<Assets<Mesh>>,
+    mut _materials: ResMut<Assets<StandardMaterial>>,
 ) {
     if let Some(ctx) = &mut ctx {
         ctx.add_snippet("agx", include_str!("../assets/shaders/agx.glsl"));
@@ -116,10 +119,10 @@ fn setup(
     // Camera
     commands.spawn((
         Camera3d::default(),
-        //Transform::from_xyz(-10.5, 1.7, -1.0).looking_at(Vec3::new(0.0, 3.5, 0.0), Vec3::Y),
-        Transform::from_xyz(12.5, 1.7, 12.0).looking_at(Vec3::new(0.0, 2.5, 0.0), Vec3::Y),
+        Transform::from_xyz(-10.5, 1.7, -1.0).looking_at(Vec3::new(0.0, 2.5, 0.0), Vec3::Y),
+        //Transform::from_xyz(12.5, 1.7, 12.0).looking_at(Vec3::new(0.0, 2.5, 0.0), Vec3::Y),
         Projection::Perspective(PerspectiveProjection {
-            fov: std::f32::consts::PI / 3.0,
+            fov: std::f32::consts::PI / 2.8,
             ..default()
         }),
         EnvironmentMapLight {
@@ -132,52 +135,41 @@ fn setup(
         Tonemapping::AgX,
     ));
 
-    // sponza
-    //commands
-    //    .spawn(SceneRoot(asset_server.load(
-    //        "models/sponza/main_sponza/NewSponza_Main_glTF_002.gltf#Scene0",
-    //    )))
-    //    .observe(proc_scene);
+    commands
+        .spawn((
+            SceneRoot(asset_server.load("models/san-miguel/san-miguel.gltf#Scene0")),
+            Transform::from_xyz(-18.0, 0.0, 0.0),
+        ))
+        .observe(proc_scene);
 
-    // curtains
-    //commands
-    //    .spawn(SceneRoot(asset_server.load(
-    //        "models/sponza/PKG_A_Curtains/NewSponza_Curtains_glTF.gltf#Scene0",
-    //    )))
-    //    .observe(proc_scene);
-
-    //commands.spawn(SceneRoot(asset_server.load(
-    //    GltfAssetLabel::Scene(0).from_asset("models/FlightHelmet/FlightHelmet.gltf"),
-    //)));
-
-    commands.spawn((
-        SceneRoot(
-            asset_server.load(GltfAssetLabel::Scene(0).from_asset("models/DamagedHelmet.glb")),
-        ),
-        Transform::from_scale(Vec3::ONE * 5.0).with_translation(vec3(0.0, 5.0, 0.0)),
-    ));
+    //commands.spawn((
+    //    SceneRoot(
+    //        asset_server.load(GltfAssetLabel::Scene(0).from_asset("models/DamagedHelmet.glb")),
+    //    ),
+    //    Transform::from_scale(Vec3::ONE * 5.0).with_translation(vec3(0.0, 5.0, 0.0)),
+    //));
 
     // Reflection plane
-    commands.spawn((
-        Mesh3d(meshes.add(Plane3d::default().mesh().size(50.0, 50.0))),
-        Transform::from_translation(vec3(0.0, 0.1, 0.0)),
-        ReflectionPlane::default(),
-        MeshMaterial3d(materials.add(StandardMaterial {
-            base_color: Color::linear_rgba(0.0, 0.0, 0.0, 0.8),
-            perceptual_roughness: 0.1,
-            alpha_mode: AlphaMode::Blend,
-            ..default()
-        })),
-        SkipReflection,
-        ReadReflection,
-    ));
+    //commands.spawn((
+    //    Mesh3d(meshes.add(Plane3d::default().mesh().size(50.0, 50.0))),
+    //    Transform::from_translation(vec3(0.0, 0.1, 0.0)),
+    //    ReflectionPlane::default(),
+    //    MeshMaterial3d(materials.add(StandardMaterial {
+    //        base_color: Color::linear_rgba(0.0, 0.0, 0.0, 0.8),
+    //        perceptual_roughness: 0.1,
+    //        alpha_mode: AlphaMode::Blend,
+    //        ..default()
+    //    })),
+    //    SkipReflection,
+    //    ReadReflection,
+    //));
 
     // Sun
     commands.spawn((
         Transform::from_rotation(Quat::from_euler(EulerRot::XYZ, PI * -0.43, PI * -0.08, 0.0)),
         DirectionalLight {
-            color: Color::srgb(1.0, 1.0, 0.99),
-            illuminance: 300000.0 * 0.2,
+            color: Color::srgb(1.0, 0.97, 0.94),
+            illuminance: DIRECT_SUNLIGHT,
             shadows_enabled: true,
             shadow_depth_bias: 0.3,
             shadow_normal_bias: 0.7,
@@ -195,76 +187,46 @@ fn setup(
 
     let point_spot_mult = 1000.0;
 
-    // Sun Refl
-    commands.spawn((
-        Transform::from_xyz(2.0, -0.0, -2.0).looking_at(Vec3::new(0.0, 999.0, 0.0), Vec3::X),
-        SpotLight {
-            range: 15.0,
-            intensity: 700.0 * point_spot_mult,
-            color: Color::srgb(1.0, 0.97, 0.85),
-            shadows_enabled: false,
-            inner_angle: PI * 0.4,
-            outer_angle: PI * 0.5,
-            ..default()
-        },
-    ));
+    // Sun Ground Refl
+    for t in [
+        Transform::from_xyz(2.0, 0.5, 1.5),
+        Transform::from_xyz(-1.5, 0.5, 1.5),
+        Transform::from_xyz(-5.0, 0.5, 1.5),
+    ] {
+        commands.spawn((
+            t.looking_at(Vec3::new(0.0, 999.0, 0.0), Vec3::X),
+            SpotLight {
+                range: 15.0,
+                radius: 4.0,
+                intensity: 1000.0 * point_spot_mult,
+                color: Color::srgb(1.0, 0.85, 0.75),
+                shadows_enabled: false,
+                inner_angle: PI * 0.4,
+                outer_angle: PI * 0.5,
+                ..default()
+            },
+        ));
+    }
 
-    // Sun refl 2nd bounce / misc bounces
-    commands.spawn((
-        Transform::from_xyz(2.0, 5.5, -2.0).looking_at(Vec3::new(0.0, -999.0, 0.0), Vec3::X),
-        SpotLight {
-            range: 13.0,
-            intensity: 500.0 * point_spot_mult,
-            color: Color::srgb(1.0, 0.97, 0.85),
-            shadows_enabled: false,
-            inner_angle: PI * 0.3,
-            outer_angle: PI * 0.4,
-            ..default()
-        },
-    ));
-
-    // sky
-    // seems to be making blocky artifacts. Even if it's the only light.
-    commands.spawn((
-        PointLight {
-            color: Color::srgb(0.8, 0.9, 0.97),
-            intensity: 10000.0 * point_spot_mult,
-            shadows_enabled: false,
-            range: 24.0,
-            radius: 3.0,
-            ..default()
-        },
-        Transform::from_xyz(0.0, 30.0, 0.0),
-    ));
-
-    // sky refl
-    commands.spawn((
-        Transform::from_xyz(0.0, -2.0, 0.0).looking_at(Vec3::new(0.0, 999.0, 0.0), Vec3::X),
-        SpotLight {
-            range: 11.0,
-            intensity: 40.0 * point_spot_mult,
-            color: Color::srgb(0.8, 0.9, 0.97),
-            shadows_enabled: false,
-            inner_angle: PI * 0.46,
-            outer_angle: PI * 0.49,
-            ..default()
-        },
-    ));
-
-    // sky low
-    commands.spawn((
-        Transform::from_xyz(3.0, 2.0, 0.0).looking_at(Vec3::new(0.0, -999.0, 0.0), Vec3::X),
-        SpotLight {
-            range: 12.0,
-            radius: 0.0,
-            intensity: 600.0 * point_spot_mult,
-            color: Color::srgb(0.8, 0.9, 0.95),
-            shadows_enabled: false,
-            inner_angle: PI * 0.34,
-            outer_angle: PI * 0.5,
-            ..default()
-        },
-    ));
+    // Sun Table Refl
+    for t in [
+        Transform::from_xyz(2.95, 0.5, 3.15),
+        Transform::from_xyz(-6.2, 0.5, 2.3),
+    ] {
+        commands.spawn((
+            t.looking_at(Vec3::new(0.0, 999.0, 0.0), Vec3::X),
+            SpotLight {
+                range: 3.0,
+                radius: 1.5,
+                intensity: 150.0 * point_spot_mult,
+                color: Color::srgb(1.0, 0.95, 0.9),
+                shadows_enabled: false,
+                inner_angle: PI * 0.4,
+                outer_angle: PI * 0.5,
+                ..default()
+            },
+        ));
+    }
 }
 
 #[allow(clippy::type_complexity)]
