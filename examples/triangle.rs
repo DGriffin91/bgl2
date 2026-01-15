@@ -1,5 +1,5 @@
 use bevy::{ecs::system::SystemState, prelude::*, winit::WINIT_WINDOWS};
-use bevy_opengl::BevyGlContext;
+use bevy_opengl::{BevyGlContext, shader_cached};
 use bytemuck::cast_slice;
 use glow::HasContext;
 
@@ -42,10 +42,13 @@ fn init(world: &mut World, params: &mut SystemState<Query<(Entity, &mut Window)>
 }
 
 fn update(mut ctx: If<NonSendMut<BevyGlContext>>) {
-    let shader_index = ctx
-        .shader_cached("examples/tri.vert", "examples/tri.frag", Default::default())
-        .unwrap();
-
+    let shader_index = shader_cached!(
+        ctx,
+        "../assets/shaders/tri.vert",
+        "../assets/shaders/tri.frag",
+        &[]
+    )
+    .unwrap();
     unsafe {
         ctx.use_cached_program(shader_index);
         ctx.gl.clear_color(0.0, 0.0, 0.0, 1.0);

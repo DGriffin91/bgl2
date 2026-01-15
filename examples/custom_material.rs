@@ -127,9 +127,13 @@ fn render_custom_mat(
         }
     };
 
-    let shader_index =
-        bevy_opengl::shader_cached!(ctx, "custom_material.vert", "custom_material.frag", &[])
-            .unwrap();
+    let shader_index = bevy_opengl::shader_cached!(
+        ctx,
+        "../assets/shaders/custom_material.vert",
+        "../assets/shaders/custom_material.frag",
+        &[]
+    )
+    .unwrap();
 
     gpu_meshes.reset_bind_cache();
     ctx.use_cached_program(shader_index);
