@@ -25,7 +25,7 @@ use bevy_opengl::{
     queue_tex, queue_val,
     render::{
         OpenGLRenderPlugins, RenderPhase, RenderSet, register_prepare_system,
-        register_render_system,
+        register_render_system, set_blend_func_from_alpha_mode, transparent_draw_from_alpha_mode,
     },
     shader_cached,
     uniform_slot_builder::UniformSlotBuilder,
@@ -163,9 +163,9 @@ fn setup(
         Transform::from_translation(vec3(0.0, 0.1, 0.0)),
         ReflectionPlane::default(),
         MeshMaterial3d(materials.add(StandardMaterial {
-            base_color: Color::linear_rgba(0.0, 0.0, 0.0, 1.0),
+            base_color: Color::linear_rgba(0.0, 0.0, 0.0, 0.8),
             perceptual_roughness: 0.1,
-            alpha_mode: AlphaMode::Opaque,
+            alpha_mode: AlphaMode::Blend,
             ..default()
         })),
         SkipReflection,
@@ -461,7 +461,9 @@ fn render_std_mat(
         build.load("directional_light_color", Vec3::ZERO);
     }
 
-    build.queue_val("alpha_blend", |m| material_alpha_blend(m));
+    build.queue_val("alpha_blend", |m| {
+        transparent_draw_from_alpha_mode(&m.alpha_mode)
+    });
     queue_val!(build, base_color);
     queue_val!(build, emissive);
     build.queue_val("has_normal_map", |m| m.normal_map_texture.is_some());
@@ -537,12 +539,13 @@ fn render_std_mat(
         let Some(material) = materials.get(material_h) else {
             continue;
         };
+
         let world_from_local = transform.to_matrix();
         let clip_from_local = view.clip_from_world * world_from_local;
 
         // If in opaque phase we must defer any alpha blend draws so they can be sorted and run in order.
         if !transparent_draws.maybe_defer::<StandardMaterial>(
-            material_alpha_blend(material),
+            transparent_draw_from_alpha_mode(&material.alpha_mode),
             phase,
             entity,
             transform,
@@ -561,6 +564,7 @@ fn render_std_mat(
         load_val!(build, clip_from_local);
 
         build.run(material);
+        set_blend_func_from_alpha_mode(&ctx.gl, &material.alpha_mode);
         gpu_meshes.draw_mesh(&ctx, mesh.id(), shader_index);
     }
 }
@@ -573,17 +577,4 @@ fn spot_dir_offset_scale(light: &SpotLight, trans: &GlobalTransform) -> Vec4 {
     octahedral_encode(trans.forward().as_vec3())
         .extend(spot_offset)
         .extend(spot_scale)
-}
-
-fn material_alpha_blend(material: &StandardMaterial) -> bool {
-    let material_blend = match material.alpha_mode {
-        AlphaMode::Opaque => false,
-        AlphaMode::Mask(_) => false,
-        AlphaMode::Blend => true,
-        AlphaMode::Premultiplied => true,
-        AlphaMode::AlphaToCoverage => true,
-        AlphaMode::Add => true,
-        AlphaMode::Multiply => true,
-    };
-    material_blend
 }

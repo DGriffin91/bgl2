@@ -238,3 +238,29 @@ pub fn default_plugins_no_render_backend() -> bevy::app::PluginGroupBuilder {
         ..default()
     })
 }
+
+pub fn transparent_draw_from_alpha_mode(alpha_mode: &AlphaMode) -> bool {
+    match alpha_mode {
+        AlphaMode::Opaque => false,
+        AlphaMode::Mask(_) => false,
+        AlphaMode::Blend => true,
+        AlphaMode::Premultiplied => true,
+        AlphaMode::AlphaToCoverage => true,
+        AlphaMode::Add => true,
+        AlphaMode::Multiply => true,
+    }
+}
+
+pub fn set_blend_func_from_alpha_mode(gl: &glow::Context, alpha_mode: &AlphaMode) {
+    unsafe {
+        match alpha_mode {
+            AlphaMode::Opaque => gl.blend_func(glow::ZERO, glow::ONE),
+            AlphaMode::Mask(_) => gl.blend_func(glow::ZERO, glow::ONE),
+            AlphaMode::Blend => gl.blend_func(glow::SRC_ALPHA, glow::ONE_MINUS_SRC_ALPHA),
+            AlphaMode::Premultiplied => gl.blend_func(glow::SRC_ALPHA, glow::ONE_MINUS_SRC_ALPHA),
+            AlphaMode::AlphaToCoverage => gl.blend_func(glow::SRC_ALPHA, glow::ONE_MINUS_SRC_ALPHA),
+            AlphaMode::Add => gl.blend_func(glow::SRC_ALPHA, glow::ONE),
+            AlphaMode::Multiply => gl.blend_func(glow::DST_COLOR, glow::ZERO),
+        }
+    }
+}
