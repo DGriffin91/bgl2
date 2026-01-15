@@ -15,6 +15,7 @@ uniform vec3 view_position;
 uniform vec2 view_resolution;
 
 uniform vec4 base_color;
+uniform vec3 emissive;
 uniform float metallic;
 uniform float perceptual_roughness;
 
@@ -27,6 +28,7 @@ uniform sampler2D base_color_texture;
 uniform sampler2D normal_map_texture;
 uniform bool has_normal_map;
 uniform sampler2D metallic_roughness_texture;
+uniform sampler2D emissive_texture;
 uniform samplerCube specular_map;
 uniform samplerCube diffuse_map;
 uniform float env_intensity;

@@ -74,12 +74,14 @@ void main() {
 
     float specular_intensity = 1.0;
 
-    vec3 V = normalize(ws_position - view_position);
+    vec3 V = normalize(view_position - ws_position);
 
     vec4 metallic_roughness = texture2D(metallic_roughness_texture, uv_0);
     float perceptual_roughness = metallic_roughness.g * perceptual_roughness; // TODO better name
     float roughness = perceptual_roughness * perceptual_roughness;
     float metallic = metallic * metallic_roughness.b;
+
+    vec3 emissive = emissive.rgb * texture2D(emissive_texture, uv_0).rgb;
 
     vec3 normal = vert_normal;
     if (has_normal_map) {
@@ -167,7 +169,7 @@ void main() {
             specular_color += mix(specular, specular * color.rgb, vec3(metallic)) * dist_attenuation * spot_attenuation;
         }
 
-        gl_FragColor = vec4(diffuse_color + specular_color, color.a);
+        gl_FragColor = vec4(diffuse_color + specular_color + emissive, color.a);
         gl_FragColor = clamp(gl_FragColor, vec4(0.0), vec4(1.0));
 
         #endif // NOT RENDER_SHADOW

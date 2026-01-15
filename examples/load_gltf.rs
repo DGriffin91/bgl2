@@ -51,7 +51,8 @@ fn main() {
 
     let mut app = App::new();
     app.insert_resource(args.clone())
-        .insert_resource(ClearColor(Color::srgb(1.75 * 0.5, 1.9 * 0.5, 1.99 * 0.5)))
+        //.insert_resource(ClearColor(Color::srgb(1.75 * 0.5, 1.9 * 0.5, 1.99 * 0.5)))
+        .insert_resource(ClearColor(Color::BLACK))
         .insert_resource(WinitSettings::continuous())
         .insert_resource(GlobalAmbientLight::NONE)
         .add_plugins((
@@ -123,7 +124,7 @@ fn setup(
         EnvironmentMapLight {
             diffuse_map: asset_server.load("environment_maps/pisa_diffuse_rgb9e5_zstd.ktx2"),
             specular_map: asset_server.load("environment_maps/pisa_specular_rgb9e5_zstd.ktx2"),
-            intensity: 250.0,
+            intensity: 500.0,
             ..default()
         },
         FreeCamera::default(),
@@ -131,59 +132,67 @@ fn setup(
     ));
 
     // sponza
-    commands
-        .spawn(SceneRoot(asset_server.load(
-            "models/sponza/main_sponza/NewSponza_Main_glTF_002.gltf#Scene0",
-        )))
-        .observe(proc_scene);
+    //commands
+    //    .spawn(SceneRoot(asset_server.load(
+    //        "models/sponza/main_sponza/NewSponza_Main_glTF_002.gltf#Scene0",
+    //    )))
+    //    .observe(proc_scene);
 
     // curtains
-    commands
-        .spawn(SceneRoot(asset_server.load(
-            "models/sponza/PKG_A_Curtains/NewSponza_Curtains_glTF.gltf#Scene0",
-        )))
-        .observe(proc_scene);
+    //commands
+    //    .spawn(SceneRoot(asset_server.load(
+    //        "models/sponza/PKG_A_Curtains/NewSponza_Curtains_glTF.gltf#Scene0",
+    //    )))
+    //    .observe(proc_scene);
 
-    commands.spawn(SceneRoot(asset_server.load(
-        GltfAssetLabel::Scene(0).from_asset("models/FlightHelmet/FlightHelmet.gltf"),
-    )));
+    //commands.spawn(SceneRoot(asset_server.load(
+    //    GltfAssetLabel::Scene(0).from_asset("models/FlightHelmet/FlightHelmet.gltf"),
+    //)));
 
-    // Reflection plane
-    // commands.spawn((
-    //     Mesh3d(meshes.add(Plane3d::default().mesh().size(50.0, 50.0))),
-    //     Transform::from_translation(vec3(0.0, 0.1, 0.0)),
-    //     ReflectionPlane::default(),
-    //     MeshMaterial3d(materials.add(StandardMaterial {
-    //         base_color: Color::linear_rgba(0.0, 0.0, 0.0, 0.5),
-    //         perceptual_roughness: 0.1,
-    //         alpha_mode: AlphaMode::Blend,
-    //         ..default()
-    //     })),
-    //     SkipReflection,
-    //     ReadReflection,
-    // ));
-
-    // Sun
     commands.spawn((
-        Transform::from_rotation(Quat::from_euler(EulerRot::XYZ, PI * -0.43, PI * -0.08, 0.0)),
-        DirectionalLight {
-            color: Color::srgb(1.0, 1.0, 0.99),
-            illuminance: 300000.0 * 0.2,
-            shadows_enabled: true,
-            shadow_depth_bias: 0.3,
-            shadow_normal_bias: 0.7,
-            ..default()
-        },
-        CascadeShadowConfigBuilder {
-            num_cascades: 1,
-            minimum_distance: 0.1,
-            maximum_distance: 25.0,
-            first_cascade_far_bound: 70.0,
-            overlap_proportion: 0.2,
-        }
-        .build(),
+        SceneRoot(
+            asset_server.load(GltfAssetLabel::Scene(0).from_asset("models/DamagedHelmet.glb")),
+        ),
+        Transform::from_scale(Vec3::ONE * 5.0).with_translation(vec3(0.0, 5.0, 0.0)),
     ));
 
+    // Reflection plane
+    //commands.spawn((
+    //    Mesh3d(meshes.add(Plane3d::default().mesh().size(50.0, 50.0))),
+    //    Transform::from_translation(vec3(0.0, 0.1, 0.0)),
+    //    ReflectionPlane::default(),
+    //    MeshMaterial3d(materials.add(StandardMaterial {
+    //        base_color: Color::linear_rgba(0.0, 0.0, 0.0, 1.0),
+    //        perceptual_roughness: 0.1,
+    //        alpha_mode: AlphaMode::Opaque,
+    //        ..default()
+    //    })),
+    //    SkipReflection,
+    //    ReadReflection,
+    //));
+
+    // Sun
+    //commands.spawn((
+    //    Transform::from_rotation(Quat::from_euler(EulerRot::XYZ, PI * -0.43, PI * -0.08, 0.0)),
+    //    DirectionalLight {
+    //        color: Color::srgb(1.0, 1.0, 0.99),
+    //        illuminance: 300000.0 * 0.2,
+    //        shadows_enabled: true,
+    //        shadow_depth_bias: 0.3,
+    //        shadow_normal_bias: 0.7,
+    //        ..default()
+    //    },
+    //    CascadeShadowConfigBuilder {
+    //        num_cascades: 1,
+    //        minimum_distance: 0.1,
+    //        maximum_distance: 25.0,
+    //        first_cascade_far_bound: 70.0,
+    //        overlap_proportion: 0.2,
+    //    }
+    //    .build(),
+    //));
+
+    /*
     let point_spot_mult = 1000.0;
 
     // Sun Refl
@@ -255,7 +264,7 @@ fn setup(
             outer_angle: PI * 0.5,
             ..default()
         },
-    ));
+    ));*/
 }
 
 #[allow(clippy::type_complexity)]
@@ -417,6 +426,7 @@ fn render_std_mat(
     queue_tex!(build, base_color_texture);
     queue_tex!(build, normal_map_texture);
     queue_tex!(build, metallic_roughness_texture);
+    queue_tex!(build, emissive_texture);
 
     let env_light = env_light.unwrap();
 
@@ -446,6 +456,7 @@ fn render_std_mat(
 
     build.queue_val("alpha_blend", |m| material_alpha_blend(m));
     build.queue_val("base_color", |m| m.base_color.to_linear().to_vec4());
+    build.queue_val("emissive", |m| m.emissive.to_vec3());
     build.queue_val("has_normal_map", |m| m.normal_map_texture.is_some());
 
     build.load("world_from_view", view.world_from_view);

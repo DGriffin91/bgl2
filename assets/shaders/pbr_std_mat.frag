@@ -137,6 +137,8 @@ void main() {
     float metallic = metallic * metallic_roughness.b;
     vec3 F0 = calculate_F0(color.rgb, metallic);
 
+    vec3 emissive = emissive.rgb * texture2D(emissive_texture, uv_0).rgb;
+
     vec3 normal = vert_normal;
     if (has_normal_map) {
         normal = apply_normal_mapping(normal_map_texture, vert_normal, tangent, uv_0);
@@ -230,7 +232,7 @@ void main() {
             specular_color += specular_brdf(V, L, normal, roughness, F0) * NoL * attenuation * light_color;
         }
 
-        gl_FragColor = vec4(diffuse_color + specular_color, color.a);
+        gl_FragColor = vec4(diffuse_color + specular_color + emissive, color.a);
         gl_FragColor.rgb = pow(agx_tonemapping(gl_FragColor.rgb), vec3(2.2)); //Convert back to linear
         gl_FragColor = clamp(gl_FragColor, vec4(0.0), vec4(1.0));
 
