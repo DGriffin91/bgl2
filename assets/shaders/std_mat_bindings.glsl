@@ -1,4 +1,6 @@
-#define MAX_POINT_LIGHTS 32
+// It seems like some drivers are limited by code length. 
+// The point light loop is unrolled so setting this too high can be an issue.
+#define MAX_POINT_LIGHTS 8
 
 varying vec4 clip_position;
 varying vec3 ws_position;

@@ -8,6 +8,7 @@ use bevy::{
 };
 
 use glow::{HasContext, PixelUnpackData};
+use shared_exponent_formats::rgb9e5::rgb9e5_to_vec3;
 use wgpu_types::TextureViewDimension;
 
 use crate::{BevyGlContext, render::RenderSet};
@@ -246,10 +247,8 @@ fn transfer_image_data(image: &bevy::prelude::Image, target: u32, ctx: &BevyGlCo
     let internal_format = match image.texture_descriptor.format {
         TextureFormat::Rgba8Unorm => rgb_format,
         TextureFormat::Rgba8UnormSrgb => rgb_format,
-        #[cfg(not(target_arch = "wasm32"))]
-        TextureFormat::Rgb9e5Ufloat => glow::RGB9_E5,
-        #[cfg(target_arch = "wasm32")]
-        TextureFormat::Rgb9e5Ufloat => rgb_format, // Not supported by WebGL1 so we convert to RGBE
+        // rgb9e5 not supported by WebGL1 or some OpenGL2 drivers so we convert to RGBE
+        TextureFormat::Rgb9e5Ufloat => rgb_format,
         _ => {
             warn!("unimplemented format {:?}", image.texture_descriptor.format);
             return;
@@ -259,9 +258,7 @@ fn transfer_image_data(image: &bevy::prelude::Image, target: u32, ctx: &BevyGlCo
     let pixel_format = match image.texture_descriptor.format {
         TextureFormat::Rgba8Unorm => glow::RGBA,
         TextureFormat::Rgba8UnormSrgb => glow::RGBA,
-        #[cfg(not(target_arch = "wasm32"))]
-        TextureFormat::Rgb9e5Ufloat => glow::RGB,
-        #[cfg(target_arch = "wasm32")]
+        // rgb9e5 not supported by WebGL1 or some OpenGL2 drivers so we convert to RGBE
         TextureFormat::Rgb9e5Ufloat => glow::RGBA,
         _ => {
             warn!("unimplemented format {:?}", image.texture_descriptor.format);
@@ -272,9 +269,7 @@ fn transfer_image_data(image: &bevy::prelude::Image, target: u32, ctx: &BevyGlCo
     let pixel_type = match image.texture_descriptor.format {
         TextureFormat::Rgba8Unorm => glow::UNSIGNED_BYTE,
         TextureFormat::Rgba8UnormSrgb => glow::UNSIGNED_BYTE,
-        #[cfg(not(target_arch = "wasm32"))]
-        TextureFormat::Rgb9e5Ufloat => glow::UNSIGNED_INT_5_9_9_9_REV,
-        #[cfg(target_arch = "wasm32")]
+        // rgb9e5 not supported by WebGL1 or some OpenGL2 drivers so we convert to RGBE
         TextureFormat::Rgb9e5Ufloat => glow::UNSIGNED_BYTE,
         _ => {
             warn!("unimplemented format {:?}", image.texture_descriptor.format);
@@ -286,19 +281,17 @@ fn transfer_image_data(image: &bevy::prelude::Image, target: u32, ctx: &BevyGlCo
         return;
     };
 
-    #[allow(unused)]
-    let mut converted_rgbe: Option<Vec<u32>> = None;
-    #[cfg(target_arch = "wasm32")]
-    if image.texture_descriptor.format == TextureFormat::Rgb9e5Ufloat {
-        // rgb9e5 Not supported by WebGL1 so we convert to RGBE
-        use shared_exponent_formats::rgb9e5::rgb9e5_to_vec3;
-        converted_rgbe = Some(
+    let converted_rgbe = if image.texture_descriptor.format == TextureFormat::Rgb9e5Ufloat {
+        // rgb9e5 not supported by WebGL1 or some OpenGL2 drivers so we convert to RGBE
+        Some(
             bytemuck::cast_slice::<u8, u32>(image_data)
                 .iter()
                 .map(|c| float2rgbe(rgb9e5_to_vec3(*c)))
                 .collect::<Vec<u32>>(),
-        );
-    }
+        )
+    } else {
+        None
+    };
 
     let image_data = if let Some(converted_rgbe) = &converted_rgbe {
         bytemuck::cast_slice::<u32, u8>(converted_rgbe)

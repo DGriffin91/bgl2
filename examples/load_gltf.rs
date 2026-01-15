@@ -116,7 +116,8 @@ fn setup(
     // Camera
     commands.spawn((
         Camera3d::default(),
-        Transform::from_xyz(-10.5, 1.7, -1.0).looking_at(Vec3::new(0.0, 3.5, 0.0), Vec3::Y),
+        //Transform::from_xyz(-10.5, 1.7, -1.0).looking_at(Vec3::new(0.0, 3.5, 0.0), Vec3::Y),
+        Transform::from_xyz(12.5, 1.7, 12.0).looking_at(Vec3::new(0.0, 2.5, 0.0), Vec3::Y),
         Projection::Perspective(PerspectiveProjection {
             fov: std::f32::consts::PI / 3.0,
             ..default()
@@ -157,42 +158,41 @@ fn setup(
     ));
 
     // Reflection plane
-    //commands.spawn((
-    //    Mesh3d(meshes.add(Plane3d::default().mesh().size(50.0, 50.0))),
-    //    Transform::from_translation(vec3(0.0, 0.1, 0.0)),
-    //    ReflectionPlane::default(),
-    //    MeshMaterial3d(materials.add(StandardMaterial {
-    //        base_color: Color::linear_rgba(0.0, 0.0, 0.0, 1.0),
-    //        perceptual_roughness: 0.1,
-    //        alpha_mode: AlphaMode::Opaque,
-    //        ..default()
-    //    })),
-    //    SkipReflection,
-    //    ReadReflection,
-    //));
+    commands.spawn((
+        Mesh3d(meshes.add(Plane3d::default().mesh().size(50.0, 50.0))),
+        Transform::from_translation(vec3(0.0, 0.1, 0.0)),
+        ReflectionPlane::default(),
+        MeshMaterial3d(materials.add(StandardMaterial {
+            base_color: Color::linear_rgba(0.0, 0.0, 0.0, 1.0),
+            perceptual_roughness: 0.1,
+            alpha_mode: AlphaMode::Opaque,
+            ..default()
+        })),
+        SkipReflection,
+        ReadReflection,
+    ));
 
     // Sun
-    //commands.spawn((
-    //    Transform::from_rotation(Quat::from_euler(EulerRot::XYZ, PI * -0.43, PI * -0.08, 0.0)),
-    //    DirectionalLight {
-    //        color: Color::srgb(1.0, 1.0, 0.99),
-    //        illuminance: 300000.0 * 0.2,
-    //        shadows_enabled: true,
-    //        shadow_depth_bias: 0.3,
-    //        shadow_normal_bias: 0.7,
-    //        ..default()
-    //    },
-    //    CascadeShadowConfigBuilder {
-    //        num_cascades: 1,
-    //        minimum_distance: 0.1,
-    //        maximum_distance: 25.0,
-    //        first_cascade_far_bound: 70.0,
-    //        overlap_proportion: 0.2,
-    //    }
-    //    .build(),
-    //));
+    commands.spawn((
+        Transform::from_rotation(Quat::from_euler(EulerRot::XYZ, PI * -0.43, PI * -0.08, 0.0)),
+        DirectionalLight {
+            color: Color::srgb(1.0, 1.0, 0.99),
+            illuminance: 300000.0 * 0.2,
+            shadows_enabled: true,
+            shadow_depth_bias: 0.3,
+            shadow_normal_bias: 0.7,
+            ..default()
+        },
+        CascadeShadowConfigBuilder {
+            num_cascades: 1,
+            minimum_distance: 0.1,
+            maximum_distance: 25.0,
+            first_cascade_far_bound: 70.0,
+            overlap_proportion: 0.2,
+        }
+        .build(),
+    ));
 
-    /*
     let point_spot_mult = 1000.0;
 
     // Sun Refl
@@ -264,7 +264,7 @@ fn setup(
             outer_angle: PI * 0.5,
             ..default()
         },
-    ));*/
+    ));
 }
 
 #[allow(clippy::type_complexity)]

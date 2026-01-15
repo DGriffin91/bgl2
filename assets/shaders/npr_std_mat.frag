@@ -113,61 +113,50 @@ void main() {
         // Environment map / reflection
         float mip_levels = 8.0; // TODO put in uniform
 
-        vec4 diffuse_env_color = textureCubeLod(diffuse_map, normal, 0.0);
-        #ifdef WEBGL1
-        diffuse_env_color.rgb = rgbe2rgb(diffuse_env_color);
-        #endif
-        diffuse_color += color.rgb * diffuse_env_color.rgb * (1.0 - metallic) * env_intensity * ENV_LIGHT_PRE_EXPOSE;
+        vec3 diffuse_env_color = rgbe2rgb(textureCubeLod(diffuse_map, normal, 0.0));
+
+        diffuse_color += color.rgb * diffuse_env_color * (1.0 - metallic) * env_intensity * ENV_LIGHT_PRE_EXPOSE;
 
         vec3 env_specular;
         if (read_reflection && perceptual_roughness < 0.2) {
             vec3 sharp_reflection_color = texture2D(reflect_texture, screen_uv).rgb;
             env_specular = sharp_reflection_color.rgb * specular_intensity;
         } else {
-            vec4 specular_env_color = textureCubeLod(specular_map, reflect(-V, normal), perceptual_roughness * mip_levels);
-            #ifdef WEBGL1
-            specular_env_color.rgb = rgbe2rgb(specular_env_color);
-            #endif
-            env_specular = specular_env_color.rgb * specular_intensity * env_intensity * ENV_LIGHT_PRE_EXPOSE;
+            vec3 specular_env_color = rgbe2rgb(textureCubeLod(specular_map, reflect(-V, normal), perceptual_roughness * mip_levels));
+            env_specular = specular_env_color * specular_intensity * env_intensity * ENV_LIGHT_PRE_EXPOSE;
         }
         specular_color += mix(env_specular, env_specular * color.rgb, vec3(metallic));
     }
 
     // Point Lights
-    #ifdef WEBGL1
+
     for (int i = 0; i < MAX_POINT_LIGHTS; i++) {
-        #else
-        for (int i = 0; i < light_count; i++) {
-            #endif //WEBGL1
+        if (i < light_count) {
             vec4 light_position_range = point_light_position_range[i];
             vec3 to_light = light_position_range.xyz - ws_position;
             float distance = length(to_light);
-            bool in_range = distance < light_position_range.w;
-            #ifdef WEBGL1
-            in_range = in_range && (i < MAX_POINT_LIGHTS);
-            #endif
-            if (!in_range) {
-                continue;
+
+            if (distance < light_position_range.w) {
+                vec4 light_color_radius = point_light_color_radius[i];
+                vec3 light_color = light_color_radius.rgb * POINT_LIGHT_PRE_EXPOSE;
+
+                vec3 to_light_dir = normalize(to_light);
+                vec3 half_dir = normalize(to_light_dir + V);
+
+                float dist_attenuation = distance_attenuation(distance, light_position_range.w);
+                float lambert = max(dot(to_light_dir, normal), 0.0);
+
+                vec4 dos = spot_light_dir_offset_scale[i];
+                float spot_attenuation = spot_angle_attenuation(octahedral_decode(dos.xy), to_light_dir, dos.z, dos.w);
+
+                diffuse_color += color.rgb * (1.0 - metallic) * light_color * lambert * dist_attenuation * spot_attenuation;
+
+                float spec_angle = max(dot(half_dir, normal), 0.0);
+                vec3 specular = pow(spec_angle, shininess) * light_color * specular_intensity;
+                specular_color += mix(specular, specular * color.rgb, vec3(metallic)) * dist_attenuation * spot_attenuation;
             }
-
-            vec4 light_color_radius = point_light_color_radius[i];
-            vec3 light_color = light_color_radius.rgb * POINT_LIGHT_PRE_EXPOSE;
-
-            vec3 to_light_dir = normalize(to_light);
-            vec3 half_dir = normalize(to_light_dir + V);
-
-            float dist_attenuation = distance_attenuation(distance, light_position_range.w);
-            float lambert = max(dot(to_light_dir, normal), 0.0);
-
-            vec4 dos = spot_light_dir_offset_scale[i];
-            float spot_attenuation = spot_angle_attenuation(octahedral_decode(dos.xy), to_light_dir, dos.z, dos.w);
-
-            diffuse_color += color.rgb * (1.0 - metallic) * light_color * lambert * dist_attenuation * spot_attenuation;
-
-            float spec_angle = max(dot(half_dir, normal), 0.0);
-            vec3 specular = pow(spec_angle, shininess) * light_color * specular_intensity;
-            specular_color += mix(specular, specular * color.rgb, vec3(metallic)) * dist_attenuation * spot_attenuation;
         }
+    }
 
         gl_FragColor = vec4(diffuse_color + specular_color + emissive, color.a);
         gl_FragColor = clamp(gl_FragColor, vec4(0.0), vec4(1.0));
