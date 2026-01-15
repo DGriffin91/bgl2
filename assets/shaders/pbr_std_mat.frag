@@ -148,11 +148,11 @@ void main() {
     vec3 specular_color = vec3(0.0);
     vec3 diffuse_color = vec3(0.0);
 
-    if (dir_shadow > 0.0 && directional_light_dir_to_light != vec3(0.0)) {
+    if (dir_shadow > 0.0 && directional_light_dir != vec3(0.0)) {
         // Directional Light
         vec3 light_color = directional_light_color * DIR_LIGHT_PRE_EXPOSE;
 
-        vec3 L = normalize(directional_light_dir_to_light);
+        vec3 L = normalize(-directional_light_dir);
         vec3 half_dir = normalize(L + V);
 
         float NoL = clamp(dot(normal, L), 0.0, 1.0);
@@ -218,7 +218,7 @@ void main() {
         }
     }
 
-    gl_FragColor = vec4(diffuse_color + specular_color + emissive, color.a);
+    gl_FragColor = vec4(diffuse_color + specular_color + emissive.rgb, color.a);
     gl_FragColor.rgb = pow(agx_tonemapping(gl_FragColor.rgb), vec3(2.2)); //Convert back to linear
     gl_FragColor = clamp(gl_FragColor, vec4(0.0), vec4(1.0));
 

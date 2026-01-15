@@ -357,6 +357,10 @@ fn prepare_view(
     });
 }
 
+// It seems like some drivers are limited by code length.
+// The point light loop is unrolled so setting this too high can be an issue.
+const MAX_POINT_LIGHTS: usize = 8;
+
 fn render_std_mat(
     mesh_entities: Query<(
         Entity,
@@ -395,12 +399,15 @@ fn render_std_mat(
         shadow_def = shadow.as_ref().map_or(("", ""), |_| ("SAMPLE_SHADOW", ""));
     }
 
+    let max_point_lights = format!("{MAX_POINT_LIGHTS}");
+    let max_lights_def = ("MAX_POINT_LIGHTS", max_point_lights.as_str());
+
     let shader_index = if args.npr {
         shader_cached!(
             ctx,
             "../assets/shaders/std_mat.vert",
             "../assets/shaders/npr_std_mat.frag",
-            &[shadow_def]
+            &[shadow_def, max_lights_def]
         )
         .unwrap()
     } else {
@@ -408,7 +415,7 @@ fn render_std_mat(
             ctx,
             "../assets/shaders/std_mat.vert",
             "../assets/shaders/pbr_std_mat.frag",
-            &[shadow_def]
+            &[shadow_def, max_lights_def]
         )
         .unwrap()
     };
@@ -444,27 +451,27 @@ fn render_std_mat(
     }
 
     if let Some((trans, light)) = directional_lights.iter().next() {
-        build.load("directional_light_dir_to_light", -trans.forward().as_vec3());
+        build.load("directional_light_dir", trans.forward().as_vec3());
         build.load(
             "directional_light_color",
             light.color.to_linear().to_vec3() * light.illuminance,
         );
     } else {
-        build.load("directional_light_dir_to_light", Vec3::ZERO);
+        build.load("directional_light_dir", Vec3::ZERO);
         build.load("directional_light_color", Vec3::ZERO);
     }
 
     build.queue_val("alpha_blend", |m| material_alpha_blend(m));
-    build.queue_val("base_color", |m| m.base_color.to_linear().to_vec4());
-    build.queue_val("emissive", |m| m.emissive.to_vec3());
+    queue_val!(build, base_color);
+    queue_val!(build, emissive);
     build.queue_val("has_normal_map", |m| m.normal_map_texture.is_some());
 
     build.load("world_from_view", view.world_from_view);
     build.load("view_position", view.position);
 
     let view_resolution = vec2(
-        bevy_window.physical_width().max(1) as f32,
-        bevy_window.physical_height().max(1) as f32,
+        bevy_window.physical_width() as f32,
+        bevy_window.physical_height() as f32,
     );
     load_val!(build, view_resolution);
 
@@ -473,6 +480,9 @@ fn render_std_mat(
     let mut spot_light_dir_offset_scale = Vec::new();
 
     for (light, trans) in &point_lights {
+        if spot_light_dir_offset_scale.len() >= MAX_POINT_LIGHTS {
+            break;
+        }
         point_light_position_range.push(trans.translation().extend(light.range));
         point_light_color_radius
             .push((light.color.to_linear().to_vec3() * light.intensity).extend(light.radius));
@@ -480,6 +490,9 @@ fn render_std_mat(
     }
 
     for (light, trans) in &spot_lights {
+        if spot_light_dir_offset_scale.len() >= MAX_POINT_LIGHTS {
+            break;
+        }
         point_light_position_range.push(trans.translation().extend(light.range));
         point_light_color_radius
             .push((light.color.to_linear().to_vec3() * light.intensity).extend(light.radius));
@@ -493,9 +506,9 @@ fn render_std_mat(
     load_slice!(build, spot_light_dir_offset_scale);
 
     build.load("write_reflection", phase.reflection());
-    let reflect_bool = build.get_uniform_location("read_reflection");
+    let reflect_bool_location = build.get_uniform_location("read_reflection");
     if let Some(reflect_texture) = &reflect_texture {
-        if reflect_bool.is_some() {
+        if reflect_bool_location.is_some() {
             let reflect_texture = reflect_texture.texture.clone();
             load_tex!(build, reflect_texture);
         }
@@ -540,7 +553,7 @@ fn render_std_mat(
             continue;
         }
 
-        reflect_bool
+        reflect_bool_location
             .clone()
             .map(|loc| (read_reflect && phase.read_reflect()).load(&ctx, &loc));
 

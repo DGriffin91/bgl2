@@ -92,14 +92,14 @@ void main() {
     vec3 diffuse_color = vec3(0.0);
 
     float shininess = mix(0.0, 64.0, (1.0 - roughness));
-    if (dir_shadow > 0.0 && directional_light_dir_to_light != vec3(0.0)) {
+    if (dir_shadow > 0.0 && directional_light_dir != vec3(0.0)) {
         vec3 light_color = directional_light_color * DIR_LIGHT_PRE_EXPOSE;
 
         // Directional Light
         // https://en.wikipedia.org/wiki/Blinn%E2%80%93Phong_reflection_model
-        float lambert = max(dot(directional_light_dir_to_light, normal), 0.0);
+        float lambert = max(dot(-directional_light_dir, normal), 0.0);
 
-        vec3 half_dir = normalize(directional_light_dir_to_light + V);
+        vec3 half_dir = normalize(-directional_light_dir + V);
         float spec_angle = max(dot(half_dir, normal), 0.0);
         float specular = pow(spec_angle, shininess);
         specular = specular * pow(min(lambert + 1.0, 1.0), 4.0); // Fade out spec TODO improve
@@ -158,7 +158,7 @@ void main() {
         }
     }
 
-        gl_FragColor = vec4(diffuse_color + specular_color + emissive, color.a);
+        gl_FragColor = vec4(diffuse_color + specular_color + emissive.rgb, color.a);
         gl_FragColor = clamp(gl_FragColor, vec4(0.0), vec4(1.0));
 
         #endif // NOT RENDER_SHADOW

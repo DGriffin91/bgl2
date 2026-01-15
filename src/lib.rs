@@ -807,6 +807,39 @@ impl UniformValue for Mat4 {
     }
 }
 
+impl UniformValue for LinearRgba {
+    fn load(&self, ctx: &BevyGlContext, loc: &glow::UniformLocation) {
+        unsafe {
+            ctx.gl
+                .uniform_4_f32_slice(Some(&loc), &self.to_vec4().to_array())
+        };
+    }
+    fn read_raw(&self, out: &mut StackStack<u32, 16>) {
+        out.clear();
+        self.to_vec4()
+            .to_array()
+            .iter()
+            .for_each(|n| out.push(n.to_bits()));
+    }
+}
+
+impl UniformValue for Color {
+    fn load(&self, ctx: &BevyGlContext, loc: &glow::UniformLocation) {
+        unsafe {
+            ctx.gl
+                .uniform_4_f32_slice(Some(&loc), &self.to_linear().to_vec4().to_array())
+        };
+    }
+    fn read_raw(&self, out: &mut StackStack<u32, 16>) {
+        out.clear();
+        self.to_linear()
+            .to_vec4()
+            .to_array()
+            .iter()
+            .for_each(|n| out.push(n.to_bits()));
+    }
+}
+
 #[macro_export]
 /// if target_arch = wasm32 or the bundle_shaders feature is enabled the shader strings will be included in the binary.
 /// otherwise they will be hot reloaded when modified.

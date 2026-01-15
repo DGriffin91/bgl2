@@ -1,7 +1,3 @@
-// It seems like some drivers are limited by code length. 
-// The point light loop is unrolled so setting this too high can be an issue.
-#define MAX_POINT_LIGHTS 8
-
 varying vec4 clip_position;
 varying vec3 ws_position;
 varying vec4 tangent;
@@ -10,14 +6,14 @@ varying vec2 uv_0;
 varying vec2 uv_1;
 
 uniform mat4 shadow_clip_from_world;
-uniform vec3 directional_light_dir_to_light;
+uniform vec3 directional_light_dir;
 uniform vec3 directional_light_color;
 
 uniform vec3 view_position;
 uniform vec2 view_resolution;
 
 uniform vec4 base_color;
-uniform vec3 emissive;
+uniform vec4 emissive;
 uniform float metallic;
 uniform float perceptual_roughness;
 
