@@ -16,8 +16,8 @@ vec3 apply_normal_mapping(sampler2D normal_tex, vec3 ws_normal, vec4 ws_tangent,
     return normalize(N);
 }
 
-float distance_attenuation(float distance, float range) {
-    float distanceSquare = distance * distance;
+float distance_attenuation(float dist, float range) {
+    float distanceSquare = dist * dist;
     float inverseRangeSquared = 1.0 / (range * range);
     float factor = distanceSquare * inverseRangeSquared;
     float smoothFactor = clamp(1.0 - factor * factor, 0.0, 1.0);
@@ -84,15 +84,15 @@ vec2 F_AB(float perceptual_roughness, float NoV) {
 
 
 vec3 directional_light(vec3 V, vec3 F0, vec3 base_color, vec3 normal, float roughness, float shadow, vec3 light_dir, vec3 color) {
-    vec3 output = vec3(0.0);
+    vec3 res = vec3(0.0, 0.0, 0.0);
     if (shadow > 0.0 && light_dir != vec3(0.0)) {
         vec3 L = normalize(-light_dir);
         vec3 half_dir = normalize(L + V);
         float NoL = clamp(dot(normal, L), 0.0, 1.0);
-        output += shadow * base_color.rgb * Fd_Lambert() * NoL * color;
-        output += shadow * specular_brdf(V, L, normal, roughness, F0) * NoL * color;
+        res += shadow * base_color.rgb * Fd_Lambert() * NoL * color;
+        res += shadow * specular_brdf(V, L, normal, roughness, F0) * NoL * color;
     }
-    return output;
+    return res;
 }
 
 vec3 environment_light(float NoV, vec3 F0, float perceptual_roughness, vec3 base_color, vec3 env_diffuse, vec3 env_specular) {
@@ -113,7 +113,7 @@ vec3 environment_light(float NoV, vec3 F0, float perceptual_roughness, vec3 base
 }
 
 vec3 point_light(vec3 V, vec3 base_color, vec3 F0, vec3 normal, float roughness, vec3 to_light, float range, vec3 color, vec3 spot_dir, float spot_offset, float spot_scale) {
-    vec3 output_color = vec3(0.0);
+    vec3 res = vec3(0.0);
     float dist = length(to_light);
     if (dist < range) {
         vec3 L = normalize(to_light);
@@ -123,8 +123,8 @@ vec3 point_light(vec3 V, vec3 base_color, vec3 F0, vec3 normal, float roughness,
         float attenuation = dist_attenuation * spot_attenuation;
         float NoL = clamp(dot(normal, L), 0.0, 1.0);
 
-        output_color += base_color.rgb * Fd_Lambert() * NoL * attenuation * color;
-        output_color += specular_brdf(V, L, normal, roughness, F0) * NoL * attenuation * color;
+        res += base_color.rgb * Fd_Lambert() * NoL * attenuation * color;
+        res += specular_brdf(V, L, normal, roughness, F0) * NoL * attenuation * color;
     }
-    return output_color;
+    return res;
 }
