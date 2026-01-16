@@ -63,3 +63,16 @@ vec4 from_linear(vec4 linearRGB) {
     return vec4(pow(linearRGB.rgb, vec3(1.0 / 2.2)), linearRGB.a);
 }
 
+float max3(float x, float y, float z) { return max(x, max(y, z)); }
+
+// https://gpuopen.com/learn/optimized-reversible-tonemapper-for-resolve/
+// Apply this to tonemap linear HDR color "c" after a sample is fetched in the resolve.
+// Note "c" 1.0 maps to the expected limit of low-dynamic-range monitor output.
+vec3 reversible_tonemap(vec3 c) { return c * (1.0 / (max3(c.r, c.g, c.b) + 1.0)); }
+
+// When the filter kernel is a weighted sum of fetched colors,
+// it is more optimal to fold the weighting into the tonemap operation.
+vec3 reversible_tonemap_weighted(vec3 c, float w) { return c * (w * (1.0 / (max3(c.r, c.g, c.b) + 1.0))); }
+
+// Apply this to restore the linear HDR color before writing out the result of the resolve.
+vec3 reversible_tonemap_invert(vec3 c) { return c * (1.0 / (1.0 - max3(c.r, c.g, c.b))); }

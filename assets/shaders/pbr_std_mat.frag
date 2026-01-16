@@ -67,8 +67,8 @@ void main() {
 
         vec3 env_specular = vec3(0.0);
         if (read_reflection && perceptual_roughness < 0.2) {
-            vec3 sharp_reflection_color = to_linear(texture2D(reflect_texture, screen_uv).rgb);
-            // TODO integrate properly (invert tonemapping? blend post tonemapping?)
+            vec3 sharp_reflection_color = reversible_tonemap_invert(texture2D(reflect_texture, screen_uv).rgb);
+            // TODO integrate brdf properly
             output_color += sharp_reflection_color.rgb / view_exposure; 
         } else {
             vec3 dir = reflect(-V, normal);
@@ -93,8 +93,12 @@ void main() {
     }
 
     gl_FragColor = vec4(view_exposure * (output_color + emissive.rgb), base_color.a);
-    gl_FragColor.rgb = agx_tonemapping(gl_FragColor.rgb); // in: linear, out: srgb
-    //gl_FragColor.rgb = from_linear(gl_FragColor.rgb); // in: linear, out: srgb
+    if (write_reflection) {
+        gl_FragColor.rgb = reversible_tonemap(gl_FragColor.rgb);
+    } else {
+        gl_FragColor.rgb = agx_tonemapping(gl_FragColor.rgb); // in: linear, out: srgb
+        //gl_FragColor.rgb = from_linear(gl_FragColor.rgb); // in: linear, out: srgb
+    }
     gl_FragColor = clamp(gl_FragColor, vec4(0.0), vec4(1.0));
 
     #endif // NOT RENDER_DEPTH_ONLY
