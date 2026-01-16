@@ -167,9 +167,9 @@ void main() {
 
         vec3 env_specular = vec3(0.0);
         if (read_reflection && perceptual_roughness < 0.2) {
-            vec3 sharp_reflection_color = texture2D(reflect_texture, screen_uv).rgb;
+            vec3 sharp_reflection_color = to_linear(texture2D(reflect_texture, screen_uv).rgb);
             // TODO integrate properly (invert tonemapping? blend post tonemapping?)
-            specular_color += sharp_reflection_color.rgb * F0 * 10.0; 
+            specular_color += sharp_reflection_color.rgb; 
         } else {
             vec3 dir = reflect(-V, normal);
             env_specular = rgbe2rgb(textureCubeLod(specular_map, vec3(dir.xy, -dir.z), perceptual_roughness * mip_levels)) * env_intensity;
