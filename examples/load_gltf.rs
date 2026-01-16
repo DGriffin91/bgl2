@@ -134,34 +134,34 @@ fn setup(
         Tonemapping::TonyMcMapface,
     ));
 
-    //commands
-    //    .spawn((
-    //        SceneRoot(asset_server.load("models/san-miguel/san-miguel.gltf#Scene0")),
-    //        Transform::from_xyz(-18.0, 0.0, 0.0),
-    //    ))
-    //    .observe(proc_scene);
+    commands
+        .spawn((
+            SceneRoot(asset_server.load("models/san-miguel/san-miguel.gltf#Scene0")),
+            Transform::from_xyz(-18.0, 0.0, 0.0),
+        ))
+        .observe(proc_scene);
 
-    commands.spawn((
-        SceneRoot(
-            asset_server.load(GltfAssetLabel::Scene(0).from_asset("models/DamagedHelmet.glb")),
-        ),
-        Transform::from_scale(Vec3::ONE * 5.0).with_translation(vec3(0.0, 5.0, 0.0)),
-    ));
+    //commands.spawn((
+    //    SceneRoot(
+    //        asset_server.load(GltfAssetLabel::Scene(0).from_asset("models/DamagedHelmet.glb")),
+    //    ),
+    //    Transform::from_scale(Vec3::ONE * 5.0).with_translation(vec3(0.0, 5.0, 0.0)),
+    //));
 
     // Reflection plane
-    commands.spawn((
-        Mesh3d(meshes.add(Plane3d::default().mesh().size(50.0, 50.0))),
-        Transform::from_translation(vec3(0.0, 0.1, 0.0)),
-        ReflectionPlane::default(),
-        MeshMaterial3d(materials.add(StandardMaterial {
-            base_color: Color::linear_rgba(0.0, 0.0, 0.0, 0.8),
-            perceptual_roughness: 0.1,
-            alpha_mode: AlphaMode::Blend,
-            ..default()
-        })),
-        SkipReflection,
-        ReadReflection,
-    ));
+    //commands.spawn((
+    //    Mesh3d(meshes.add(Plane3d::default().mesh().size(50.0, 50.0))),
+    //    Transform::from_translation(vec3(0.0, 0.1, 0.0)),
+    //    ReflectionPlane::default(),
+    //    MeshMaterial3d(materials.add(StandardMaterial {
+    //        base_color: Color::linear_rgba(0.0, 0.0, 0.0, 0.8),
+    //        perceptual_roughness: 0.1,
+    //        alpha_mode: AlphaMode::Blend,
+    //        ..default()
+    //    })),
+    //    SkipReflection,
+    //    ReadReflection,
+    //));
 
     // Sun
     commands.spawn((
@@ -398,55 +398,12 @@ fn render_std_mat(
 
     let mut build = UniformSlotBuilder::<StandardMaterial>::new(&ctx, &gpu_images, shader_index);
 
-    queue_val!(build, flip_normal_map_y);
     queue_val!(build, double_sided);
-    queue_val!(build, perceptual_roughness);
-    queue_val!(build, metallic);
-    build.queue_val("reflectance", |m| {
-        m.specular_tint.to_linear().to_vec3() * m.reflectance
-    });
-
     queue_tex!(build, base_color_texture);
-    queue_tex!(build, normal_map_texture);
-    queue_tex!(build, metallic_roughness_texture);
-    queue_tex!(build, emissive_texture);
-
-    let env_light = env_light.unwrap();
-
-    let specular_map = env_light.specular_map.clone();
-    load_tex!(build, specular_map);
-    let diffuse_map = env_light.diffuse_map.clone();
-    load_tex!(build, diffuse_map);
-    build.load("env_intensity", env_light.intensity);
-
-    if let Some(shadow) = &shadow {
-        let shadow_texture = shadow.texture.clone();
-        load_tex!(build, shadow_texture);
-        let shadow_clip_from_world = shadow.cascade.clip_from_world;
-        load_val!(build, shadow_clip_from_world);
-    }
-
-    if let Some((trans, light)) = directional_lights.iter().next() {
-        build.load("directional_light_dir", trans.forward().as_vec3());
-        build.load(
-            "directional_light_color",
-            light.color.to_linear().to_vec3() * light.illuminance,
-        );
-    } else {
-        build.load("directional_light_dir", Vec3::ZERO);
-        build.load("directional_light_color", Vec3::ZERO);
-    }
-
-    build.queue_val("alpha_blend", |m| {
-        transparent_draw_from_alpha_mode(&m.alpha_mode)
-    });
     queue_val!(build, base_color);
-    queue_val!(build, emissive);
-    build.queue_val("has_normal_map", |m| m.normal_map_texture.is_some());
 
     build.load("world_from_view", view.world_from_view);
     build.load("view_position", view.position);
-    build.load("view_exposure", view.exposure);
     build.load("clip_from_world", view.clip_from_world);
 
     let view_resolution = vec2(
@@ -454,53 +411,99 @@ fn render_std_mat(
         bevy_window.physical_height() as f32,
     );
     load_val!(build, view_resolution);
-
-    let mut point_light_position_range = Vec::new();
-    let mut point_light_color_radius = Vec::new();
-    let mut spot_light_dir_offset_scale = Vec::new();
-
-    for (light, trans) in &point_lights {
-        if spot_light_dir_offset_scale.len() >= MAX_POINT_LIGHTS {
-            break;
-        }
-        point_light_position_range.push(trans.translation().extend(light.range));
-        point_light_color_radius.push(
-            (light.color.to_linear().to_vec3() * light.intensity * POWER_TO_INTENSITY)
-                .extend(light.radius),
-        );
-        spot_light_dir_offset_scale.push(vec4(1.0, 0.0, 2.0, 1.0));
-    }
-
-    for (light, trans) in &spot_lights {
-        if spot_light_dir_offset_scale.len() >= MAX_POINT_LIGHTS {
-            break;
-        }
-        point_light_position_range.push(trans.translation().extend(light.range));
-        point_light_color_radius.push(
-            (light.color.to_linear().to_vec3() * light.intensity * POWER_TO_INTENSITY)
-                .extend(light.radius),
-        );
-        spot_light_dir_offset_scale.push(spot_dir_offset_scale(light, trans));
-    }
-
-    let light_count = point_light_position_range.len() as i32;
-    load_val!(build, light_count);
-    load_slice!(build, point_light_position_range);
-    load_slice!(build, point_light_color_radius);
-    load_slice!(build, spot_light_dir_offset_scale);
-
     build.load("write_reflection", phase.reflection());
-    let reflect_bool_location = build.get_uniform_location("read_reflection");
-    if let Some(reflect_texture) = &reflect_texture {
-        if reflect_bool_location.is_some() {
-            let reflect_texture = reflect_texture.texture.clone();
-            load_tex!(build, reflect_texture);
-        }
-    }
+    let mut reflect_bool_location = None;
 
-    if let Some(plane) = &mut plane_reflection {
-        build.load("reflection_plane_position", plane.1.translation());
-        build.load("reflection_plane_normal", plane.1.up().as_vec3());
+    if !phase.depth_only() {
+        queue_val!(build, flip_normal_map_y);
+        queue_val!(build, perceptual_roughness);
+        queue_val!(build, metallic);
+        queue_val!(build, emissive);
+        build.queue_val("reflectance", |m| {
+            m.specular_tint.to_linear().to_vec3() * m.reflectance
+        });
+        queue_tex!(build, normal_map_texture);
+        queue_tex!(build, metallic_roughness_texture);
+        queue_tex!(build, emissive_texture);
+
+        let env_light = env_light.unwrap();
+
+        let specular_map = env_light.specular_map.clone();
+        load_tex!(build, specular_map);
+        let diffuse_map = env_light.diffuse_map.clone();
+        load_tex!(build, diffuse_map);
+        build.load("env_intensity", env_light.intensity);
+
+        if let Some(shadow) = &shadow {
+            let shadow_texture = shadow.texture.clone();
+            load_tex!(build, shadow_texture);
+            let shadow_clip_from_world = shadow.cascade.clip_from_world;
+            load_val!(build, shadow_clip_from_world);
+        }
+
+        if let Some((trans, light)) = directional_lights.iter().next() {
+            build.load("directional_light_dir", trans.forward().as_vec3());
+            build.load(
+                "directional_light_color",
+                light.color.to_linear().to_vec3() * light.illuminance,
+            );
+        } else {
+            build.load("directional_light_dir", Vec3::ZERO);
+            build.load("directional_light_color", Vec3::ZERO);
+        }
+
+        build.queue_val("alpha_blend", |m| {
+            transparent_draw_from_alpha_mode(&m.alpha_mode)
+        });
+        build.queue_val("has_normal_map", |m| m.normal_map_texture.is_some());
+        build.load("view_exposure", view.exposure);
+
+        let mut point_light_position_range = Vec::new();
+        let mut point_light_color_radius = Vec::new();
+        let mut spot_light_dir_offset_scale = Vec::new();
+
+        for (light, trans) in &point_lights {
+            if spot_light_dir_offset_scale.len() >= MAX_POINT_LIGHTS {
+                break;
+            }
+            point_light_position_range.push(trans.translation().extend(light.range));
+            point_light_color_radius.push(
+                (light.color.to_linear().to_vec3() * light.intensity * POWER_TO_INTENSITY)
+                    .extend(light.radius),
+            );
+            spot_light_dir_offset_scale.push(vec4(1.0, 0.0, 2.0, 1.0));
+        }
+
+        for (light, trans) in &spot_lights {
+            if spot_light_dir_offset_scale.len() >= MAX_POINT_LIGHTS {
+                break;
+            }
+            point_light_position_range.push(trans.translation().extend(light.range));
+            point_light_color_radius.push(
+                (light.color.to_linear().to_vec3() * light.intensity * POWER_TO_INTENSITY)
+                    .extend(light.radius),
+            );
+            spot_light_dir_offset_scale.push(spot_dir_offset_scale(light, trans));
+        }
+
+        let light_count = point_light_position_range.len() as i32;
+        load_val!(build, light_count);
+        load_slice!(build, point_light_position_range);
+        load_slice!(build, point_light_color_radius);
+        load_slice!(build, spot_light_dir_offset_scale);
+
+        reflect_bool_location = build.get_uniform_location("read_reflection");
+        if let Some(reflect_texture) = &reflect_texture {
+            if reflect_bool_location.is_some() {
+                let reflect_texture = reflect_texture.texture.clone();
+                load_tex!(build, reflect_texture);
+            }
+        }
+
+        if let Some(plane) = &mut plane_reflection {
+            build.load("reflection_plane_position", plane.1.translation());
+            build.load("reflection_plane_normal", plane.1.up().as_vec3());
+        }
     }
 
     let iter = if phase.transparent() {
@@ -524,27 +527,28 @@ fn render_std_mat(
 
         let world_from_local = transform.to_matrix();
 
-        // If in opaque phase we must defer any alpha blend draws so they can be sorted and run in order.
-        if !transparent_draws.maybe_defer::<StandardMaterial>(
-            transparent_draw_from_alpha_mode(&material.alpha_mode),
-            phase,
-            entity,
-            transform,
-            aabb,
-            &view.from_world,
-            &world_from_local,
-        ) {
-            continue;
+        if !phase.depth_only() {
+            // If in opaque phase we must defer any alpha blend draws so they can be sorted and run in order.
+            if !transparent_draws.maybe_defer::<StandardMaterial>(
+                transparent_draw_from_alpha_mode(&material.alpha_mode),
+                phase,
+                entity,
+                transform,
+                aabb,
+                &view.from_world,
+                &world_from_local,
+            ) {
+                continue;
+            }
+            reflect_bool_location
+                .clone()
+                .map(|loc| (read_reflect && phase.read_reflect()).load(&ctx, &loc));
+            set_blend_func_from_alpha_mode(&ctx.gl, &material.alpha_mode);
         }
-
-        reflect_bool_location
-            .clone()
-            .map(|loc| (read_reflect && phase.read_reflect()).load(&ctx, &loc));
 
         load_val!(build, world_from_local);
 
         build.run(material);
-        set_blend_func_from_alpha_mode(&ctx.gl, &material.alpha_mode);
         gpu_meshes.draw_mesh(&ctx, mesh.id(), shader_index);
     }
 }
