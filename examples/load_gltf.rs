@@ -4,7 +4,7 @@ use argh::FromArgs;
 use bevy::{
     camera::{Exposure, primitives::Aabb},
     camera_controller::free_camera::{FreeCamera, FreeCameraPlugin},
-    core_pipeline::tonemapping::Tonemapping,
+    core_pipeline::{prepass::DepthPrepass, tonemapping::Tonemapping},
     diagnostic::{FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin},
     light::{CascadeShadowConfigBuilder, light_consts::lux::DIRECT_SUNLIGHT},
     prelude::*,
@@ -128,6 +128,7 @@ fn setup(
             intensity: 500.0,
             ..default()
         },
+        DepthPrepass,
         FreeCamera::default(),
         Tonemapping::TonyMcMapface,
     ));
@@ -165,7 +166,7 @@ fn setup(
     commands.spawn((
         Transform::from_rotation(Quat::from_euler(EulerRot::XYZ, PI * -0.43, PI * -0.08, 0.0)),
         DirectionalLight {
-            color: Color::srgb(1.0, 0.97, 0.94),
+            color: Color::srgb(1.0, 0.9, 0.8),
             illuminance: DIRECT_SUNLIGHT,
             shadows_enabled: true,
             shadow_depth_bias: 0.3,
@@ -196,7 +197,7 @@ fn setup(
                 range: 15.0,
                 radius: 4.0,
                 intensity: 1000.0 * point_spot_mult,
-                color: Color::srgb(1.0, 0.85, 0.75),
+                color: Color::srgb(1.0, 0.8, 0.7),
                 shadows_enabled: false,
                 inner_angle: PI * 0.4,
                 outer_angle: PI * 0.5,
@@ -216,7 +217,7 @@ fn setup(
                 range: 3.0,
                 radius: 1.5,
                 intensity: 150.0 * point_spot_mult,
-                color: Color::srgb(1.0, 0.95, 0.9),
+                color: Color::srgb(1.0, 0.9, 0.8),
                 shadows_enabled: false,
                 inner_angle: PI * 0.4,
                 outer_angle: PI * 0.5,
@@ -362,8 +363,10 @@ fn render_std_mat(
 
     let shadow_def;
 
-    if phase == RenderPhase::Shadow {
-        shadow_def = shadow.as_ref().map_or(("", ""), |_| ("RENDER_SHADOW", ""));
+    if phase.depth_only() {
+        shadow_def = shadow
+            .as_ref()
+            .map_or(("", ""), |_| ("RENDER_DEPTH_ONLY", ""));
     } else {
         shadow_def = shadow.as_ref().map_or(("", ""), |_| ("SAMPLE_SHADOW", ""));
     }

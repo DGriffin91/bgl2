@@ -130,8 +130,10 @@ fn present(
 #[derive(Resource, Default, PartialEq, Eq, Clone, Copy)]
 pub enum RenderPhase {
     Shadow,
+    ReflectDepthPrepass,
     ReflectOpaque,
     ReflectTransparent,
+    DepthPrepass,
     #[default]
     Opaque,
     Transparent,
@@ -143,16 +145,40 @@ impl RenderPhase {
             RenderPhase::Shadow | RenderPhase::ReflectOpaque | RenderPhase::ReflectTransparent => {
                 false
             }
-            RenderPhase::Opaque | RenderPhase::Transparent => true,
+            RenderPhase::ReflectDepthPrepass
+            | RenderPhase::DepthPrepass
+            | RenderPhase::Opaque
+            | RenderPhase::Transparent => true,
         }
     }
     pub fn reflection(&self) -> bool {
         match self {
             RenderPhase::ReflectOpaque | RenderPhase::ReflectTransparent => true,
-            RenderPhase::Shadow | RenderPhase::Opaque | RenderPhase::Transparent => false,
+            RenderPhase::ReflectDepthPrepass
+            | RenderPhase::DepthPrepass
+            | RenderPhase::Shadow
+            | RenderPhase::Opaque
+            | RenderPhase::Transparent => false,
         }
     }
     pub fn opaque(&self) -> bool {
+        match self {
+            RenderPhase::ReflectDepthPrepass
+            | RenderPhase::DepthPrepass
+            | RenderPhase::ReflectOpaque
+            | RenderPhase::Opaque => true,
+            _ => false,
+        }
+    }
+    pub fn depth_only(&self) -> bool {
+        match self {
+            RenderPhase::ReflectDepthPrepass | RenderPhase::DepthPrepass | RenderPhase::Shadow => {
+                true
+            }
+            _ => false,
+        }
+    }
+    pub fn defer_transparent(&self) -> bool {
         match self {
             RenderPhase::ReflectOpaque | RenderPhase::Opaque => true,
             _ => false,
@@ -166,9 +192,11 @@ impl RenderPhase {
     }
     pub fn read_reflect(&self) -> bool {
         match self {
-            RenderPhase::Shadow | RenderPhase::ReflectOpaque | RenderPhase::ReflectTransparent => {
-                false
-            }
+            RenderPhase::ReflectDepthPrepass
+            | RenderPhase::DepthPrepass
+            | RenderPhase::Shadow
+            | RenderPhase::ReflectOpaque
+            | RenderPhase::ReflectTransparent => false,
             RenderPhase::Opaque | RenderPhase::Transparent => true,
         }
     }

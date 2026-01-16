@@ -52,9 +52,9 @@ void main() {
     vec3 ndc_position = clip_position.xyz / clip_position.w;
     vec2 screen_uv = ndc_position.xy * 0.5 + 0.5;
 
-    #ifdef RENDER_SHADOW
+    #ifdef RENDER_DEPTH_ONLY
     gl_FragColor = EncodeFloatRGBA(clamp(ndc_position.z * 0.5 + 0.5, 0.0, 1.0));
-    #else // RENDER_SHADOW
+    #else // RENDER_DEPTH_ONLY
 
     float dir_shadow = 1.0;
     #ifdef SAMPLE_SHADOW
@@ -161,5 +161,5 @@ void main() {
         gl_FragColor = vec4(diffuse_color + specular_color + emissive.rgb, color.a);
         gl_FragColor = clamp(gl_FragColor, vec4(0.0), vec4(1.0));
 
-        #endif // NOT RENDER_SHADOW
+        #endif // NOT RENDER_DEPTH_ONLY
     }

@@ -54,7 +54,7 @@ impl DeferredAlphaBlendDraws {
         if !transparent_draw {
             return true;
         }
-        if phase.opaque() {
+        if phase.defer_transparent() {
             let ws_radius = transform.radius_vec3a(aabb.half_extents);
             let ws_center = world_from_local.transform_point3a(aabb.center);
             self.defer::<T>(

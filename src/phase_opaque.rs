@@ -1,4 +1,4 @@
-use bevy::prelude::*;
+use bevy::{core_pipeline::prepass::DepthPrepass, prelude::*};
 
 use crate::{
     BevyGlContext,
@@ -23,26 +23,37 @@ impl Plugin for OpaquePhasePlugin {
 }
 
 fn render_reflect_opaque(world: &mut World) {
+    clear_color_and_depth(world);
     let mut planes = world.query::<&ReflectionPlane>();
     if planes.iter(world).len() == 0 {
         return;
     }
+    let mut query = world.query::<(&Camera3d, &DepthPrepass)>();
+    let depth_prepass_enabled = query.iter(world).len() > 0;
     *world.get_resource_mut::<RenderPhase>().unwrap() = RenderPhase::ReflectOpaque;
-    // Don't need to clear color or depth opaque always clears both at start.
-    opaque(world);
+    opaque(world, false, !depth_prepass_enabled);
 }
 
 fn render_opaque(world: &mut World) {
+    clear_color_and_depth(world);
+    let mut query = world.query::<(&Camera3d, &DepthPrepass)>();
+    let depth_prepass_enabled = query.iter(world).len() > 0;
+    if depth_prepass_enabled {
+        *world.get_resource_mut::<RenderPhase>().unwrap() = RenderPhase::DepthPrepass;
+        opaque(world, true, true)
+    }
     *world.get_resource_mut::<RenderPhase>().unwrap() = RenderPhase::Opaque;
-    opaque(world);
+    opaque(world, false, !depth_prepass_enabled);
 }
 
 // During the opaque pass the registered systems also write any transparent items to the DeferredAlphaBlendDraws.
-fn opaque(world: &mut World) {
-    let clear_color = world.resource::<ClearColor>().clone();
+fn opaque(world: &mut World, depth_prepass: bool, write_depth: bool) {
     let ctx = world.get_non_send_resource_mut::<BevyGlContext>().unwrap();
-    ctx.start_opaque(true);
-    ctx.clear_color_and_depth(Some(clear_color.to_srgba().to_vec4()));
+    if depth_prepass {
+        ctx.start_depth_only();
+    } else {
+        ctx.start_opaque(write_depth);
+    }
 
     let Some(runner) = world.remove_resource::<RenderRunner>() else {
         return;
@@ -58,4 +69,13 @@ fn opaque(world: &mut World) {
     }
 
     world.insert_resource(runner);
+}
+
+fn clear_color_and_depth(world: &mut World) {
+    // Seems faster to clear these together
+    let color = world.resource::<ClearColor>().clone();
+    world
+        .get_non_send_resource_mut::<BevyGlContext>()
+        .unwrap()
+        .clear_color_and_depth(Some(color.to_srgba().to_vec4()));
 }
