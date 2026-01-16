@@ -125,11 +125,11 @@ fn setup(
         EnvironmentMapLight {
             diffuse_map: asset_server.load("environment_maps/pisa_diffuse_rgb9e5_zstd.ktx2"),
             specular_map: asset_server.load("environment_maps/pisa_specular_rgb9e5_zstd.ktx2"),
-            intensity: 5000.0,
+            intensity: 500.0,
             ..default()
         },
         FreeCamera::default(),
-        Tonemapping::None,
+        Tonemapping::TonyMcMapface,
     ));
 
     commands
@@ -162,25 +162,25 @@ fn setup(
     //));
 
     // Sun
-    //commands.spawn((
-    //    Transform::from_rotation(Quat::from_euler(EulerRot::XYZ, PI * -0.43, PI * -0.08, 0.0)),
-    //    DirectionalLight {
-    //        color: Color::srgb(1.0, 0.97, 0.94),
-    //        illuminance: DIRECT_SUNLIGHT,
-    //        shadows_enabled: true,
-    //        shadow_depth_bias: 0.3,
-    //        shadow_normal_bias: 0.7,
-    //        ..default()
-    //    },
-    //    CascadeShadowConfigBuilder {
-    //        num_cascades: 1,
-    //        minimum_distance: 0.1,
-    //        maximum_distance: 25.0,
-    //        first_cascade_far_bound: 70.0,
-    //        overlap_proportion: 0.2,
-    //    }
-    //    .build(),
-    //));
+    commands.spawn((
+        Transform::from_rotation(Quat::from_euler(EulerRot::XYZ, PI * -0.43, PI * -0.08, 0.0)),
+        DirectionalLight {
+            color: Color::srgb(1.0, 0.97, 0.94),
+            illuminance: DIRECT_SUNLIGHT,
+            shadows_enabled: true,
+            shadow_depth_bias: 0.3,
+            shadow_normal_bias: 0.7,
+            ..default()
+        },
+        CascadeShadowConfigBuilder {
+            num_cascades: 1,
+            minimum_distance: 0.1,
+            maximum_distance: 25.0,
+            first_cascade_far_bound: 70.0,
+            overlap_proportion: 0.2,
+        }
+        .build(),
+    ));
 
     let point_spot_mult = 1000.0;
 
@@ -190,19 +190,19 @@ fn setup(
         Transform::from_xyz(-1.5, 0.5, 1.5),
         Transform::from_xyz(-5.0, 0.5, 1.5),
     ] {
-        //commands.spawn((
-        //    t.looking_at(Vec3::new(0.0, 999.0, 0.0), Vec3::X),
-        //    SpotLight {
-        //        range: 15.0,
-        //        radius: 4.0,
-        //        intensity: 1000.0 * point_spot_mult,
-        //        color: Color::srgb(1.0, 0.85, 0.75),
-        //        shadows_enabled: false,
-        //        inner_angle: PI * 0.4,
-        //        outer_angle: PI * 0.5,
-        //        ..default()
-        //    },
-        //));
+        commands.spawn((
+            t.looking_at(Vec3::new(0.0, 999.0, 0.0), Vec3::X),
+            SpotLight {
+                range: 15.0,
+                radius: 4.0,
+                intensity: 1000.0 * point_spot_mult,
+                color: Color::srgb(1.0, 0.85, 0.75),
+                shadows_enabled: false,
+                inner_angle: PI * 0.4,
+                outer_angle: PI * 0.5,
+                ..default()
+            },
+        ));
     }
 
     // Sun Table Refl
@@ -210,19 +210,19 @@ fn setup(
         Transform::from_xyz(2.95, 0.5, 3.15),
         Transform::from_xyz(-6.2, 0.5, 2.3),
     ] {
-        //commands.spawn((
-        //    t.looking_at(Vec3::new(0.0, 999.0, 0.0), Vec3::X),
-        //    SpotLight {
-        //        range: 3.0,
-        //        radius: 1.5,
-        //        intensity: 150.0 * point_spot_mult,
-        //        color: Color::srgb(1.0, 0.95, 0.9),
-        //        shadows_enabled: false,
-        //        inner_angle: PI * 0.4,
-        //        outer_angle: PI * 0.5,
-        //        ..default()
-        //    },
-        //));
+        commands.spawn((
+            t.looking_at(Vec3::new(0.0, 999.0, 0.0), Vec3::X),
+            SpotLight {
+                range: 3.0,
+                radius: 1.5,
+                intensity: 150.0 * point_spot_mult,
+                color: Color::srgb(1.0, 0.95, 0.9),
+                shadows_enabled: false,
+                inner_angle: PI * 0.4,
+                outer_angle: PI * 0.5,
+                ..default()
+            },
+        ));
     }
 }
 
@@ -398,6 +398,9 @@ fn render_std_mat(
     queue_val!(build, double_sided);
     queue_val!(build, perceptual_roughness);
     queue_val!(build, metallic);
+    build.queue_val("reflectance", |m| {
+        m.specular_tint.to_linear().to_vec3() * m.reflectance
+    });
 
     queue_tex!(build, base_color_texture);
     queue_tex!(build, normal_map_texture);

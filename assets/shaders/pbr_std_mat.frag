@@ -34,8 +34,7 @@ float spot_angle_attenuation(vec3 spot_dir, vec3 to_light_dir, float spot_offset
 }
 
 // https://google.github.io/filament/Filament.html#materialsystem/parameterization/remapping
-vec3 calculate_F0(vec3 base_color, float metallic) {
-    float reflectance = 0.5;
+vec3 calculate_F0(vec3 base_color, float metallic, vec3 reflectance) {
     return 0.16 * reflectance * reflectance * (1.0 - metallic) + base_color * metallic;
 }
 
@@ -135,7 +134,7 @@ void main() {
     float perceptual_roughness = metallic_roughness.g * perceptual_roughness;
     float roughness = perceptual_roughness * perceptual_roughness;
     float metallic = metallic * metallic_roughness.b;
-    vec3 F0 = calculate_F0(color.rgb, metallic);
+    vec3 F0 = calculate_F0(color.rgb, metallic, reflectance);
 
     vec3 emissive = view_exposure * emissive.rgb * to_linear(texture2D(emissive_texture, uv_0).rgb);
 
@@ -219,8 +218,8 @@ void main() {
     }
 
     gl_FragColor = vec4(diffuse_color + specular_color + emissive.rgb, color.a);
-    //gl_FragColor.rgb = agx_tonemapping(gl_FragColor.rgb); // in: linear, out: srgb
-    gl_FragColor.rgb = from_linear(gl_FragColor.rgb); // in: linear, out: srgb
+    gl_FragColor.rgb = agx_tonemapping(gl_FragColor.rgb); // in: linear, out: srgb
+    //gl_FragColor.rgb = from_linear(gl_FragColor.rgb); // in: linear, out: srgb
     gl_FragColor = clamp(gl_FragColor, vec4(0.0), vec4(1.0));
 
     #endif // NOT RENDER_SHADOW

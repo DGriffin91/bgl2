@@ -15,6 +15,7 @@ uniform float view_exposure;
 
 uniform vec4 base_color;
 uniform vec4 emissive;
+uniform vec3 reflectance;
 uniform float metallic;
 uniform float perceptual_roughness;
 
