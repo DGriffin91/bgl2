@@ -153,9 +153,11 @@ impl RenderPhase {
     }
     pub fn reflection(&self) -> bool {
         match self {
-            RenderPhase::ReflectOpaque | RenderPhase::ReflectTransparent => true,
             RenderPhase::ReflectDepthPrepass
-            | RenderPhase::DepthPrepass
+            | RenderPhase::ReflectOpaque
+            | RenderPhase::ReflectTransparent => true,
+
+            RenderPhase::DepthPrepass
             | RenderPhase::Shadow
             | RenderPhase::Opaque
             | RenderPhase::Transparent => false,

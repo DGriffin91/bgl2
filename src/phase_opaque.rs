@@ -23,13 +23,17 @@ impl Plugin for OpaquePhasePlugin {
 }
 
 fn render_reflect_opaque(world: &mut World) {
-    clear_color_and_depth(world);
     let mut planes = world.query::<&ReflectionPlane>();
     if planes.iter(world).len() == 0 {
         return;
     }
+    clear_color_and_depth(world);
     let mut query = world.query::<(&Camera3d, &DepthPrepass)>();
     let depth_prepass_enabled = query.iter(world).len() > 0;
+    if depth_prepass_enabled {
+        *world.get_resource_mut::<RenderPhase>().unwrap() = RenderPhase::ReflectDepthPrepass;
+        opaque(world, true, true)
+    }
     *world.get_resource_mut::<RenderPhase>().unwrap() = RenderPhase::ReflectOpaque;
     opaque(world, false, !depth_prepass_enabled);
 }
