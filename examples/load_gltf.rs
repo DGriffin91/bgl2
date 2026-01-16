@@ -111,6 +111,7 @@ fn setup(
             include_str!("../assets/shaders/shadow_sampling.glsl"),
         );
         ctx.add_snippet("math", include_str!("../assets/shaders/math.glsl"));
+        ctx.add_snippet("pbr", include_str!("../assets/shaders/pbr.glsl"));
     }
 
     // Camera
