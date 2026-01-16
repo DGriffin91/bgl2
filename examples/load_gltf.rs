@@ -30,7 +30,7 @@ use bevy_opengl::{
     shader_cached,
     uniform_slot_builder::UniformSlotBuilder,
 };
-use itertools::Either;
+use itertools::{Either, Itertools};
 
 #[derive(FromArgs, Resource, Clone, Default)]
 /// Config
@@ -97,8 +97,8 @@ fn setup(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
     mut ctx: Option<NonSendMut<BevyGlContext>>,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut _meshes: ResMut<Assets<Mesh>>,
+    mut _materials: ResMut<Assets<StandardMaterial>>,
 ) {
     if let Some(ctx) = &mut ctx {
         ctx.add_snippet("agx", include_str!("../assets/shaders/agx.glsl"));
@@ -140,6 +140,31 @@ fn setup(
             Transform::from_xyz(-18.0, 0.0, 0.0),
         ))
         .observe(proc_scene);
+
+    //commands
+    //    .spawn((
+    //        SceneRoot(
+    //            asset_server.load("models/bistro/bistro_exterior/BistroExterior.gltf#Scene0"),
+    //        ),
+    //        Transform::from_xyz(0.0, 0.0, 0.0),
+    //    ))
+    //    .observe(proc_scene);
+    //commands
+    //    .spawn((
+    //        SceneRoot(
+    //            asset_server
+    //                .load("models/bistro/bistro_interior_wine/BistroInterior_Wine.gltf#Scene0"),
+    //        ),
+    //        Transform::from_xyz(0.0, 0.0, 0.0),
+    //    ))
+    //    .observe(proc_scene);
+
+    //commands
+    //    .spawn((
+    //        SceneRoot(asset_server.load("models/caldera/hotel_01.glb#Scene0")),
+    //        Transform::from_scale(Vec3::ONE * 0.01),
+    //    ))
+    //    .observe(proc_scene);
 
     //commands.spawn((
     //    SceneRoot(
@@ -509,9 +534,17 @@ fn render_std_mat(
     let iter = if phase.transparent() {
         Either::Right(mesh_entities.iter_many(transparent_draws.take()))
     } else {
-        Either::Left(mesh_entities.iter())
+        // Sort by material. Can be faster if enough entities share materials (faster on bistro and san-miguel).
+        // TODO avoid re-sorting?
+        Either::Left(
+            mesh_entities
+                .iter()
+                .sorted_by_key(|(_, _, _, _, _, material_h, _, _)| material_h.id()),
+        )
+        // Either::Left(mesh_entities.iter()) // <- Unsorted alternative
     };
 
+    let mut last_material = None;
     for (entity, view_vis, transform, mesh, aabb, material_h, skip_reflect, read_reflect) in iter {
         if phase.can_use_camera_frustum_cull() && !view_vis.get() {
             continue;
@@ -548,8 +581,12 @@ fn render_std_mat(
 
         load_val!(build, world_from_local);
 
-        build.run(material);
+        // Only re-bind if the material has changed.
+        if last_material != Some(material_h) {
+            build.run(material);
+        }
         gpu_meshes.draw_mesh(&ctx, mesh.id(), shader_index);
+        last_material = Some(material_h);
     }
 }
 
