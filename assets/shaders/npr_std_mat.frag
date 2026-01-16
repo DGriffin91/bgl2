@@ -27,13 +27,13 @@ float distance_attenuation(float distance, float range) {
     float distanceSquare = distance * distance;
     float inverseRangeSquared = 1.0 / (range * range);
     float factor = distanceSquare * inverseRangeSquared;
-    float smoothFactor = clamp(1.0 - factor * factor, 0.0, 1.0);
+    float smoothFactor = saturate(1.0 - factor * factor);
     float attenuation = smoothFactor * smoothFactor;
     return max(attenuation * 1.0 / max(distanceSquare, 0.0001), 0.0);
 }
 
 float spot_angle_attenuation(vec3 spot_dir, vec3 to_light_dir, float spot_offset, float spot_scale) {
-    float attenuation = clamp(dot(-spot_dir, to_light_dir) * spot_scale + spot_offset, 0.0, 1.0);
+    float attenuation = saturate(dot(-spot_dir, to_light_dir) * spot_scale + spot_offset);
     return attenuation * attenuation;
 }
 
@@ -53,7 +53,7 @@ void main() {
     vec2 screen_uv = ndc_position.xy * 0.5 + 0.5;
 
     #ifdef RENDER_DEPTH_ONLY
-    gl_FragColor = EncodeFloatRGBA(clamp(ndc_position.z * 0.5 + 0.5, 0.0, 1.0));
+    gl_FragColor = EncodeFloatRGBA(saturate(ndc_position.z * 0.5 + 0.5));
     #else // RENDER_DEPTH_ONLY
 
     float dir_shadow = 1.0;

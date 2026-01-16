@@ -20,13 +20,13 @@ float distance_attenuation(float dist, float range) {
     float distanceSquare = dist * dist;
     float inverseRangeSquared = 1.0 / (range * range);
     float factor = distanceSquare * inverseRangeSquared;
-    float smoothFactor = clamp(1.0 - factor * factor, 0.0, 1.0);
+    float smoothFactor = saturate(1.0 - factor * factor);
     float att = smoothFactor * smoothFactor;
     return max(att * 1.0 / max(distanceSquare, 0.0001), 0.0);
 }
 
 float spot_angle_attenuation(vec3 spot_dir, vec3 to_light_dir, float spot_offset, float spot_scale) {
-    float attenuation = clamp(dot(-spot_dir, to_light_dir) * spot_scale + spot_offset, 0.0, 1.0);
+    float attenuation = saturate(dot(-spot_dir, to_light_dir) * spot_scale + spot_offset);
     return attenuation * attenuation;
 }
 
@@ -58,17 +58,17 @@ float Fd_Lambert() {
 
 vec3 specular_brdf(vec3 V, vec3 L, vec3 normal, float roughness, vec3 F0) {
     vec3 H = normalize(V + L);
-    float NoL = clamp(dot(normal, L), 0.0, 1.0);
+    float NoL = saturate(dot(normal, L));
     float NoV = abs(dot(normal, V)) + 1e-5;
-    float NoH = clamp(dot(normal, H), 0.0, 1.0);
-    float LoH = clamp(dot(L, H), 0.0, 1.0);
+    float NoH = saturate(dot(normal, H));
+    float LoH = saturate(dot(L, H));
 
     float D = D_GGX(NoH, roughness);
     vec3 F = F_Schlick(LoH, F0);
     float VGGX = V_SmithGGXCorrelated(NoV, NoL, roughness);
 
     // specular BRDF
-    vec3 Fr = clamp((D * VGGX) * F, vec3(0.0), vec3(1.0));
+    vec3 Fr = saturate((D * VGGX) * F);
 
     return Fr;
 }
@@ -88,7 +88,7 @@ vec3 directional_light(vec3 V, vec3 F0, vec3 base_color, vec3 normal, float roug
     if (shadow > 0.0 && light_dir != vec3(0.0)) {
         vec3 L = normalize(-light_dir);
         vec3 half_dir = normalize(L + V);
-        float NoL = clamp(dot(normal, L), 0.0, 1.0);
+        float NoL = saturate(dot(normal, L));
         res += shadow * base_color.rgb * Fd_Lambert() * NoL * color;
         res += shadow * specular_brdf(V, L, normal, roughness, F0) * NoL * color;
     }
@@ -121,7 +121,7 @@ vec3 point_light(vec3 V, vec3 base_color, vec3 F0, vec3 normal, float roughness,
         float dist_attenuation = distance_attenuation(dist, range);
 
         float attenuation = dist_attenuation * spot_attenuation;
-        float NoL = clamp(dot(normal, L), 0.0, 1.0);
+        float NoL = saturate(dot(normal, L));
 
         res += base_color.rgb * Fd_Lambert() * NoL * attenuation * color;
         res += specular_brdf(V, L, normal, roughness, F0) * NoL * attenuation * color;

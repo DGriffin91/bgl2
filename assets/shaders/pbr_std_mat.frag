@@ -20,7 +20,7 @@ void main() {
     vec2 screen_uv = ndc_position.xy * 0.5 + 0.5;
 
     #ifdef RENDER_DEPTH_ONLY
-    gl_FragColor = EncodeFloatRGBA(clamp(ndc_position.z * 0.5 + 0.5, 0.0, 1.0));
+    gl_FragColor = EncodeFloatRGBA(saturate(ndc_position.z * 0.5 + 0.5));
     #else // RENDER_DEPTH_ONLY
 
     float dir_shadow = 1.0;
@@ -32,7 +32,7 @@ void main() {
 
     if (shadow_uvz.x > 0.0 && shadow_uvz.x < 1.0 && shadow_uvz.y > 0.0 && shadow_uvz.y < 1.0) {
         dir_shadow *= bilinear_shadow2(shadow_texture, shadow_uvz.xy, shadow_uvz.z, bias, view_resolution);
-        //dir_shadow *= sample_shadow_map_castano_thirteen(shadow_texture, shadow_uv, receiver_z, bias, view_resolution);
+        //dir_shadow *= sample_shadow_map_castano_thirteen(shadow_texture, shadow_uvz.xy, shadow_uvz.z, bias, view_resolution);
     }
     #endif // SAMPLE_SHADOW
 
