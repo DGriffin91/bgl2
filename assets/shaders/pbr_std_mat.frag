@@ -1,8 +1,3 @@
-#define LIGHT_PRE_EXPOSE 0.0001
-// TODO why is this different
-#define DIR_LIGHT_PRE_EXPOSE 0.0005
-#define ENV_LIGHT_PRE_EXPOSE 0.005
-
 #include agx
 #include std_mat_bindings
 #include math
@@ -91,8 +86,13 @@ vec2 F_AB(float Roughness, float NoV) {
     return vec2(-1.04, 1.04) * a004 + r.zw;
 }
 
+
+vec3 rgbe2rgb(vec4 rgbe) {
+    return (rgbe.rgb * exp2(rgbe.a * 255.0 - 128.0) * 0.99609375); // (255.0/256.0)
+}
+
 void main() {
-    vec4 color = base_color * texture2D(base_color_texture, uv_0);
+    vec4 color = base_color * to_linear(texture2D(base_color_texture, uv_0));
 
     if (!alpha_blend && (color.a < 0.5)) {
         discard;
@@ -137,7 +137,7 @@ void main() {
     float metallic = metallic * metallic_roughness.b;
     vec3 F0 = calculate_F0(color.rgb, metallic);
 
-    vec3 emissive = emissive.rgb * texture2D(emissive_texture, uv_0).rgb;
+    vec3 emissive = view_exposure * emissive.rgb * to_linear(texture2D(emissive_texture, uv_0).rgb);
 
     vec3 normal = vert_normal;
     if (has_normal_map) {
@@ -150,48 +150,48 @@ void main() {
 
     if (dir_shadow > 0.0 && directional_light_dir != vec3(0.0)) {
         // Directional Light
-        vec3 light_color = directional_light_color * DIR_LIGHT_PRE_EXPOSE;
+        vec3 light_color = directional_light_color;
 
         vec3 L = normalize(-directional_light_dir);
         vec3 half_dir = normalize(L + V);
 
         float NoL = clamp(dot(normal, L), 0.0, 1.0);
-        diffuse_color += dir_shadow * color.rgb * (1.0 - metallic) * Fd_Lambert() * NoL * light_color;
-        specular_color += dir_shadow * specular_brdf(V, L, normal, roughness, F0) * NoL * light_color;
+        diffuse_color += view_exposure * dir_shadow * color.rgb * (1.0 - metallic) * Fd_Lambert() * NoL * light_color;
+        specular_color += view_exposure * dir_shadow * specular_brdf(V, L, normal, roughness, F0) * NoL * light_color;
     }
 
     {
         // Environment map / reflection
         float mip_levels = 8.0; // TODO put in uniform
 
-        vec3 diffuse_env_color = rgbe2rgb(textureCubeLod(diffuse_map, normal, 0.0));
-
-        vec3 env_diffuse = color.rgb * (1.0 - metallic) * diffuse_env_color * env_intensity * ENV_LIGHT_PRE_EXPOSE;
+        vec3 env_diffuse = rgbe2rgb(textureCubeLod(diffuse_map, vec3(normal.xy, -normal.z), 0.0)) * env_intensity;
 
         vec3 env_specular = vec3(0.0);
         if (read_reflection && perceptual_roughness < 0.2) {
             vec3 sharp_reflection_color = texture2D(reflect_texture, screen_uv).rgb;
-            specular_color += sharp_reflection_color.rgb * F0 * 10.0; // TODO integrate properly
+            // TODO integrate properly (invert tonemapping? blend post tonemapping?)
+            specular_color += sharp_reflection_color.rgb * F0 * 10.0; 
         } else {
-            vec3 specular_env_color = rgbe2rgb(textureCubeLod(specular_map, reflect(-V, normal), perceptual_roughness * mip_levels));
-            env_specular = specular_env_color * env_intensity * ENV_LIGHT_PRE_EXPOSE;
+            vec3 dir = reflect(-V, normal);
+            env_specular = rgbe2rgb(textureCubeLod(specular_map, vec3(dir.xy, -dir.z), perceptual_roughness * mip_levels)) * env_intensity;
         }
 
         vec2 f_ab = F_AB(perceptual_roughness, NoV);
 
+
         // Multiscattering approximation
         // https://bruop.github.io/ibl
         // https://www.jcgt.org/published/0008/01/03/paper.pdf
-        //vec3 Fr = max(vec3(1.0 - roughness), F0) - F0;
-        //vec3 kS = F0 + Fr * pow(1.0 - NoV, 5.0);
+        // vec3 Fr = max(vec3(1.0 - roughness), F0) - F0;
+        // vec3 kS = F0 + Fr * pow(1.0 - NoV, 5.0);
         vec3 FssEss = F0 * f_ab.x + f_ab.y; // Optionally use kS in place of F0 here
         float Ems = (1.0 - (f_ab.x + f_ab.y));
         vec3 F_avg = F0 + (1.0 - F0) / 21.0;
         vec3 FmsEms = Ems * FssEss * F_avg / (1.0 - F_avg * Ems);
         vec3 k_D = color.rgb * (1.0 - FssEss - FmsEms);
 
-        diffuse_color += (FmsEms + k_D) * env_diffuse;
-        specular_color += FssEss * env_specular;
+        diffuse_color += view_exposure * (FmsEms + k_D) * env_diffuse;
+        specular_color += view_exposure * FssEss * env_specular;
     }
 
     // Point Lights
@@ -202,7 +202,7 @@ void main() {
             float distance = length(to_light);
             if (distance < light_position_range.w) {
                 vec4 light_color_radius = point_light_color_radius[i];
-                vec3 light_color = light_color_radius.rgb * LIGHT_PRE_EXPOSE;
+                vec3 light_color = light_color_radius.rgb;
 
                 vec3 L = normalize(to_light);
                 vec4 dos = spot_light_dir_offset_scale[i];
@@ -212,14 +212,15 @@ void main() {
                 float attenuation = dist_attenuation * spot_attenuation;
                 float NoL = clamp(dot(normal, L), 0.0, 1.0);
 
-                diffuse_color += color.rgb * (1.0 - metallic) * Fd_Lambert() * NoL * attenuation * light_color;
-                specular_color += specular_brdf(V, L, normal, roughness, F0) * NoL * attenuation * light_color;
+                diffuse_color += view_exposure * color.rgb * (1.0 - metallic) * Fd_Lambert() * NoL * attenuation * light_color;
+                specular_color += view_exposure * specular_brdf(V, L, normal, roughness, F0) * NoL * attenuation * light_color;
             }
         }
     }
 
     gl_FragColor = vec4(diffuse_color + specular_color + emissive.rgb, color.a);
-    gl_FragColor.rgb = pow(agx_tonemapping(gl_FragColor.rgb), vec3(2.2)); //Convert back to linear
+    //gl_FragColor.rgb = agx_tonemapping(gl_FragColor.rgb); // in: linear, out: srgb
+    gl_FragColor.rgb = from_linear(gl_FragColor.rgb); // in: linear, out: srgb
     gl_FragColor = clamp(gl_FragColor, vec4(0.0), vec4(1.0));
 
     #endif // NOT RENDER_SHADOW

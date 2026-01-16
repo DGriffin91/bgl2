@@ -2,14 +2,11 @@ use std::f32::consts::PI;
 
 use argh::FromArgs;
 use bevy::{
-    camera::primitives::Aabb,
+    camera::{Exposure, primitives::Aabb},
     camera_controller::free_camera::{FreeCamera, FreeCameraPlugin},
     core_pipeline::tonemapping::Tonemapping,
     diagnostic::{FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin},
-    light::{
-        CascadeShadowConfigBuilder,
-        light_consts::lux::{DIRECT_SUNLIGHT, FULL_DAYLIGHT},
-    },
+    light::{CascadeShadowConfigBuilder, light_consts::lux::DIRECT_SUNLIGHT},
     prelude::*,
     render::{RenderPlugin, settings::WgpuSettings},
     scene::SceneInstanceReady,
@@ -128,11 +125,11 @@ fn setup(
         EnvironmentMapLight {
             diffuse_map: asset_server.load("environment_maps/pisa_diffuse_rgb9e5_zstd.ktx2"),
             specular_map: asset_server.load("environment_maps/pisa_specular_rgb9e5_zstd.ktx2"),
-            intensity: 500.0,
+            intensity: 5000.0,
             ..default()
         },
         FreeCamera::default(),
-        Tonemapping::AgX,
+        Tonemapping::None,
     ));
 
     commands
@@ -165,25 +162,25 @@ fn setup(
     //));
 
     // Sun
-    commands.spawn((
-        Transform::from_rotation(Quat::from_euler(EulerRot::XYZ, PI * -0.43, PI * -0.08, 0.0)),
-        DirectionalLight {
-            color: Color::srgb(1.0, 0.97, 0.94),
-            illuminance: DIRECT_SUNLIGHT,
-            shadows_enabled: true,
-            shadow_depth_bias: 0.3,
-            shadow_normal_bias: 0.7,
-            ..default()
-        },
-        CascadeShadowConfigBuilder {
-            num_cascades: 1,
-            minimum_distance: 0.1,
-            maximum_distance: 25.0,
-            first_cascade_far_bound: 70.0,
-            overlap_proportion: 0.2,
-        }
-        .build(),
-    ));
+    //commands.spawn((
+    //    Transform::from_rotation(Quat::from_euler(EulerRot::XYZ, PI * -0.43, PI * -0.08, 0.0)),
+    //    DirectionalLight {
+    //        color: Color::srgb(1.0, 0.97, 0.94),
+    //        illuminance: DIRECT_SUNLIGHT,
+    //        shadows_enabled: true,
+    //        shadow_depth_bias: 0.3,
+    //        shadow_normal_bias: 0.7,
+    //        ..default()
+    //    },
+    //    CascadeShadowConfigBuilder {
+    //        num_cascades: 1,
+    //        minimum_distance: 0.1,
+    //        maximum_distance: 25.0,
+    //        first_cascade_far_bound: 70.0,
+    //        overlap_proportion: 0.2,
+    //    }
+    //    .build(),
+    //));
 
     let point_spot_mult = 1000.0;
 
@@ -193,19 +190,19 @@ fn setup(
         Transform::from_xyz(-1.5, 0.5, 1.5),
         Transform::from_xyz(-5.0, 0.5, 1.5),
     ] {
-        commands.spawn((
-            t.looking_at(Vec3::new(0.0, 999.0, 0.0), Vec3::X),
-            SpotLight {
-                range: 15.0,
-                radius: 4.0,
-                intensity: 1000.0 * point_spot_mult,
-                color: Color::srgb(1.0, 0.85, 0.75),
-                shadows_enabled: false,
-                inner_angle: PI * 0.4,
-                outer_angle: PI * 0.5,
-                ..default()
-            },
-        ));
+        //commands.spawn((
+        //    t.looking_at(Vec3::new(0.0, 999.0, 0.0), Vec3::X),
+        //    SpotLight {
+        //        range: 15.0,
+        //        radius: 4.0,
+        //        intensity: 1000.0 * point_spot_mult,
+        //        color: Color::srgb(1.0, 0.85, 0.75),
+        //        shadows_enabled: false,
+        //        inner_angle: PI * 0.4,
+        //        outer_angle: PI * 0.5,
+        //        ..default()
+        //    },
+        //));
     }
 
     // Sun Table Refl
@@ -213,19 +210,19 @@ fn setup(
         Transform::from_xyz(2.95, 0.5, 3.15),
         Transform::from_xyz(-6.2, 0.5, 2.3),
     ] {
-        commands.spawn((
-            t.looking_at(Vec3::new(0.0, 999.0, 0.0), Vec3::X),
-            SpotLight {
-                range: 3.0,
-                radius: 1.5,
-                intensity: 150.0 * point_spot_mult,
-                color: Color::srgb(1.0, 0.95, 0.9),
-                shadows_enabled: false,
-                inner_angle: PI * 0.4,
-                outer_angle: PI * 0.5,
-                ..default()
-            },
-        ));
+        //commands.spawn((
+        //    t.looking_at(Vec3::new(0.0, 999.0, 0.0), Vec3::X),
+        //    SpotLight {
+        //        range: 3.0,
+        //        radius: 1.5,
+        //        intensity: 150.0 * point_spot_mult,
+        //        color: Color::srgb(1.0, 0.95, 0.9),
+        //        shadows_enabled: false,
+        //        inner_angle: PI * 0.4,
+        //        outer_angle: PI * 0.5,
+        //        ..default()
+        //    },
+        //));
     }
 }
 
@@ -271,17 +268,24 @@ struct ViewUniforms {
     world_from_view: Mat4,
     from_world: Mat4,
     clip_from_world: Mat4,
+    exposure: f32,
 }
 
 // Runs at each view transition: Before shadows, before reflections, etc..
 fn prepare_view(
     mut commands: Commands,
     phase: If<Res<RenderPhase>>,
-    camera: Single<(Entity, &Camera, &GlobalTransform, &Projection)>,
+    camera: Single<(
+        Entity,
+        &Camera,
+        &GlobalTransform,
+        &Projection,
+        Option<&Exposure>,
+    )>,
     shadow: Option<Res<DirectionalLightInfo>>,
     reflect: Option<Single<&ReflectionPlane>>,
 ) {
-    let (camera_entity, _camera, cam_global_trans, cam_proj) = *camera;
+    let (camera_entity, _camera, cam_global_trans, cam_proj, exposure) = *camera;
 
     let view_position;
     let mut world_from_view;
@@ -316,6 +320,9 @@ fn prepare_view(
         world_from_view,
         from_world: view_from_world,
         clip_from_world,
+        exposure: exposure
+            .map(|e| e.exposure())
+            .unwrap_or_else(|| Exposure::default().exposure()),
     });
 }
 
@@ -432,6 +439,7 @@ fn render_std_mat(
 
     build.load("world_from_view", view.world_from_view);
     build.load("view_position", view.position);
+    build.load("view_exposure", view.exposure);
 
     let view_resolution = vec2(
         bevy_window.physical_width() as f32,
@@ -448,8 +456,10 @@ fn render_std_mat(
             break;
         }
         point_light_position_range.push(trans.translation().extend(light.range));
-        point_light_color_radius
-            .push((light.color.to_linear().to_vec3() * light.intensity).extend(light.radius));
+        point_light_color_radius.push(
+            (light.color.to_linear().to_vec3() * light.intensity * POWER_TO_INTENSITY)
+                .extend(light.radius),
+        );
         spot_light_dir_offset_scale.push(vec4(1.0, 0.0, 2.0, 1.0));
     }
 
@@ -458,8 +468,10 @@ fn render_std_mat(
             break;
         }
         point_light_position_range.push(trans.translation().extend(light.range));
-        point_light_color_radius
-            .push((light.color.to_linear().to_vec3() * light.intensity).extend(light.radius));
+        point_light_color_radius.push(
+            (light.color.to_linear().to_vec3() * light.intensity * POWER_TO_INTENSITY)
+                .extend(light.radius),
+        );
         spot_light_dir_offset_scale.push(spot_dir_offset_scale(light, trans));
     }
 
@@ -540,3 +552,7 @@ fn spot_dir_offset_scale(light: &SpotLight, trans: &GlobalTransform) -> Vec4 {
         .extend(spot_offset)
         .extend(spot_scale)
 }
+
+// Map from luminous power in lumens to luminous intensity in lumens per steradian for a point light.
+// For details see: https://google.github.io/filament/Filament.html#mjx-eqn-pointLightLuminousPower
+const POWER_TO_INTENSITY: f32 = 1.0 / (4.0 * PI);

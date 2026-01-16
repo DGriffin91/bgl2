@@ -50,6 +50,9 @@ web-sys = { version = "0.3", features = [
 wasm-bindgen = { version = "0.2" }
 
 [dev-dependencies]
+# tonemapping_luts only needed to view scenes with bevy's renderer
+bevy = { version = "0.18.0", default-features = false, features = ["tonemapping_luts"] }
+
 bevy_mod_mipmap_generator = { git = "https://github.com/DGriffin91/bevy_mod_mipmap_generator" }
 argh = "0.1"
 

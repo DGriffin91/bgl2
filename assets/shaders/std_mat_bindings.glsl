@@ -11,6 +11,7 @@ uniform vec3 directional_light_color;
 
 uniform vec3 view_position;
 uniform vec2 view_resolution;
+uniform float view_exposure;
 
 uniform vec4 base_color;
 uniform vec4 emissive;

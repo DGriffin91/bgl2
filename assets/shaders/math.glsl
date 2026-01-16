@@ -27,6 +27,20 @@ float DecodeFloatRGBA(vec4 rgba) {
     return clamp(dot(rgba, vec4(1.0, 1.0 / 255.0, 1.0 / 65025.0, 1.0 / 16581375.0)), 0.0, 1.0);
 }
 
-vec3 rgbe2rgb(vec4 rgbe) {
-    return (rgbe.rgb * pow(2.0, rgbe.a * 255.0 - 128.0));
+
+vec3 to_linear(vec3 sRGB) {
+    return pow(sRGB, vec3(2.2));
 }
+
+vec4 to_linear(vec4 sRGB) {
+    return vec4(pow(sRGB.rgb, vec3(2.2)), sRGB.a);
+}
+
+vec3 from_linear(vec3 linearRGB) {
+    return pow(linearRGB, vec3(1.0 / 2.2));
+}
+
+vec4 from_linear(vec4 linearRGB) {
+    return vec4(pow(linearRGB.rgb, vec3(1.0 / 2.2)), linearRGB.a);
+}
+
