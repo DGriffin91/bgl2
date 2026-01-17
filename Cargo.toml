@@ -16,6 +16,7 @@ bevy = { version = "0.18.0", default-features = false, features = [
     "jpeg",
     "bevy_camera_controller",
     "free_camera",
+    "gltf_animation",
 ] }
 
 wgpu-types = "27" #Needed for bevy interop types since bevy doesn't re-export everything

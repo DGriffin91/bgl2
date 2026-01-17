@@ -21,6 +21,7 @@ use bevy_opengl::{
     phase_transparent::DeferredAlphaBlendDraws,
     plane_reflect::{PlaneReflectionTexture, ReflectionPlane},
     prepare_image::GpuImages,
+    prepare_joints::JointData,
     prepare_mesh::GPUMeshBufferMap,
     queue_tex, queue_val,
     render::{
@@ -93,12 +94,21 @@ fn main() {
         .run();
 }
 
+const FOX_PATH: &str = "models/animated/Fox.glb";
+
+#[derive(Component)]
+struct AnimationToPlay {
+    graph_handle: Handle<AnimationGraph>,
+    index: AnimationNodeIndex,
+}
+
 fn setup(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
     mut ctx: Option<NonSendMut<BevyGlContext>>,
-    mut _meshes: ResMut<Assets<Mesh>>,
-    mut _materials: ResMut<Assets<StandardMaterial>>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut graphs: ResMut<Assets<AnimationGraph>>,
 ) {
     if let Some(ctx) = &mut ctx {
         ctx.add_snippet("agx", include_str!("../assets/shaders/agx.glsl"));
@@ -113,6 +123,25 @@ fn setup(
         ctx.add_snippet("math", include_str!("../assets/shaders/math.glsl"));
         ctx.add_snippet("pbr", include_str!("../assets/shaders/pbr.glsl"));
     }
+
+    // --------------------------
+    let (graph, index) = AnimationGraph::from_clip(
+        asset_server.load(GltfAssetLabel::Animation(2).from_asset(FOX_PATH)),
+    );
+    let graph_handle = graphs.add(graph);
+    let animation_to_play = AnimationToPlay {
+        graph_handle,
+        index,
+    };
+    let mesh_scene = SceneRoot(asset_server.load(GltfAssetLabel::Scene(0).from_asset(FOX_PATH)));
+    commands
+        .spawn((
+            animation_to_play,
+            mesh_scene,
+            Transform::from_scale(Vec3::ONE * 0.01),
+        ))
+        .observe(play_animation_when_ready);
+    // --------------------------
 
     // Camera
     commands.spawn((
@@ -134,12 +163,12 @@ fn setup(
         Tonemapping::TonyMcMapface,
     ));
 
-    commands
-        .spawn((
-            SceneRoot(asset_server.load("models/san-miguel/san-miguel.gltf#Scene0")),
-            Transform::from_xyz(-18.0, 0.0, 0.0),
-        ))
-        .observe(proc_scene);
+    //commands
+    //    .spawn((
+    //        SceneRoot(asset_server.load("models/san-miguel/san-miguel.gltf#Scene0")),
+    //        Transform::from_xyz(-18.0, 0.0, 0.0),
+    //    ))
+    //    .observe(proc_scene);
 
     //commands
     //    .spawn((
@@ -174,19 +203,19 @@ fn setup(
     //));
 
     // Reflection plane
-    //commands.spawn((
-    //    Mesh3d(meshes.add(Plane3d::default().mesh().size(50.0, 50.0))),
-    //    Transform::from_translation(vec3(0.0, 0.1, 0.0)),
-    //    ReflectionPlane::default(),
-    //    MeshMaterial3d(materials.add(StandardMaterial {
-    //        base_color: Color::linear_rgba(0.0, 0.0, 0.0, 0.8),
-    //        perceptual_roughness: 0.1,
-    //        alpha_mode: AlphaMode::Blend,
-    //        ..default()
-    //    })),
-    //    SkipReflection,
-    //    ReadReflection,
-    //));
+    commands.spawn((
+        Mesh3d(meshes.add(Plane3d::default().mesh().size(500.0, 500.0))),
+        Transform::from_translation(vec3(0.0, 0.1, 0.0)),
+        ReflectionPlane::default(),
+        MeshMaterial3d(materials.add(StandardMaterial {
+            base_color: Color::linear_rgba(0.0, 0.0, 0.0, 0.8),
+            perceptual_roughness: 0.1,
+            alpha_mode: AlphaMode::Blend,
+            ..default()
+        })),
+        SkipReflection,
+        ReadReflection,
+    ));
 
     // Sun
     commands.spawn((
@@ -250,6 +279,25 @@ fn setup(
                 ..default()
             },
         ));
+    }
+}
+
+fn play_animation_when_ready(
+    scene_ready: On<SceneInstanceReady>,
+    mut commands: Commands,
+    children: Query<&Children>,
+    animations_to_play: Query<&AnimationToPlay>,
+    mut players: Query<&mut AnimationPlayer>,
+) {
+    if let Ok(animation_to_play) = animations_to_play.get(scene_ready.entity) {
+        for child in children.iter_descendants(scene_ready.entity) {
+            if let Ok(mut player) = players.get_mut(child) {
+                player.play(animation_to_play.index).repeat();
+                commands
+                    .entity(child)
+                    .insert(AnimationGraphHandle(animation_to_play.graph_handle.clone()));
+            }
+        }
     }
 }
 
@@ -355,7 +403,12 @@ fn prepare_view(
 
 // It seems like some drivers are limited by code length.
 // The point light loop is unrolled so setting this too high can be an issue.
+// Also fragment shader uniform capacity can be very limited on some drivers.
 const MAX_POINT_LIGHTS: usize = 8;
+const MAX_LIGHTS_DEF: (&str, &str) = ("MAX_POINT_LIGHTS", "8");
+
+// vertex shader uniform capacity can be limited on some drivers (though not as much as in the frag shader.)
+const MAX_JOINTS_DEF: (&str, &str) = ("MAX_JOINTS", "32");
 
 fn render_std_mat(
     mesh_entities: Query<(
@@ -367,6 +420,7 @@ fn render_std_mat(
         &MeshMaterial3d<StandardMaterial>,
         Has<SkipReflection>,
         Has<ReadReflection>,
+        Option<&JointData>,
     )>,
     camera: Single<(&ViewUniforms, Option<&EnvironmentMapLight>)>,
     point_lights: Query<(&PointLight, &GlobalTransform)>,
@@ -397,15 +451,12 @@ fn render_std_mat(
         shadow_def = shadow.as_ref().map_or(("", ""), |_| ("SAMPLE_SHADOW", ""));
     }
 
-    let max_point_lights = format!("{MAX_POINT_LIGHTS}");
-    let max_lights_def = ("MAX_POINT_LIGHTS", max_point_lights.as_str());
-
     let shader_index = if args.npr {
         shader_cached!(
             ctx,
             "../assets/shaders/std_mat.vert",
             "../assets/shaders/npr_std_mat.frag",
-            &[shadow_def, max_lights_def]
+            &[shadow_def, MAX_LIGHTS_DEF, MAX_JOINTS_DEF]
         )
         .unwrap()
     } else {
@@ -413,7 +464,7 @@ fn render_std_mat(
             ctx,
             "../assets/shaders/std_mat.vert",
             "../assets/shaders/pbr_std_mat.frag",
-            &[shadow_def, max_lights_def]
+            &[shadow_def, MAX_LIGHTS_DEF, MAX_JOINTS_DEF]
         )
         .unwrap()
     };
@@ -539,13 +590,24 @@ fn render_std_mat(
         Either::Left(
             mesh_entities
                 .iter()
-                .sorted_by_key(|(_, _, _, _, _, material_h, _, _)| material_h.id()),
+                .sorted_by_key(|(_, _, _, _, _, material_h, _, _, _)| material_h.id()),
         )
         // Either::Left(mesh_entities.iter()) // <- Unsorted alternative
     };
 
     let mut last_material = None;
-    for (entity, view_vis, transform, mesh, aabb, material_h, skip_reflect, read_reflect) in iter {
+    for (
+        entity,
+        view_vis,
+        transform,
+        mesh,
+        aabb,
+        material_h,
+        skip_reflect,
+        read_reflect,
+        joint_data,
+    ) in iter
+    {
         if phase.can_use_camera_frustum_cull() && !view_vis.get() {
             continue;
         }
@@ -580,6 +642,11 @@ fn render_std_mat(
         }
 
         load_val!(build, world_from_local);
+
+        if let Some(joint_data) = joint_data {
+            build.load("joint_data", joint_data.as_slice());
+        }
+        build.load("has_joint_data", joint_data.is_some());
 
         // Only re-bind if the material has changed.
         if last_material != Some(material_h) {

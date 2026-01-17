@@ -19,7 +19,8 @@ use glutin::surface::GlSurface;
 use crate::{
     BevyGlContext, phase_opaque::OpaquePhasePlugin, phase_shadow::ShadowPhasePlugin,
     phase_transparent::TransparentPhasePlugin, plane_reflect::PlaneReflectPlugin,
-    prepare_image::PrepareImagePlugin, prepare_mesh::PrepareMeshPlugin,
+    prepare_image::PrepareImagePlugin, prepare_joints::PrepareJointsPlugin,
+    prepare_mesh::PrepareMeshPlugin,
 };
 
 #[derive(Debug, Hash, PartialEq, Eq, Clone, SystemSet)]
@@ -58,7 +59,7 @@ impl Plugin for OpenGLMinimalRenderPlugin {
         app.insert_resource(CompressedImageFormatSupport(CompressedImageFormats::BC)) // TODO query?
             .init_resource::<RenderRunner>()
             .init_resource::<RenderPhase>()
-            .add_plugins((PrepareMeshPlugin, PrepareImagePlugin));
+            .add_plugins((PrepareMeshPlugin, PrepareJointsPlugin, PrepareImagePlugin));
 
         // TODO reference: https://github.com/bevyengine/bevy/pull/22144
         app.configure_sets(Startup, (RenderSet::Init, RenderSet::Pipeline).chain());

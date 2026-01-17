@@ -6,6 +6,7 @@ pub mod phase_shadow;
 pub mod phase_transparent;
 pub mod plane_reflect;
 pub mod prepare_image;
+pub mod prepare_joints;
 pub mod prepare_mesh;
 pub mod render;
 pub mod uniform_slot_builder;
@@ -14,6 +15,8 @@ pub mod watchers;
 use anyhow::Error;
 use anyhow::anyhow;
 use bevy::platform::collections::HashSet;
+use bytemuck::cast_slice;
+use core::slice;
 use std::hash::Hash;
 use std::hash::Hasher;
 use std::path::Path;
@@ -815,8 +818,11 @@ impl UniformValue for &[Vec4] {
 impl UniformValue for Mat4 {
     fn load(&self, ctx: &BevyGlContext, loc: &glow::UniformLocation) {
         unsafe {
-            ctx.gl
-                .uniform_matrix_4_f32_slice(Some(&loc), false, &self.to_cols_array())
+            ctx.gl.uniform_matrix_4_f32_slice(
+                Some(&loc),
+                false,
+                cast_slice::<Mat4, f32>(slice::from_ref(self)),
+            )
         };
     }
     fn read_raw(&self, out: &mut StackStack<u32, 16>) {
@@ -824,6 +830,18 @@ impl UniformValue for Mat4 {
         self.to_cols_array()
             .iter()
             .for_each(|n| out.push(n.to_bits()));
+    }
+}
+
+impl UniformValue for &[Mat4] {
+    fn load(&self, ctx: &BevyGlContext, loc: &glow::UniformLocation) {
+        unsafe {
+            ctx.gl
+                .uniform_matrix_4_f32_slice(Some(&loc), false, &bytemuck::cast_slice(self))
+        };
+    }
+    fn read_raw(&self, _out: &mut StackStack<u32, 16>) {
+        unimplemented!("read_raw for slices not supported");
     }
 }
 

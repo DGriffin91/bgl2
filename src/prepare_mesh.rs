@@ -7,6 +7,7 @@ use bytemuck::cast_slice;
 use glow::{Context, HasContext};
 use std::hash::Hash;
 use std::{hash::Hasher, sync::Arc};
+use wgpu_types::VertexFormat;
 
 use crate::{
     AttribType, BevyGlContext, ShaderIndex,
@@ -138,6 +139,7 @@ pub fn send_standard_meshes_to_gpu(
     mut mesh_events: MessageReader<AssetEvent<Mesh>>,
     mut index_buffer_data_u16: Local<Vec<u16>>,
     mut index_buffer_data_u32: Local<Vec<u32>>,
+    mut scratch_floats: Local<Vec<f32>>,
     ctx: If<NonSend<BevyGlContext>>,
 ) {
     if gpu_meshes.gl.is_none() {
@@ -350,7 +352,23 @@ pub fn send_standard_meshes_to_gpu(
             .attributes()
             .zip(buffer_data.iter_mut())
             .map(|((mesh_attribute, _), data)| {
-                (*mesh_attribute, ctx.gen_vbo(data, glow::STATIC_DRAW))
+                let mut mesh_attribute = *mesh_attribute;
+                let converted_data = match mesh_attribute.format {
+                    // Vertex_JointIndex uses Uint16x4 but this type is not supported so Float32x4 is used instead
+                    VertexFormat::Uint16x4 => {
+                        scratch_floats.clear();
+                        scratch_floats
+                            .extend(cast_slice::<u8, u16>(data).iter().map(|v| *v as f32));
+                        mesh_attribute.format = VertexFormat::Float32x4;
+                        cast_slice::<f32, u8>(&scratch_floats)
+                    }
+                    _ => data,
+                };
+
+                (
+                    mesh_attribute,
+                    ctx.gen_vbo(converted_data, glow::STATIC_DRAW),
+                )
             })
             .collect();
 
