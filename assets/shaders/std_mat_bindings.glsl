@@ -18,6 +18,7 @@ uniform vec4 emissive;
 uniform vec3 reflectance;
 uniform float metallic;
 uniform float perceptual_roughness;
+uniform float diffuse_transmission;
 
 uniform bool double_sided;
 uniform bool flip_normal_map_y;

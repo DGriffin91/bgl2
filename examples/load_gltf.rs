@@ -6,7 +6,9 @@ use bevy::{
     camera_controller::free_camera::{FreeCamera, FreeCameraPlugin},
     core_pipeline::{prepass::DepthPrepass, tonemapping::Tonemapping},
     diagnostic::{FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin},
-    light::{CascadeShadowConfigBuilder, light_consts::lux::DIRECT_SUNLIGHT},
+    light::{
+        CascadeShadowConfigBuilder, TransmittedShadowReceiver, light_consts::lux::DIRECT_SUNLIGHT,
+    },
     prelude::*,
     render::{RenderPlugin, settings::WgpuSettings},
     scene::SceneInstanceReady,
@@ -106,9 +108,9 @@ fn setup(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
     mut ctx: Option<NonSendMut<BevyGlContext>>,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-    mut graphs: ResMut<Assets<AnimationGraph>>,
+    mut _meshes: ResMut<Assets<Mesh>>,
+    mut _materials: ResMut<Assets<StandardMaterial>>,
+    mut _graphs: ResMut<Assets<AnimationGraph>>,
 ) {
     if let Some(ctx) = &mut ctx {
         ctx.add_snippet("agx", include_str!("../assets/shaders/agx.glsl"));
@@ -125,22 +127,22 @@ fn setup(
     }
 
     // --------------------------
-    let (graph, index) = AnimationGraph::from_clip(
-        asset_server.load(GltfAssetLabel::Animation(2).from_asset(FOX_PATH)),
-    );
-    let graph_handle = graphs.add(graph);
-    let animation_to_play = AnimationToPlay {
-        graph_handle,
-        index,
-    };
-    let mesh_scene = SceneRoot(asset_server.load(GltfAssetLabel::Scene(0).from_asset(FOX_PATH)));
-    commands
-        .spawn((
-            animation_to_play,
-            mesh_scene,
-            Transform::from_scale(Vec3::ONE * 0.01),
-        ))
-        .observe(play_animation_when_ready);
+    //let (graph, index) = AnimationGraph::from_clip(
+    //    asset_server.load(GltfAssetLabel::Animation(2).from_asset(FOX_PATH)),
+    //);
+    //let graph_handle = graphs.add(graph);
+    //let animation_to_play = AnimationToPlay {
+    //    graph_handle,
+    //    index,
+    //};
+    //let mesh_scene = SceneRoot(asset_server.load(GltfAssetLabel::Scene(0).from_asset(FOX_PATH)));
+    //commands
+    //    .spawn((
+    //        animation_to_play,
+    //        mesh_scene,
+    //        Transform::from_scale(Vec3::ONE * 0.01),
+    //    ))
+    //    .observe(play_animation_when_ready);
     // --------------------------
 
     // Camera
@@ -163,12 +165,12 @@ fn setup(
         Tonemapping::TonyMcMapface,
     ));
 
-    //commands
-    //    .spawn((
-    //        SceneRoot(asset_server.load("models/san-miguel/san-miguel.gltf#Scene0")),
-    //        Transform::from_xyz(-18.0, 0.0, 0.0),
-    //    ))
-    //    .observe(proc_scene);
+    commands
+        .spawn((
+            SceneRoot(asset_server.load("models/san-miguel/san-miguel.gltf#Scene0")),
+            Transform::from_xyz(-18.0, 0.0, 0.0),
+        ))
+        .observe(proc_scene);
 
     //commands
     //    .spawn((
@@ -203,19 +205,19 @@ fn setup(
     //));
 
     // Reflection plane
-    commands.spawn((
-        Mesh3d(meshes.add(Plane3d::default().mesh().size(500.0, 500.0))),
-        Transform::from_translation(vec3(0.0, 0.1, 0.0)),
-        ReflectionPlane::default(),
-        MeshMaterial3d(materials.add(StandardMaterial {
-            base_color: Color::linear_rgba(0.0, 0.0, 0.0, 0.8),
-            perceptual_roughness: 0.1,
-            alpha_mode: AlphaMode::Blend,
-            ..default()
-        })),
-        SkipReflection,
-        ReadReflection,
-    ));
+    //commands.spawn((
+    //    Mesh3d(meshes.add(Plane3d::default().mesh().size(500.0, 500.0))),
+    //    Transform::from_translation(vec3(0.0, 0.1, 0.0)),
+    //    ReflectionPlane::default(),
+    //    MeshMaterial3d(materials.add(StandardMaterial {
+    //        base_color: Color::linear_rgba(0.0, 0.0, 0.0, 0.8),
+    //        perceptual_roughness: 0.1,
+    //        alpha_mode: AlphaMode::Blend,
+    //        ..default()
+    //    })),
+    //    SkipReflection,
+    //    ReadReflection,
+    //));
 
     // Sun
     commands.spawn((
@@ -316,6 +318,15 @@ pub fn proc_scene(
         if let Ok(mat_h) = has_std_mat.get(entity) {
             if let Some(mat) = materials.get_mut(mat_h) {
                 mat.flip_normal_map_y = true;
+                match mat.alpha_mode {
+                    AlphaMode::Mask(_) => {
+                        mat.diffuse_transmission = 0.6;
+                        mat.double_sided = true;
+                        mat.cull_mode = None;
+                        commands.entity(entity).insert(TransmittedShadowReceiver);
+                    }
+                    _ => (),
+                }
             }
         }
 
@@ -491,10 +502,11 @@ fn render_std_mat(
     let mut reflect_bool_location = None;
 
     if !phase.depth_only() {
-        queue_val!(build, flip_normal_map_y);
-        queue_val!(build, perceptual_roughness);
-        queue_val!(build, metallic);
         queue_val!(build, emissive);
+        queue_val!(build, metallic);
+        queue_val!(build, perceptual_roughness);
+        queue_val!(build, diffuse_transmission);
+        queue_val!(build, flip_normal_map_y);
         build.queue_val("reflectance", |m| {
             m.specular_tint.to_linear().to_vec3() * m.reflectance
         });

@@ -43,7 +43,7 @@ void main() {
     float roughness = perceptual_roughness * perceptual_roughness;
     float metallic = metallic * metallic_roughness.b;
     vec3 F0 = calculate_F0(base_color.rgb, metallic, reflectance);
-    base_color.rgb = base_color.rgb * (1.0 - metallic);
+    vec3 diffuse_color = base_color.rgb * (1.0 - metallic);
 
     float emissive_exposure_factor = 1000.0; // TODO do something better
     vec3 emissive = emissive_exposure_factor * emissive.rgb * to_linear(texture2D(emissive_texture, uv_0).rgb);
@@ -56,7 +56,7 @@ void main() {
 
     vec3 output_color = vec3(0.0);
 
-    output_color += directional_light(V, F0, base_color.rgb, normal, roughness, dir_shadow, directional_light_dir, directional_light_color);
+    output_color += directional_light(V, F0, diffuse_color, normal, roughness, diffuse_transmission, dir_shadow, directional_light_dir, directional_light_color);
 
 
     {
@@ -75,7 +75,7 @@ void main() {
             env_specular = rgbe2rgb(textureCubeLod(specular_map, vec3(dir.xy, -dir.z), perceptual_roughness * mip_levels)) * env_intensity;
         }
 
-        output_color += environment_light(NoV, F0, perceptual_roughness, base_color.rgb, env_diffuse, env_specular);
+        output_color += environment_light(NoV, F0, perceptual_roughness, diffuse_color, env_diffuse, env_specular);
     }
 
     // Point Lights
@@ -86,8 +86,9 @@ void main() {
             if (length(to_light) < light_position_range.w) {
                 vec4 light_color_radius = point_light_color_radius[i];
                 vec4 dos = spot_light_dir_offset_scale[i];
-                output_color += point_light(V, base_color.rgb, F0, normal, roughness, to_light, light_position_range.w, 
-                                            light_color_radius.rgb, octahedral_decode(dos.xy), dos.z, dos.w);
+                vec3 spot_dir = octahedral_decode(dos.xy);
+                output_color += point_light(V, diffuse_color, F0, normal, roughness, diffuse_transmission, to_light, 
+                                            light_position_range.w, light_color_radius.rgb, spot_dir, dos.z, dos.w);
             }
         }
     }

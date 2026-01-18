@@ -83,19 +83,25 @@ vec2 F_AB(float perceptual_roughness, float NoV) {
 }
 
 
-vec3 directional_light(vec3 V, vec3 F0, vec3 base_color, vec3 normal, float roughness, float shadow, vec3 light_dir, vec3 color) {
+vec3 directional_light(vec3 V, vec3 F0, vec3 base_color, vec3 normal, float roughness, float diffuse_transmission, float shadow, vec3 light_dir, vec3 color) {
     vec3 res = vec3(0.0, 0.0, 0.0);
     if (shadow > 0.0 && light_dir != vec3(0.0)) {
         vec3 L = normalize(-light_dir);
         vec3 half_dir = normalize(L + V);
-        float NoL = saturate(dot(normal, L));
-        res += shadow * base_color.rgb * Fd_Lambert() * NoL * color;
+        float NoL_unclamped = dot(normal, L);
+        float NoL = saturate(NoL_unclamped);
+        float NoL_transmission = saturate(-NoL_unclamped);
+        vec3 diffuse_base = shadow * base_color.rgb * Fd_Lambert() * color;
+        res += diffuse_base * NoL * (1.0 - diffuse_transmission);
+        res += diffuse_base * NoL_transmission * diffuse_transmission;
         res += shadow * specular_brdf(V, L, normal, roughness, F0) * NoL * color;
+
     }
     return res;
 }
 
 vec3 environment_light(float NoV, vec3 F0, float perceptual_roughness, vec3 base_color, vec3 env_diffuse, vec3 env_specular) {
+    // Could add diffuse_transmission, but it would require a 2nd env_diffuse sample
     vec2 f_ab = F_AB(perceptual_roughness, NoV);
 
     // Multiscattering approximation
@@ -112,18 +118,21 @@ vec3 environment_light(float NoV, vec3 F0, float perceptual_roughness, vec3 base
     return ((FmsEms + k_D) * env_diffuse) + (FssEss * env_specular);
 }
 
-vec3 point_light(vec3 V, vec3 base_color, vec3 F0, vec3 normal, float roughness, vec3 to_light, float range, vec3 color, vec3 spot_dir, float spot_offset, float spot_scale) {
+vec3 point_light(vec3 V, vec3 base_color, vec3 F0, vec3 normal, float roughness, float diffuse_transmission, 
+                 vec3 to_light, float range, vec3 color, vec3 spot_dir, float spot_offset, float spot_scale) {
     vec3 res = vec3(0.0);
     float dist = length(to_light);
     if (dist < range) {
         vec3 L = normalize(to_light);
         float spot_attenuation = spot_angle_attenuation(spot_dir, L, spot_offset, spot_scale);
         float dist_attenuation = distance_attenuation(dist, range);
-
         float attenuation = dist_attenuation * spot_attenuation;
-        float NoL = saturate(dot(normal, L));
-
-        res += base_color.rgb * Fd_Lambert() * NoL * attenuation * color;
+        float NoL_unclamped = dot(normal, L);
+        float NoL = saturate(NoL_unclamped);
+        float NoL_transmission = saturate(-NoL_unclamped);
+        vec3 diffuse_base = base_color.rgb * Fd_Lambert() * attenuation * color;
+        res += diffuse_base * NoL * (1.0 - diffuse_transmission);
+        res += diffuse_base * NoL_transmission * diffuse_transmission;
         res += specular_brdf(V, L, normal, roughness, F0) * NoL * attenuation * color;
     }
     return res;
