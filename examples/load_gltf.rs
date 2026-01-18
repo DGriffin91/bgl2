@@ -546,39 +546,15 @@ fn render_std_mat(
         build.queue_val("has_normal_map", |m| m.normal_map_texture.is_some());
         build.load("view_exposure", view.exposure);
 
-        let mut point_light_position_range = Vec::new();
-        let mut point_light_color_radius = Vec::new();
-        let mut spot_light_dir_offset_scale = Vec::new();
-
-        for (light, trans) in &point_lights {
-            if spot_light_dir_offset_scale.len() >= MAX_POINT_LIGHTS {
-                break;
-            }
-            point_light_position_range.push(trans.translation().extend(light.range));
-            point_light_color_radius.push(
-                (light.color.to_linear().to_vec3() * light.intensity * POWER_TO_INTENSITY)
-                    .extend(light.radius),
-            );
-            spot_light_dir_offset_scale.push(vec4(1.0, 0.0, 2.0, 1.0));
-        }
-
-        for (light, trans) in &spot_lights {
-            if spot_light_dir_offset_scale.len() >= MAX_POINT_LIGHTS {
-                break;
-            }
-            point_light_position_range.push(trans.translation().extend(light.range));
-            point_light_color_radius.push(
-                (light.color.to_linear().to_vec3() * light.intensity * POWER_TO_INTENSITY)
-                    .extend(light.radius),
-            );
-            spot_light_dir_offset_scale.push(spot_dir_offset_scale(light, trans));
-        }
-
-        let light_count = point_light_position_range.len() as i32;
-        load_val!(build, light_count);
-        load_slice!(build, point_light_position_range);
-        load_slice!(build, point_light_color_radius);
-        load_slice!(build, spot_light_dir_offset_scale);
+        load_point_spot_lights(
+            &mut build,
+            point_lights,
+            spot_lights,
+            "light_count",
+            "point_light_position_range",
+            "point_light_color_radius",
+            "spot_light_dir_offset_scale",
+        );
 
         reflect_bool_location = build.get_uniform_location("read_reflection");
         if let Some(reflect_texture) = &reflect_texture {
@@ -669,7 +645,56 @@ fn render_std_mat(
     }
 }
 
-fn spot_dir_offset_scale(light: &SpotLight, trans: &GlobalTransform) -> Vec4 {
+pub fn load_point_spot_lights<T>(
+    build: &mut UniformSlotBuilder<T>,
+    point_lights: Query<(&PointLight, &GlobalTransform)>,
+    spot_lights: Query<(&SpotLight, &GlobalTransform)>,
+    count_binding: &str,
+    position_range_binding: &str,
+    color_radius_binding: &str,
+    dir_offset_scale_binding: &str,
+) {
+    let mut point_light_position_range = Vec::new();
+    let mut point_light_color_radius = Vec::new();
+    let mut spot_light_dir_offset_scale = Vec::new();
+    for (light, trans) in &point_lights {
+        if spot_light_dir_offset_scale.len() >= MAX_POINT_LIGHTS {
+            break;
+        }
+        point_light_position_range.push(trans.translation().extend(light.range));
+        point_light_color_radius.push(
+            (light.color.to_linear().to_vec3() * light.intensity * POWER_TO_INTENSITY)
+                .extend(light.radius),
+        );
+        spot_light_dir_offset_scale.push(vec4(1.0, 0.0, 2.0, 1.0));
+    }
+
+    for (light, trans) in &spot_lights {
+        if spot_light_dir_offset_scale.len() >= MAX_POINT_LIGHTS {
+            break;
+        }
+        point_light_position_range.push(trans.translation().extend(light.range));
+        point_light_color_radius.push(
+            (light.color.to_linear().to_vec3() * light.intensity * POWER_TO_INTENSITY)
+                .extend(light.radius),
+        );
+        spot_light_dir_offset_scale.push(spot_dir_offset_scale(light, trans));
+    }
+
+    let light_count = point_light_position_range.len() as i32;
+    build.load(count_binding, light_count);
+    build.load(
+        position_range_binding,
+        point_light_position_range.as_slice(),
+    );
+    build.load(color_radius_binding, point_light_color_radius.as_slice());
+    build.load(
+        dir_offset_scale_binding,
+        spot_light_dir_offset_scale.as_slice(),
+    );
+}
+
+pub fn spot_dir_offset_scale(light: &SpotLight, trans: &GlobalTransform) -> Vec4 {
     // https://github.com/bevyengine/bevy/blob/abb8c353f49a6fe9e039e82adbe1040488ad910a/crates/bevy_pbr/src/render/light.rs#L846
     let cos_outer = light.outer_angle.cos();
     let spot_scale = 1.0 / (light.inner_angle.cos() - cos_outer).max(1e-4);
