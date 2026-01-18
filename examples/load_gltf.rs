@@ -38,9 +38,6 @@ use itertools::{Either, Itertools};
 #[derive(FromArgs, Resource, Clone, Default)]
 /// Config
 pub struct Args {
-    /// render with npr shaders (non-physically based). Otherwise PBR shaders are used.
-    #[argh(switch)]
-    npr: bool,
     /// use default bevy render backend (Also need to enable default plugins)
     #[argh(switch)]
     bevy: bool,
@@ -447,7 +444,6 @@ fn render_std_mat(
     directional_lights: Query<(&Transform, &DirectionalLight)>,
     reflect_texture: Option<Res<PlaneReflectionTexture>>,
     mut plane_reflection: Option<Single<(&mut ReflectionPlane, &GlobalTransform)>>,
-    args: Res<Args>,
 ) {
     let (view, env_light) = *camera;
     let phase = **phase;
@@ -462,23 +458,13 @@ fn render_std_mat(
         shadow_def = shadow.as_ref().map_or(("", ""), |_| ("SAMPLE_SHADOW", ""));
     }
 
-    let shader_index = if args.npr {
-        shader_cached!(
-            ctx,
-            "../assets/shaders/std_mat.vert",
-            "../assets/shaders/npr_std_mat.frag",
-            &[shadow_def, MAX_LIGHTS_DEF, MAX_JOINTS_DEF]
-        )
-        .unwrap()
-    } else {
-        shader_cached!(
-            ctx,
-            "../assets/shaders/std_mat.vert",
-            "../assets/shaders/pbr_std_mat.frag",
-            &[shadow_def, MAX_LIGHTS_DEF, MAX_JOINTS_DEF]
-        )
-        .unwrap()
-    };
+    let shader_index = shader_cached!(
+        ctx,
+        "../assets/shaders/std_mat.vert",
+        "../assets/shaders/pbr_std_mat.frag",
+        &[shadow_def, MAX_LIGHTS_DEF, MAX_JOINTS_DEF]
+    )
+    .unwrap();
 
     gpu_meshes.reset_bind_cache();
     ctx.use_cached_program(shader_index);
