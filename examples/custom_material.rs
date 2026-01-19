@@ -138,7 +138,7 @@ fn render_custom_mat(
     gpu_meshes.reset_bind_cache();
     ctx.use_cached_program(shader_index);
 
-    let mut build = UniformSlotBuilder::<CustomMaterial>::new(&ctx, &gpu_images, shader_index);
+    let mut build = UniformSlotBuilder::<CustomMaterial>::new(&mut ctx, &gpu_images, shader_index);
 
     queue_val!(build, color);
     queue_tex!(build, emissive);
@@ -157,6 +157,6 @@ fn render_custom_mat(
         load_val!(build, clip_from_local);
 
         build.run(material);
-        gpu_meshes.draw_mesh(&ctx, mesh.id(), shader_index);
+        gpu_meshes.draw_mesh(build.ctx, mesh.id(), shader_index);
     }
 }

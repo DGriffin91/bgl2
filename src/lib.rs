@@ -22,6 +22,7 @@ use std::hash::Hash;
 use std::hash::Hasher;
 use std::path::Path;
 use std::sync::Arc;
+use wgpu_types::Face;
 
 use bevy::{platform::collections::HashMap, prelude::*};
 
@@ -52,6 +53,7 @@ pub struct BevyGlContext {
     pub shader_snippets: HashMap<String, String>,
     pub has_glsl_cube_lod: bool, // TODO move
     pub has_cube_map_seamless: bool,
+    pub last_cull_mode: Option<Face>,
 }
 
 impl Drop for BevyGlContext {
@@ -219,6 +221,7 @@ impl BevyGlContext {
                 shader_snippets: Default::default(),
                 has_glsl_cube_lod: true,
                 has_cube_map_seamless,
+                last_cull_mode: None,
             };
             ctx.test_for_glsl_lod();
             ctx
@@ -593,6 +596,29 @@ impl BevyGlContext {
             self.gl.depth_mask(true);
             self.gl.color_mask(false, false, false, false);
             self.gl.blend_func(glow::ZERO, glow::ONE);
+        }
+    }
+
+    pub fn set_cull_mode(&mut self, cull_mode: Option<Face>) {
+        if self.last_cull_mode != cull_mode {
+            self.last_cull_mode = cull_mode;
+            unsafe {
+                match cull_mode {
+                    Some(face) => match face {
+                        wgpu_types::Face::Front => {
+                            self.gl.enable(glow::CULL_FACE);
+                            self.gl.cull_face(glow::BACK);
+                        }
+                        wgpu_types::Face::Back => {
+                            self.gl.enable(glow::CULL_FACE);
+                            self.gl.cull_face(glow::BACK);
+                        }
+                    },
+                    None => {
+                        self.gl.disable(glow::CULL_FACE);
+                    }
+                }
+            }
         }
     }
 

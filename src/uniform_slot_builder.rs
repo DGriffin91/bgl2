@@ -45,7 +45,7 @@ impl From<Handle<Image>> for Tex {
 }
 
 pub struct UniformSlotBuilder<'a, T> {
-    pub ctx: &'a BevyGlContext,
+    pub ctx: &'a mut BevyGlContext,
     pub gpu_images: &'a GpuImages,
     pub shader_index: u32,
 
@@ -66,12 +66,15 @@ pub struct UniformSlotBuilder<'a, T> {
 }
 
 impl<'a, T> UniformSlotBuilder<'a, T> {
-    pub fn new(ctx: &'a BevyGlContext, gpu_images: &'a GpuImages, shader_index: u32) -> Self {
+    // BevyGlContext is only mut here so the mut version can still be accessed.
+    // TODO move UniformSlotBuilder (or similar) into BevyGlContext
+    pub fn new(ctx: &'a mut BevyGlContext, gpu_images: &'a GpuImages, shader_index: u32) -> Self {
+        let slots_count = ctx.get_uniform_count(shader_index) as usize;
         UniformSlotBuilder {
             ctx,
             gpu_images,
             shader_index,
-            value_slots: Vec::with_capacity(ctx.get_uniform_count(shader_index) as usize),
+            value_slots: Vec::with_capacity(slots_count),
             texture_slots: Vec::new(),
             uniform_location_cache: Default::default(),
             temp_value: Default::default(),

@@ -38,6 +38,7 @@ use bevy_opengl::{
     uniform_slot_builder::UniformSlotBuilder,
 };
 use itertools::{Either, Itertools};
+use wgpu_types::Face;
 
 #[derive(FromArgs, Resource, Clone, Default)]
 /// Config
@@ -320,7 +321,10 @@ pub fn proc_scene(
                         mat.cull_mode = None;
                         commands.entity(entity).insert(TransmittedShadowReceiver);
                     }
-                    _ => (),
+                    _ => {
+                        mat.double_sided = false;
+                        mat.cull_mode = Some(Face::Back);
+                    }
                 }
             }
         }
@@ -458,7 +462,8 @@ fn render_std_mat(
     gpu_meshes.reset_bind_cache();
     ctx.use_cached_program(shader_index);
 
-    let mut build = UniformSlotBuilder::<StandardMaterial>::new(&ctx, &gpu_images, shader_index);
+    let mut build =
+        UniformSlotBuilder::<StandardMaterial>::new(&mut ctx, &gpu_images, shader_index);
 
     queue_val!(build, double_sided);
     queue_tex!(build, base_color_texture);
@@ -573,8 +578,8 @@ fn render_std_mat(
             }
             reflect_bool_location
                 .clone()
-                .map(|loc| (read_reflect && phase.read_reflect()).load(&ctx, &loc));
-            set_blend_func_from_alpha_mode(&ctx.gl, &material.alpha_mode);
+                .map(|loc| (read_reflect && phase.read_reflect()).load(&build.ctx, &loc));
+            set_blend_func_from_alpha_mode(&build.ctx.gl, &material.alpha_mode);
         }
 
         load_val!(build, world_from_local);
@@ -587,8 +592,10 @@ fn render_std_mat(
         // Only re-bind if the material has changed.
         if last_material != Some(material_h) {
             build.run(material);
+            build.ctx.set_cull_mode(material.cull_mode);
         }
-        gpu_meshes.draw_mesh(&ctx, mesh.id(), shader_index);
+
+        gpu_meshes.draw_mesh(&build.ctx, mesh.id(), shader_index);
         last_material = Some(material_h);
     }
 }
