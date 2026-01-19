@@ -7,9 +7,9 @@ use crate::{BevyGlContext, UniformValue, faststack::StackStack, prepare_image::G
 // are maybe also dyn dispatch?
 
 pub struct SlotData {
-    init: bool,
-    previous: StackStack<u32, 16>,
-    location: glow::UniformLocation,
+    pub(crate) init: bool,
+    pub(crate) previous: StackStack<u32, 16>,
+    pub(crate) location: glow::UniformLocation,
 }
 
 #[derive(Clone)]
@@ -112,13 +112,13 @@ impl<'a, T> UniformSlotBuilder<'a, T> {
                           temp_value: &mut StackStack<u32, 16>| {
                         let v: V = f(material);
                         if !slot.init {
-                            v.load(ctx, &slot.location);
+                            v.load(&ctx.gl, &slot.location);
                             slot.init = true;
                         } else {
                             v.read_raw(temp_value);
                             if temp_value != &slot.previous {
                                 std::mem::swap(&mut slot.previous, temp_value);
-                                v.load(ctx, &slot.location);
+                                v.load(&ctx.gl, &slot.location);
                             }
                         }
                     },
@@ -187,7 +187,7 @@ impl<'a, T> UniformSlotBuilder<'a, T> {
         V: UniformValue,
     {
         if let Some(location) = self.get_uniform_location(name) {
-            v.load(&self.ctx, &location);
+            v.load(&self.ctx.gl, &location);
         }
     }
 }

@@ -1,4 +1,5 @@
 pub mod bevy_standard_lighting;
+pub mod bevy_standard_material;
 pub mod egui_plugin;
 pub mod faststack;
 pub mod mesh_util;
@@ -18,6 +19,7 @@ use anyhow::anyhow;
 use bevy::platform::collections::HashSet;
 use bytemuck::cast_slice;
 use core::slice;
+use std::any::TypeId;
 use std::hash::Hash;
 use std::hash::Hasher;
 use std::path::Path;
@@ -36,6 +38,7 @@ use winit::platform::web::WindowExtWebSys;
 
 use crate::faststack::FastStack;
 use crate::faststack::StackStack;
+use crate::uniform_slot_builder::SlotData;
 use crate::watchers::Watchers;
 
 pub type ShaderIndex = u32;
@@ -54,6 +57,9 @@ pub struct BevyGlContext {
     pub has_glsl_cube_lod: bool, // TODO move
     pub has_cube_map_seamless: bool,
     pub last_cull_mode: Option<Face>,
+    pub uniform_slot_map: HashMap<TypeId, Vec<Option<SlotData>>>,
+    pub current_program: Option<glow::Program>,
+    pub temp_slot_data: StackStack<u32, 16>,
 }
 
 impl Drop for BevyGlContext {
@@ -222,6 +228,9 @@ impl BevyGlContext {
                 has_glsl_cube_lod: true,
                 has_cube_map_seamless,
                 last_cull_mode: None,
+                uniform_slot_map: Default::default(),
+                current_program: Default::default(),
+                temp_slot_data: Default::default(),
             };
             ctx.test_for_glsl_lod();
             ctx
@@ -264,8 +273,11 @@ impl BevyGlContext {
         ctx
     }
 
-    pub fn use_cached_program(&self, index: ShaderIndex) {
-        unsafe { self.gl.use_program(Some(self.shader_cache[index as usize])) };
+    pub fn use_cached_program(&mut self, index: ShaderIndex) {
+        self.uniform_slot_map.clear();
+        self.temp_slot_data.clear();
+        self.current_program = Some(self.shader_cache[index as usize]);
+        unsafe { self.gl.use_program(self.current_program) };
     }
 
     pub fn get_attrib_location(&self, shader_index: ShaderIndex, name: &str) -> Option<u32> {
@@ -730,13 +742,13 @@ pub fn shader_key(vertex: &Path, fragment: &Path, shader_defs: &[(&str, &str)]) 
 }
 
 pub trait UniformValue: Sized {
-    fn load(&self, ctx: &BevyGlContext, loc: &glow::UniformLocation);
+    fn load(&self, gl: &glow::Context, loc: &glow::UniformLocation);
     fn read_raw(&self, out: &mut StackStack<u32, 16>);
 }
 
 impl UniformValue for bool {
-    fn load(&self, ctx: &BevyGlContext, loc: &glow::UniformLocation) {
-        unsafe { ctx.gl.uniform_1_i32(Some(&loc), if *self { 1 } else { 0 }) };
+    fn load(&self, gl: &glow::Context, loc: &glow::UniformLocation) {
+        unsafe { gl.uniform_1_i32(Some(&loc), if *self { 1 } else { 0 }) };
     }
     fn read_raw(&self, out: &mut StackStack<u32, 16>) {
         out.clear();
@@ -745,8 +757,8 @@ impl UniformValue for bool {
 }
 
 impl UniformValue for f32 {
-    fn load(&self, ctx: &BevyGlContext, loc: &glow::UniformLocation) {
-        unsafe { ctx.gl.uniform_1_f32(Some(&loc), *self) };
+    fn load(&self, gl: &glow::Context, loc: &glow::UniformLocation) {
+        unsafe { gl.uniform_1_f32(Some(&loc), *self) };
     }
     fn read_raw(&self, out: &mut StackStack<u32, 16>) {
         out.clear();
@@ -755,11 +767,8 @@ impl UniformValue for f32 {
 }
 
 impl UniformValue for &[f32] {
-    fn load(&self, ctx: &BevyGlContext, loc: &glow::UniformLocation) {
-        unsafe {
-            ctx.gl
-                .uniform_1_f32_slice(Some(&loc), &bytemuck::cast_slice(self))
-        };
+    fn load(&self, gl: &glow::Context, loc: &glow::UniformLocation) {
+        unsafe { gl.uniform_1_f32_slice(Some(&loc), &bytemuck::cast_slice(self)) };
     }
     fn read_raw(&self, _out: &mut StackStack<u32, 16>) {
         unimplemented!("read_raw for slices not supported");
@@ -767,8 +776,8 @@ impl UniformValue for &[f32] {
 }
 
 impl UniformValue for i32 {
-    fn load(&self, ctx: &BevyGlContext, loc: &glow::UniformLocation) {
-        unsafe { ctx.gl.uniform_1_i32(Some(&loc), *self) };
+    fn load(&self, gl: &glow::Context, loc: &glow::UniformLocation) {
+        unsafe { gl.uniform_1_i32(Some(&loc), *self) };
     }
     fn read_raw(&self, out: &mut StackStack<u32, 16>) {
         out.clear();
@@ -777,8 +786,8 @@ impl UniformValue for i32 {
 }
 
 impl UniformValue for Vec2 {
-    fn load(&self, ctx: &BevyGlContext, loc: &glow::UniformLocation) {
-        unsafe { ctx.gl.uniform_2_f32_slice(Some(&loc), &self.to_array()) };
+    fn load(&self, gl: &glow::Context, loc: &glow::UniformLocation) {
+        unsafe { gl.uniform_2_f32_slice(Some(&loc), &self.to_array()) };
     }
     fn read_raw(&self, out: &mut StackStack<u32, 16>) {
         out.clear();
@@ -787,11 +796,8 @@ impl UniformValue for Vec2 {
 }
 
 impl UniformValue for &[Vec2] {
-    fn load(&self, ctx: &BevyGlContext, loc: &glow::UniformLocation) {
-        unsafe {
-            ctx.gl
-                .uniform_2_f32_slice(Some(&loc), &bytemuck::cast_slice(self))
-        };
+    fn load(&self, gl: &glow::Context, loc: &glow::UniformLocation) {
+        unsafe { gl.uniform_2_f32_slice(Some(&loc), &bytemuck::cast_slice(self)) };
     }
     fn read_raw(&self, _out: &mut StackStack<u32, 16>) {
         unimplemented!("read_raw for slices not supported");
@@ -799,8 +805,8 @@ impl UniformValue for &[Vec2] {
 }
 
 impl UniformValue for Vec3 {
-    fn load(&self, ctx: &BevyGlContext, loc: &glow::UniformLocation) {
-        unsafe { ctx.gl.uniform_3_f32_slice(Some(&loc), &self.to_array()) };
+    fn load(&self, gl: &glow::Context, loc: &glow::UniformLocation) {
+        unsafe { gl.uniform_3_f32_slice(Some(&loc), &self.to_array()) };
     }
     fn read_raw(&self, out: &mut StackStack<u32, 16>) {
         out.clear();
@@ -809,11 +815,8 @@ impl UniformValue for Vec3 {
 }
 
 impl UniformValue for &[Vec3] {
-    fn load(&self, ctx: &BevyGlContext, loc: &glow::UniformLocation) {
-        unsafe {
-            ctx.gl
-                .uniform_3_f32_slice(Some(&loc), &bytemuck::cast_slice(self))
-        };
+    fn load(&self, gl: &glow::Context, loc: &glow::UniformLocation) {
+        unsafe { gl.uniform_3_f32_slice(Some(&loc), &bytemuck::cast_slice(self)) };
     }
     fn read_raw(&self, _out: &mut StackStack<u32, 16>) {
         unimplemented!("read_raw for slices not supported");
@@ -821,8 +824,8 @@ impl UniformValue for &[Vec3] {
 }
 
 impl UniformValue for Vec4 {
-    fn load(&self, ctx: &BevyGlContext, loc: &glow::UniformLocation) {
-        unsafe { ctx.gl.uniform_4_f32_slice(Some(&loc), &self.to_array()) };
+    fn load(&self, gl: &glow::Context, loc: &glow::UniformLocation) {
+        unsafe { gl.uniform_4_f32_slice(Some(&loc), &self.to_array()) };
     }
     fn read_raw(&self, out: &mut StackStack<u32, 16>) {
         out.clear();
@@ -831,11 +834,8 @@ impl UniformValue for Vec4 {
 }
 
 impl UniformValue for &[Vec4] {
-    fn load(&self, ctx: &BevyGlContext, loc: &glow::UniformLocation) {
-        unsafe {
-            ctx.gl
-                .uniform_4_f32_slice(Some(&loc), &bytemuck::cast_slice(self))
-        };
+    fn load(&self, gl: &glow::Context, loc: &glow::UniformLocation) {
+        unsafe { gl.uniform_4_f32_slice(Some(&loc), &bytemuck::cast_slice(self)) };
     }
     fn read_raw(&self, _out: &mut StackStack<u32, 16>) {
         unimplemented!("read_raw for slices not supported");
@@ -843,9 +843,9 @@ impl UniformValue for &[Vec4] {
 }
 
 impl UniformValue for Mat4 {
-    fn load(&self, ctx: &BevyGlContext, loc: &glow::UniformLocation) {
+    fn load(&self, gl: &glow::Context, loc: &glow::UniformLocation) {
         unsafe {
-            ctx.gl.uniform_matrix_4_f32_slice(
+            gl.uniform_matrix_4_f32_slice(
                 Some(&loc),
                 false,
                 cast_slice::<Mat4, f32>(slice::from_ref(self)),
@@ -861,11 +861,8 @@ impl UniformValue for Mat4 {
 }
 
 impl UniformValue for &[Mat4] {
-    fn load(&self, ctx: &BevyGlContext, loc: &glow::UniformLocation) {
-        unsafe {
-            ctx.gl
-                .uniform_matrix_4_f32_slice(Some(&loc), false, &bytemuck::cast_slice(self))
-        };
+    fn load(&self, gl: &glow::Context, loc: &glow::UniformLocation) {
+        unsafe { gl.uniform_matrix_4_f32_slice(Some(&loc), false, &bytemuck::cast_slice(self)) };
     }
     fn read_raw(&self, _out: &mut StackStack<u32, 16>) {
         unimplemented!("read_raw for slices not supported");
@@ -873,11 +870,8 @@ impl UniformValue for &[Mat4] {
 }
 
 impl UniformValue for LinearRgba {
-    fn load(&self, ctx: &BevyGlContext, loc: &glow::UniformLocation) {
-        unsafe {
-            ctx.gl
-                .uniform_4_f32_slice(Some(&loc), &self.to_vec4().to_array())
-        };
+    fn load(&self, gl: &glow::Context, loc: &glow::UniformLocation) {
+        unsafe { gl.uniform_4_f32_slice(Some(&loc), &self.to_vec4().to_array()) };
     }
     fn read_raw(&self, out: &mut StackStack<u32, 16>) {
         out.clear();
@@ -889,11 +883,8 @@ impl UniformValue for LinearRgba {
 }
 
 impl UniformValue for Color {
-    fn load(&self, ctx: &BevyGlContext, loc: &glow::UniformLocation) {
-        unsafe {
-            ctx.gl
-                .uniform_4_f32_slice(Some(&loc), &self.to_linear().to_vec4().to_array())
-        };
+    fn load(&self, gl: &glow::Context, loc: &glow::UniformLocation) {
+        unsafe { gl.uniform_4_f32_slice(Some(&loc), &self.to_linear().to_vec4().to_array()) };
     }
     fn read_raw(&self, out: &mut StackStack<u32, 16>) {
         out.clear();
@@ -939,4 +930,72 @@ macro_rules! shader_cached {
             }
         }
     }};
+}
+
+pub trait UniformSet {
+    // TODO depth only variant? When the depth only variant uses an ifdef it should be that the locations return None
+    // TODO could cache a names/location set for each combination of ShaderProgram+TypeId.
+    fn names() -> &'static [&'static str];
+    /// The index for load should correspond to the order returned from names()
+    /// location is where this value should be put
+    /// if the current item differs from prev_value bind it and update prev_value
+    /// temp_value is scratch space to load your value to so it can be compared to prev_value
+    fn load(
+        &self,
+        gl: &glow::Context,
+        index: u32,
+        slot: &mut SlotData,
+        temp_value: &mut StackStack<u32, 16>,
+    );
+}
+
+#[inline]
+pub fn load_if_new<T: UniformValue>(
+    v: &T,
+    gl: &glow::Context,
+    slot: &mut SlotData,
+    temp: &mut StackStack<u32, 16>,
+) {
+    v.read_raw(temp);
+    if !slot.init || temp != &slot.previous {
+        slot.init = true;
+        std::mem::swap(&mut slot.previous, temp);
+        v.load(&gl, &slot.location);
+    }
+}
+
+impl BevyGlContext {
+    pub fn map_uniform_set_locations<T: UniformSet + 'static>(&mut self) {
+        let current_program = self
+            .current_program
+            .expect("Need to run use_cached_program() before map_uniform_set_locations()");
+
+        let locations = T::names()
+            .iter()
+            .map(|name| unsafe {
+                self.gl
+                    .get_uniform_location(current_program, name)
+                    .map(|location| SlotData {
+                        init: false,
+                        previous: Default::default(),
+                        location,
+                    })
+            })
+            .collect::<Vec<_>>();
+
+        self.uniform_slot_map.insert(TypeId::of::<T>(), locations);
+    }
+    pub fn bind_uniforms_set<T: UniformSet + 'static>(&mut self, v: &T) {
+        for (index, slot) in self
+            .uniform_slot_map
+            .get_mut(&TypeId::of::<T>())
+            .unwrap()
+            .iter_mut()
+            .enumerate()
+        {
+            if let Some(slot) = slot {
+                v.load(&self.gl, index as u32, slot, &mut self.temp_slot_data);
+            }
+        }
+    }
 }
