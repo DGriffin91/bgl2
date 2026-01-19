@@ -13,7 +13,9 @@ uniform vec4 B_point_light_position_range[MAX_POINT_LIGHTS];
 uniform vec4 B_point_light_color_radius[MAX_POINT_LIGHTS];
 uniform vec4 B_spot_light_dir_offset_scale[MAX_POINT_LIGHTS];
 
-vec3 apply_pbr_lighting(vec3 V, vec3 diffuse_color, vec3 F0, vec3 normal, float roughness, float diffuse_transmission, vec2 screen_uv) {
+vec3 apply_pbr_lighting(vec3 V, vec3 diffuse_color, vec3 F0, vec3 vert_normal, vec3 normal, float perceptual_roughness, 
+                        float diffuse_transmission, vec2 screen_uv, vec2 view_resolution, vec3 ws_position) {
+    float roughness = perceptual_roughness * perceptual_roughness;
     vec3 output_color = vec3(0.0);
 
     float dir_shadow = 1.0;

@@ -115,10 +115,6 @@ fn setup(
 ) {
     if let Some(ctx) = &mut ctx {
         ctx.add_snippet("agx", include_str!("../assets/shaders/agx.glsl"));
-        ctx.add_snippet(
-            "std_mat_bindings",
-            include_str!("../assets/shaders/std_mat_bindings.glsl"),
-        );
         ctx.add_snippet("math", include_str!("../assets/shaders/math.glsl"));
         ctx.add_snippet("shadow_sampling", standard_shadow_sampling_glsl());
         ctx.add_snippet("pbr", standard_pbr_glsl());
