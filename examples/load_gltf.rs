@@ -17,9 +17,13 @@ use bevy::{
 };
 use bevy_mod_mipmap_generator::{MipmapGeneratorPlugin, generate_mipmaps};
 use bevy_opengl::{
-    BevyGlContext, UniformValue, load_slice, load_tex, load_val,
-    mesh_util::octahedral_encode,
-    phase_shadow::DirectionalLightInfo,
+    BevyGlContext, UniformValue,
+    bevy_standard_lighting::{
+        DEFAULT_MAX_JOINTS_DEF, DEFAULT_MAX_LIGHTS_DEF, bind_standard_lighting, standard_pbr_glsl,
+        standard_pbr_lighting_glsl, standard_shadow_sampling_glsl,
+    },
+    load_tex, load_val,
+    phase_shadow::DirectionalLightShadow,
     phase_transparent::DeferredAlphaBlendDraws,
     plane_reflect::{PlaneReflectionTexture, ReflectionPlane},
     prepare_image::GpuImages,
@@ -115,12 +119,10 @@ fn setup(
             "std_mat_bindings",
             include_str!("../assets/shaders/std_mat_bindings.glsl"),
         );
-        ctx.add_snippet(
-            "shadow_sampling",
-            include_str!("../assets/shaders/shadow_sampling.glsl"),
-        );
         ctx.add_snippet("math", include_str!("../assets/shaders/math.glsl"));
-        ctx.add_snippet("pbr", include_str!("../assets/shaders/pbr.glsl"));
+        ctx.add_snippet("shadow_sampling", standard_shadow_sampling_glsl());
+        ctx.add_snippet("pbr", standard_pbr_glsl());
+        ctx.add_snippet("standard_pbr_lighting", standard_pbr_lighting_glsl());
     }
 
     // --------------------------
@@ -365,7 +367,7 @@ fn prepare_view(
         &Projection,
         Option<&Exposure>,
     )>,
-    shadow: Option<Res<DirectionalLightInfo>>,
+    shadow: Option<Res<DirectionalLightShadow>>,
     reflect: Option<Single<&ReflectionPlane>>,
 ) {
     let (camera_entity, _camera, cam_global_trans, cam_proj, exposure) = *camera;
@@ -409,15 +411,6 @@ fn prepare_view(
     });
 }
 
-// It seems like some drivers are limited by code length.
-// The point light loop is unrolled so setting this too high can be an issue.
-// Also fragment shader uniform capacity can be very limited on some drivers.
-const MAX_POINT_LIGHTS: usize = 8;
-const MAX_LIGHTS_DEF: (&str, &str) = ("MAX_POINT_LIGHTS", "8");
-
-// vertex shader uniform capacity can be limited on some drivers (though not as much as in the frag shader.)
-const MAX_JOINTS_DEF: (&str, &str) = ("MAX_JOINTS", "32");
-
 fn render_std_mat(
     mesh_entities: Query<(
         Entity,
@@ -433,15 +426,15 @@ fn render_std_mat(
     camera: Single<(&ViewUniforms, Option<&EnvironmentMapLight>)>,
     point_lights: Query<(&PointLight, &GlobalTransform)>,
     spot_lights: Query<(&SpotLight, &GlobalTransform)>,
+    directional_lights: Query<(&DirectionalLight, &GlobalTransform)>,
     mut ctx: NonSendMut<BevyGlContext>,
     mut gpu_meshes: NonSendMut<GPUMeshBufferMap>,
     materials: Res<Assets<StandardMaterial>>,
     phase: If<Res<RenderPhase>>,
     mut transparent_draws: ResMut<DeferredAlphaBlendDraws>,
-    shadow: Option<Res<DirectionalLightInfo>>,
+    shadow: Option<Res<DirectionalLightShadow>>,
     gpu_images: NonSend<GpuImages>,
     bevy_window: Single<&Window>,
-    directional_lights: Query<(&Transform, &DirectionalLight)>,
     reflect_texture: Option<Res<PlaneReflectionTexture>>,
     mut plane_reflection: Option<Single<(&mut ReflectionPlane, &GlobalTransform)>>,
 ) {
@@ -462,7 +455,7 @@ fn render_std_mat(
         ctx,
         "../assets/shaders/std_mat.vert",
         "../assets/shaders/pbr_std_mat.frag",
-        &[shadow_def, MAX_LIGHTS_DEF, MAX_JOINTS_DEF]
+        &[shadow_def, DEFAULT_MAX_LIGHTS_DEF, DEFAULT_MAX_JOINTS_DEF]
     )
     .unwrap();
 
@@ -478,6 +471,7 @@ fn render_std_mat(
     build.load("world_from_view", view.world_from_view);
     build.load("view_position", view.position);
     build.load("clip_from_world", view.clip_from_world);
+    build.load("view_exposure", view.exposure);
 
     let view_resolution = vec2(
         bevy_window.physical_width() as f32,
@@ -500,47 +494,10 @@ fn render_std_mat(
         queue_tex!(build, metallic_roughness_texture);
         queue_tex!(build, emissive_texture);
 
-        let env_light = env_light.unwrap();
-
-        let specular_map = env_light.specular_map.clone();
-        load_tex!(build, specular_map);
-        let diffuse_map = env_light.diffuse_map.clone();
-        load_tex!(build, diffuse_map);
-        build.load("env_intensity", env_light.intensity);
-
-        if let Some(shadow) = &shadow {
-            let shadow_texture = shadow.texture.clone();
-            load_tex!(build, shadow_texture);
-            let shadow_clip_from_world = shadow.cascade.clip_from_world;
-            load_val!(build, shadow_clip_from_world);
-        }
-
-        if let Some((trans, light)) = directional_lights.iter().next() {
-            build.load("directional_light_dir", trans.forward().as_vec3());
-            build.load(
-                "directional_light_color",
-                light.color.to_linear().to_vec3() * light.illuminance,
-            );
-        } else {
-            build.load("directional_light_dir", Vec3::ZERO);
-            build.load("directional_light_color", Vec3::ZERO);
-        }
-
         build.queue_val("alpha_blend", |m| {
             transparent_draw_from_alpha_mode(&m.alpha_mode)
         });
         build.queue_val("has_normal_map", |m| m.normal_map_texture.is_some());
-        build.load("view_exposure", view.exposure);
-
-        load_point_spot_lights(
-            &mut build,
-            point_lights,
-            spot_lights,
-            "light_count",
-            "point_light_position_range",
-            "point_light_color_radius",
-            "spot_light_dir_offset_scale",
-        );
 
         reflect_bool_location = build.get_uniform_location("read_reflection");
         if let Some(reflect_texture) = &reflect_texture {
@@ -554,6 +511,15 @@ fn render_std_mat(
             build.load("reflection_plane_position", plane.1.translation());
             build.load("reflection_plane_normal", plane.1.up().as_vec3());
         }
+
+        bind_standard_lighting(
+            &mut build,
+            point_lights.iter(),
+            spot_lights.iter(),
+            directional_lights.single().ok(),
+            env_light,
+            shadow.as_deref(),
+        );
     }
 
     let iter = if phase.transparent() {
@@ -630,66 +596,3 @@ fn render_std_mat(
         last_material = Some(material_h);
     }
 }
-
-pub fn load_point_spot_lights<T>(
-    build: &mut UniformSlotBuilder<T>,
-    point_lights: Query<(&PointLight, &GlobalTransform)>,
-    spot_lights: Query<(&SpotLight, &GlobalTransform)>,
-    count_binding: &str,
-    position_range_binding: &str,
-    color_radius_binding: &str,
-    dir_offset_scale_binding: &str,
-) {
-    let mut point_light_position_range = Vec::new();
-    let mut point_light_color_radius = Vec::new();
-    let mut spot_light_dir_offset_scale = Vec::new();
-    for (light, trans) in &point_lights {
-        if spot_light_dir_offset_scale.len() >= MAX_POINT_LIGHTS {
-            break;
-        }
-        point_light_position_range.push(trans.translation().extend(light.range));
-        point_light_color_radius.push(
-            (light.color.to_linear().to_vec3() * light.intensity * POWER_TO_INTENSITY)
-                .extend(light.radius),
-        );
-        spot_light_dir_offset_scale.push(vec4(1.0, 0.0, 2.0, 1.0));
-    }
-
-    for (light, trans) in &spot_lights {
-        if spot_light_dir_offset_scale.len() >= MAX_POINT_LIGHTS {
-            break;
-        }
-        point_light_position_range.push(trans.translation().extend(light.range));
-        point_light_color_radius.push(
-            (light.color.to_linear().to_vec3() * light.intensity * POWER_TO_INTENSITY)
-                .extend(light.radius),
-        );
-        spot_light_dir_offset_scale.push(spot_dir_offset_scale(light, trans));
-    }
-
-    let light_count = point_light_position_range.len() as i32;
-    build.load(count_binding, light_count);
-    build.load(
-        position_range_binding,
-        point_light_position_range.as_slice(),
-    );
-    build.load(color_radius_binding, point_light_color_radius.as_slice());
-    build.load(
-        dir_offset_scale_binding,
-        spot_light_dir_offset_scale.as_slice(),
-    );
-}
-
-pub fn spot_dir_offset_scale(light: &SpotLight, trans: &GlobalTransform) -> Vec4 {
-    // https://github.com/bevyengine/bevy/blob/abb8c353f49a6fe9e039e82adbe1040488ad910a/crates/bevy_pbr/src/render/light.rs#L846
-    let cos_outer = light.outer_angle.cos();
-    let spot_scale = 1.0 / (light.inner_angle.cos() - cos_outer).max(1e-4);
-    let spot_offset = -cos_outer * spot_scale;
-    octahedral_encode(trans.forward().as_vec3())
-        .extend(spot_offset)
-        .extend(spot_scale)
-}
-
-// Map from luminous power in lumens to luminous intensity in lumens per steradian for a point light.
-// For details see: https://google.github.io/filament/Filament.html#mjx-eqn-pointLightLuminousPower
-const POWER_TO_INTENSITY: f32 = 1.0 / (4.0 * PI);

@@ -3,6 +3,7 @@
 #include agx
 #include std_mat_bindings
 #include shadow_sampling
+#include standard_pbr_lighting
 
 void main() {
     vec4 base_color = base_color * to_linear(texture2D(base_color_texture, uv_0));
@@ -23,19 +24,6 @@ void main() {
     gl_FragColor = EncodeFloatRGBA(saturate(ndc_position.z * 0.5 + 0.5));
     #else // RENDER_DEPTH_ONLY
 
-    float dir_shadow = 1.0;
-    #ifdef SAMPLE_SHADOW
-    float bias = 0.002;
-    float normal_bias = 0.05;
-    vec4 shadow_clip = shadow_clip_from_world * vec4(ws_position + vert_normal * normal_bias, 1.0);
-    vec3 shadow_uvz = (shadow_clip.xyz / shadow_clip.w) * 0.5 + 0.5;
-
-    if (shadow_uvz.x > 0.0 && shadow_uvz.x < 1.0 && shadow_uvz.y > 0.0 && shadow_uvz.y < 1.0) {
-        dir_shadow *= bilinear_shadow2(shadow_texture, shadow_uvz.xy, shadow_uvz.z, bias, view_resolution);
-        //dir_shadow *= sample_shadow_map_castano_thirteen(shadow_texture, shadow_uvz.xy, shadow_uvz.z, bias, view_resolution);
-    }
-    #endif // SAMPLE_SHADOW
-
     vec3 V = normalize(view_position - ws_position);
 
     vec4 metallic_roughness = texture2D(metallic_roughness_texture, uv_0);
@@ -52,45 +40,13 @@ void main() {
     if (has_normal_map) {
         normal = apply_normal_mapping(normal_map_texture, vert_normal, tangent, uv_0, flip_normal_map_y, double_sided);
     }
-    float NoV = abs(dot(normal, V)) + 1e-5;
 
-    vec3 output_color = vec3(0.0);
+    vec3 output_color = apply_pbr_lighting(V, diffuse_color, F0, normal, roughness, diffuse_transmission, screen_uv);
 
-    output_color += directional_light(V, F0, diffuse_color, normal, roughness, diffuse_transmission, dir_shadow, directional_light_dir, directional_light_color);
-
-
-    {
-        // Environment map / reflection
-        float mip_levels = 8.0; // TODO put in uniform
-
-        vec3 env_diffuse = rgbe2rgb(textureCubeLod(diffuse_map, vec3(normal.xy, -normal.z), 0.0)) * env_intensity;
-
-        vec3 env_specular = vec3(0.0);
-        if (read_reflection && perceptual_roughness < 0.2) {
-            vec3 sharp_reflection_color = reversible_tonemap_invert(texture2D(reflect_texture, screen_uv).rgb);
-            // TODO integrate brdf properly
-            output_color += sharp_reflection_color.rgb / view_exposure; 
-        } else {
-            vec3 dir = reflect(-V, normal);
-            env_specular = rgbe2rgb(textureCubeLod(specular_map, vec3(dir.xy, -dir.z), perceptual_roughness * mip_levels)) * env_intensity;
-        }
-
-        output_color += environment_light(NoV, F0, perceptual_roughness, diffuse_color, env_diffuse, env_specular);
-    }
-
-    // Point Lights
-    for (int i = 0; i < MAX_POINT_LIGHTS; i++) {
-        if (i < light_count) {
-            vec4 light_position_range = point_light_position_range[i];
-            vec3 to_light = light_position_range.xyz - ws_position;
-            if (length(to_light) < light_position_range.w) {
-                vec4 light_color_radius = point_light_color_radius[i];
-                vec4 dos = spot_light_dir_offset_scale[i];
-                vec3 spot_dir = octahedral_decode(dos.xy);
-                output_color += point_light(V, diffuse_color, F0, normal, roughness, diffuse_transmission, to_light, 
-                                            light_position_range.w, light_color_radius.rgb, spot_dir, dos.z, dos.w);
-            }
-        }
+    // TODO return struct from standard_lighting so the env map can be properly replaced by reflection?
+    if (read_reflection && perceptual_roughness < 0.2) {
+        vec3 sharp_reflection_color = reversible_tonemap_invert(texture2D(reflect_texture, screen_uv).rgb);
+        output_color += sharp_reflection_color.rgb / view_exposure; // TODO integrate brdf properly
     }
 
     gl_FragColor = vec4(view_exposure * (output_color + emissive.rgb), base_color.a);

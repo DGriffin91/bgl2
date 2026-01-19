@@ -83,7 +83,7 @@ vec2 F_AB(float perceptual_roughness, float NoV) {
 }
 
 
-vec3 directional_light(vec3 V, vec3 F0, vec3 base_color, vec3 normal, float roughness, float diffuse_transmission, float shadow, vec3 light_dir, vec3 color) {
+vec3 directional_light(vec3 V, vec3 F0, vec3 diffuse_color, vec3 normal, float roughness, float diffuse_transmission, float shadow, vec3 light_dir, vec3 color) {
     vec3 res = vec3(0.0, 0.0, 0.0);
     if (shadow > 0.0 && light_dir != vec3(0.0)) {
         vec3 L = normalize(-light_dir);
@@ -91,7 +91,7 @@ vec3 directional_light(vec3 V, vec3 F0, vec3 base_color, vec3 normal, float roug
         float NoL_unclamped = dot(normal, L);
         float NoL = saturate(NoL_unclamped);
         float NoL_transmission = saturate(-NoL_unclamped);
-        vec3 diffuse_base = shadow * base_color.rgb * Fd_Lambert() * color;
+        vec3 diffuse_base = shadow * diffuse_color * Fd_Lambert() * color;
         res += diffuse_base * NoL * (1.0 - diffuse_transmission);
         res += diffuse_base * NoL_transmission * diffuse_transmission;
         res += shadow * specular_brdf(V, L, normal, roughness, F0) * NoL * color;
@@ -100,7 +100,7 @@ vec3 directional_light(vec3 V, vec3 F0, vec3 base_color, vec3 normal, float roug
     return res;
 }
 
-vec3 environment_light(float NoV, vec3 F0, float perceptual_roughness, vec3 base_color, vec3 env_diffuse, vec3 env_specular) {
+vec3 environment_light(float NoV, vec3 F0, float perceptual_roughness, vec3 diffuse_color, vec3 env_diffuse, vec3 env_specular) {
     // Could add diffuse_transmission, but it would require a 2nd env_diffuse sample
     vec2 f_ab = F_AB(perceptual_roughness, NoV);
 
@@ -113,12 +113,12 @@ vec3 environment_light(float NoV, vec3 F0, float perceptual_roughness, vec3 base
     float Ems = (1.0 - (f_ab.x + f_ab.y));
     vec3 F_avg = F0 + (1.0 - F0) / 21.0;
     vec3 FmsEms = Ems * FssEss * F_avg / (1.0 - F_avg * Ems);
-    vec3 k_D = base_color * (1.0 - FssEss - FmsEms);
+    vec3 k_D = diffuse_color * (1.0 - FssEss - FmsEms);
 
     return ((FmsEms + k_D) * env_diffuse) + (FssEss * env_specular);
 }
 
-vec3 point_light(vec3 V, vec3 base_color, vec3 F0, vec3 normal, float roughness, float diffuse_transmission, 
+vec3 point_light(vec3 V, vec3 diffuse_color, vec3 F0, vec3 normal, float roughness, float diffuse_transmission, 
                  vec3 to_light, float range, vec3 color, vec3 spot_dir, float spot_offset, float spot_scale) {
     vec3 res = vec3(0.0);
     float dist = length(to_light);
@@ -130,7 +130,7 @@ vec3 point_light(vec3 V, vec3 base_color, vec3 F0, vec3 normal, float roughness,
         float NoL_unclamped = dot(normal, L);
         float NoL = saturate(NoL_unclamped);
         float NoL_transmission = saturate(-NoL_unclamped);
-        vec3 diffuse_base = base_color.rgb * Fd_Lambert() * attenuation * color;
+        vec3 diffuse_base = diffuse_color * Fd_Lambert() * attenuation * color;
         res += diffuse_base * NoL * (1.0 - diffuse_transmission);
         res += diffuse_base * NoL_transmission * diffuse_transmission;
         res += specular_brdf(V, L, normal, roughness, F0) * NoL * attenuation * color;

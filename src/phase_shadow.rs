@@ -21,7 +21,7 @@ impl Plugin for ShadowPhasePlugin {
 fn update_shadow_tex(
     mut commands: Commands,
     bevy_window: Single<&Window>,
-    shadow_tex: Option<Res<DirectionalLightInfo>>,
+    shadow_tex: Option<Res<DirectionalLightShadow>>,
     directional_lights: Query<(&DirectionalLight, &Cascades)>,
     ctx: NonSend<BevyGlContext>,
 ) {
@@ -34,7 +34,7 @@ fn update_shadow_tex(
                 if let Some(cascade) = cascades.get(0) {
                     shadow_cascade = Some(cascade.clone());
                 } else {
-                    commands.remove_resource::<DirectionalLightInfo>();
+                    commands.remove_resource::<DirectionalLightShadow>();
                     return;
                 }
             }
@@ -47,7 +47,7 @@ fn update_shadow_tex(
             if shadow_tex.width != width || shadow_tex.height != height {
                 unsafe {
                     ctx.gl.delete_texture(shadow_tex.texture);
-                    commands.insert_resource(DirectionalLightInfo::new(
+                    commands.insert_resource(DirectionalLightShadow::new(
                         &ctx.gl,
                         shadow_cascade,
                         width,
@@ -57,11 +57,11 @@ fn update_shadow_tex(
             }
         } else {
             unsafe { ctx.gl.delete_texture(shadow_tex.texture) };
-            commands.remove_resource::<DirectionalLightInfo>();
+            commands.remove_resource::<DirectionalLightShadow>();
         }
     } else {
         if let Some(shadow_cascade) = shadow_cascade {
-            commands.insert_resource(DirectionalLightInfo::new(
+            commands.insert_resource(DirectionalLightShadow::new(
                 &ctx.gl,
                 shadow_cascade,
                 width,
@@ -74,7 +74,7 @@ fn update_shadow_tex(
 }
 
 fn render_shadow(world: &mut World) {
-    let Some(shadow_texture) = world.get_resource::<DirectionalLightInfo>().cloned() else {
+    let Some(shadow_texture) = world.get_resource::<DirectionalLightShadow>().cloned() else {
         return;
     };
     let ctx = world.get_non_send_resource_mut::<BevyGlContext>().unwrap();
@@ -115,7 +115,7 @@ fn render_shadow(world: &mut World) {
 }
 
 #[derive(Resource, Clone)]
-pub struct DirectionalLightInfo {
+pub struct DirectionalLightShadow {
     pub texture: glow::Texture,
     pub cascade: Cascade,
     pub dir_to_light: Vec3,
@@ -123,7 +123,7 @@ pub struct DirectionalLightInfo {
     height: u32,
 }
 
-impl DirectionalLightInfo {
+impl DirectionalLightShadow {
     fn new(gl: &glow::Context, cascade: Cascade, width: u32, height: u32) -> Self {
         unsafe {
             let texture = gl.create_texture().unwrap();

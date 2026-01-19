@@ -1,3 +1,4 @@
+pub mod bevy_standard_lighting;
 pub mod egui_plugin;
 pub mod faststack;
 pub mod mesh_util;
