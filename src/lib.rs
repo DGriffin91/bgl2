@@ -1221,3 +1221,25 @@ impl From<Handle<Image>> for Tex {
         Tex::Bevy(Some(handle))
     }
 }
+
+#[macro_export]
+macro_rules! load_match {
+    ($index:expr, $gl:expr, $gpu:expr, $slot:expr, $temp:expr, {
+        $( $i:literal => $kind:ident($expr:expr) ),* $(,)?
+    }) => {{
+        match $index {
+            $(
+                $i => load_match!(@do $kind, $expr, $gl, $gpu, $slot, $temp),
+            )*
+            _ => unreachable!(),
+        }
+    }};
+
+    (@do value, $expr:expr, $gl:expr, $_gpu:expr, $slot:expr, $temp:expr) => {
+        load_if_new(&($expr), $gl, $slot, $temp)
+    };
+
+    (@do tex, $expr:expr, $gl:expr, $gpu:expr, $slot:expr, $_temp:expr) => {
+        load_tex_if_new(&($expr), $gl, $gpu, $slot)
+    };
+}

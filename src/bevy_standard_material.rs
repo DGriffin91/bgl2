@@ -3,6 +3,7 @@ use bevy::{
     prelude::*,
 };
 use itertools::{Either, Itertools};
+use uniform_set_derive::UniformSet;
 
 use crate::{
     BevyGlContext, SlotData, Tex, UniformSet, UniformValue,
@@ -11,7 +12,7 @@ use crate::{
         standard_pbr_lighting_glsl, standard_shadow_sampling_glsl,
     },
     faststack::StackStack,
-    load_if_new, load_tex_if_new,
+    load_if_new, load_match, load_tex_if_new,
     phase_shadow::DirectionalLightShadow,
     phase_transparent::DeferredAlphaBlendDraws,
     plane_reflect::{PlaneReflectionTexture, ReflectionPlane},
@@ -52,13 +53,14 @@ pub struct SkipReflection;
 #[derive(Component, Default)]
 pub struct ReadReflection;
 
-#[derive(Component, Clone)]
+#[derive(UniformSet, Component, Clone)]
 pub struct ViewUniforms {
-    pub position: Vec3,
     pub world_from_view: Mat4,
-    pub from_world: Mat4,
+    pub view_from_world: Mat4,
     pub clip_from_world: Mat4,
-    pub exposure: f32,
+    pub view_position: Vec3,
+    pub view_resolution: Vec2,
+    pub view_exposure: f32,
 }
 
 // Runs at each view transition: Before shadows, before reflections, etc..
@@ -74,8 +76,13 @@ pub fn standard_material_prepare_view(
     )>,
     shadow: Option<Res<DirectionalLightShadow>>,
     reflect: Option<Single<&ReflectionPlane>>,
+    bevy_window: Single<&Window>,
 ) {
     let (camera_entity, _camera, cam_global_trans, cam_proj, exposure) = *camera;
+    let view_resolution = vec2(
+        bevy_window.physical_width() as f32,
+        bevy_window.physical_height() as f32,
+    );
 
     let view_position;
     let mut world_from_view;
@@ -106,11 +113,12 @@ pub fn standard_material_prepare_view(
     }
 
     commands.entity(camera_entity).insert(ViewUniforms {
-        position: view_position,
         world_from_view,
-        from_world: view_from_world,
+        view_from_world,
         clip_from_world,
-        exposure: exposure
+        view_position,
+        view_resolution,
+        view_exposure: exposure
             .map(|e| e.exposure())
             .unwrap_or_else(|| Exposure::default().exposure()),
     });
@@ -139,11 +147,10 @@ pub fn standard_material_render(
     mut transparent_draws: ResMut<DeferredAlphaBlendDraws>,
     shadow: Option<Res<DirectionalLightShadow>>,
     gpu_images: NonSend<GpuImages>,
-    bevy_window: Single<&Window>,
     reflect_texture: Option<Res<PlaneReflectionTexture>>,
     mut plane_reflection: Option<Single<(&mut ReflectionPlane, &GlobalTransform)>>,
 ) {
-    let (view, env_light) = *camera;
+    let (view_uniforms, env_light) = *camera;
     let phase = **phase;
 
     let shadow_def;
@@ -167,19 +174,11 @@ pub fn standard_material_render(
     gpu_meshes.reset_bind_cache();
     ctx.use_cached_program(shader_index);
 
-    ctx.load("world_from_view", view.world_from_view);
-    ctx.load("view_position", view.position);
-    ctx.load("clip_from_world", view.clip_from_world);
-    ctx.load("view_exposure", view.exposure);
-
-    let view_resolution = vec2(
-        bevy_window.physical_width() as f32,
-        bevy_window.physical_height() as f32,
-    );
-    ctx.load("view_resolution", view_resolution);
     ctx.load("write_reflection", phase.reflection());
     let mut reflect_bool_location = None;
 
+    ctx.map_uniform_set_locations::<ViewUniforms>();
+    ctx.bind_uniforms_set(&gpu_images, view_uniforms);
     ctx.map_uniform_set_locations::<StandardMaterial>();
 
     if !phase.depth_only() {
@@ -255,7 +254,7 @@ pub fn standard_material_render(
                 entity,
                 transform,
                 aabb,
-                &view.from_world,
+                &view_uniforms.view_from_world,
                 &world_from_local,
             ) {
                 continue;
@@ -284,6 +283,7 @@ pub fn standard_material_render(
     }
 }
 
+// Implementing this manually for bevy's standard material, see #[derive(UniformSet)] for typical uses.
 impl UniformSet for StandardMaterial {
     fn names() -> &'static [(&'static str, bool)] {
         &[
@@ -312,69 +312,21 @@ impl UniformSet for StandardMaterial {
         slot: &mut SlotData,
         temp: &mut StackStack<u32, 16>,
     ) {
-        match index {
-            0 => load_if_new(&self.base_color, gl, slot, temp),
-            1 => {
-                load_if_new(&self.emissive, gl, slot, temp);
-            }
-            2 => {
-                load_if_new(&self.perceptual_roughness, gl, slot, temp);
-            }
-            3 => {
-                load_if_new(&self.metallic, gl, slot, temp);
-            }
-            4 => {
-                load_if_new(&self.double_sided, gl, slot, temp);
-            }
-            5 => {
-                load_if_new(&self.diffuse_transmission, gl, slot, temp);
-            }
-            6 => {
-                load_if_new(&self.flip_normal_map_y, gl, slot, temp);
-            }
-            7 => {
-                let reflectance = self.specular_tint.to_linear().to_vec3() * self.reflectance;
-                load_if_new(&reflectance, gl, slot, temp);
-            }
-            8 => {
-                load_if_new(
-                    &transparent_draw_from_alpha_mode(&self.alpha_mode),
-                    gl,
-                    slot,
-                    temp,
-                );
-            }
-            9 => {
-                load_if_new(&self.normal_map_texture.is_some(), gl, slot, temp);
-            }
-            10 => {
-                load_tex_if_new(
-                    &self.base_color_texture.clone().into(),
-                    gl,
-                    gpu_images,
-                    slot,
-                );
-            }
-            11 => {
-                load_tex_if_new(
-                    &self.normal_map_texture.clone().into(),
-                    gl,
-                    gpu_images,
-                    slot,
-                );
-            }
-            12 => {
-                load_tex_if_new(
-                    &self.metallic_roughness_texture.clone().into(),
-                    gl,
-                    gpu_images,
-                    slot,
-                );
-            }
-            13 => {
-                load_tex_if_new(&self.emissive_texture.clone().into(), gl, gpu_images, slot);
-            }
-            _ => unreachable!(),
-        }
+        load_match!(index, gl, gpu_images, slot, temp, {
+            0 => value(self.base_color),
+            1 => value(self.emissive),
+            2 => value(self.perceptual_roughness),
+            3 => value(self.metallic),
+            4 => value(self.double_sided),
+            5 => value(self.diffuse_transmission),
+            6 => value(self.flip_normal_map_y),
+            7 => value(self.specular_tint.to_linear().to_vec3() * self.reflectance),
+            8 => value(transparent_draw_from_alpha_mode(&self.alpha_mode)),
+            9 => value(self.normal_map_texture.is_some()),
+            10 => tex(self.base_color_texture.clone().into()),
+            11 => tex(self.normal_map_texture.clone().into()),
+            12 => tex(self.metallic_roughness_texture.clone().into()),
+            13 => tex(self.emissive_texture.clone().into()),
+        });
     }
 }
