@@ -11,7 +11,6 @@ pub mod prepare_image;
 pub mod prepare_joints;
 pub mod prepare_mesh;
 pub mod render;
-pub mod uniform_slot_builder;
 pub mod watchers;
 
 use anyhow::Error;
@@ -19,6 +18,7 @@ use anyhow::anyhow;
 use bevy::platform::collections::HashSet;
 use bytemuck::cast_slice;
 use core::slice;
+use glow::UniformLocation;
 use std::any::TypeId;
 use std::hash::Hash;
 use std::hash::Hasher;
@@ -38,7 +38,7 @@ use winit::platform::web::WindowExtWebSys;
 
 use crate::faststack::FastStack;
 use crate::faststack::StackStack;
-use crate::uniform_slot_builder::SlotData;
+use crate::prepare_image::GpuImages;
 use crate::watchers::Watchers;
 
 pub type ShaderIndex = u32;
@@ -60,6 +60,8 @@ pub struct BevyGlContext {
     pub uniform_slot_map: HashMap<TypeId, Vec<Option<SlotData>>>,
     pub current_program: Option<glow::Program>,
     pub temp_slot_data: StackStack<u32, 16>,
+    pub uniform_location_cache: HashMap<String, Option<UniformLocation>>,
+    pub current_texture_slot_count: usize,
 }
 
 impl Drop for BevyGlContext {
@@ -231,6 +233,8 @@ impl BevyGlContext {
                 uniform_slot_map: Default::default(),
                 current_program: Default::default(),
                 temp_slot_data: Default::default(),
+                uniform_location_cache: Default::default(),
+                current_texture_slot_count: 0,
             };
             ctx.test_for_glsl_lod();
             ctx
@@ -276,7 +280,9 @@ impl BevyGlContext {
     pub fn use_cached_program(&mut self, index: ShaderIndex) {
         self.uniform_slot_map.clear();
         self.temp_slot_data.clear();
+        self.uniform_location_cache.clear();
         self.current_program = Some(self.shader_cache[index as usize]);
+        self.current_texture_slot_count = 0;
         unsafe { self.gl.use_program(self.current_program) };
     }
 
@@ -323,7 +329,8 @@ impl BevyGlContext {
         }
     }
 
-    pub fn get_uniform_location(
+    /// Get uniform location of any shader program in the cache
+    pub fn get_shader_uniform_location(
         &self,
         shader_index: ShaderIndex,
         name: &str,
@@ -331,6 +338,34 @@ impl BevyGlContext {
         unsafe {
             self.gl
                 .get_uniform_location(self.shader_cache[shader_index as usize], name)
+        }
+    }
+
+    /// Get uniform location for the currently bound shader program
+    pub fn get_uniform_location(&mut self, name: &str) -> Option<glow::UniformLocation> {
+        if let Some(location) = self.uniform_location_cache.get(name) {
+            location.clone()
+        } else {
+            let location = unsafe {
+                self.gl.get_uniform_location(
+                    self.current_program
+                        .expect("Need to run use_cached_program() before get_uniform_location()"),
+                    name,
+                )
+            };
+            self.uniform_location_cache
+                .insert(name.to_string(), location.clone());
+            location
+        }
+    }
+
+    /// Uploads immediately if location is found
+    pub fn load<V>(&mut self, name: &str, v: V)
+    where
+        V: UniformValue,
+    {
+        if let Some(location) = self.get_uniform_location(name) {
+            v.load(&self.gl, &location);
         }
     }
 
@@ -935,7 +970,8 @@ macro_rules! shader_cached {
 pub trait UniformSet {
     // TODO depth only variant? When the depth only variant uses an ifdef it should be that the locations return None
     // TODO could cache a names/location set for each combination of ShaderProgram+TypeId.
-    fn names() -> &'static [&'static str];
+    /// if bool is true uniform is texture
+    fn names() -> &'static [(&'static str, bool)];
     /// The index for load should correspond to the order returned from names()
     /// location is where this value should be put
     /// if the current item differs from prev_value bind it and update prev_value
@@ -943,6 +979,7 @@ pub trait UniformSet {
     fn load(
         &self,
         gl: &glow::Context,
+        gpu_images: &GpuImages,
         index: u32,
         slot: &mut SlotData,
         temp_value: &mut StackStack<u32, 16>,
@@ -956,11 +993,60 @@ pub fn load_if_new<T: UniformValue>(
     slot: &mut SlotData,
     temp: &mut StackStack<u32, 16>,
 ) {
-    v.read_raw(temp);
-    if !slot.init || temp != &slot.previous {
-        slot.init = true;
-        std::mem::swap(&mut slot.previous, temp);
-        v.load(&gl, &slot.location);
+    match slot {
+        SlotData::Uniform {
+            init,
+            previous,
+            location,
+        } => {
+            v.read_raw(temp);
+            if !*init || temp != previous {
+                *init = true;
+                std::mem::swap(previous, temp);
+                v.load(&gl, &location);
+            }
+        }
+        _ => panic!("Expected uniform"),
+    }
+}
+
+#[inline]
+pub fn load_tex_if_new(tex: &Tex, gl: &glow::Context, gpu_images: &GpuImages, slot: &mut SlotData) {
+    match slot {
+        SlotData::Texture {
+            target,
+            texture_slot,
+            previous,
+            location,
+        } => {
+            let mut texture = gpu_images.placeholder.unwrap();
+            match tex {
+                Tex::Bevy(image_h) => {
+                    if let Some(image_h) = image_h {
+                        if let Some(t) = gpu_images.mapping.get(&image_h.id()) {
+                            texture = t.0;
+                            *target = t.1;
+                        }
+                    }
+                }
+                Tex::Gl(t) => {
+                    texture = *t;
+                }
+            }
+            unsafe {
+                if let Some(previous) = previous.as_ref() {
+                    if previous == &texture {
+                        return;
+                    }
+                }
+                // TODO needs to use info from the texture to actually setup correctly
+                gl.active_texture(glow::TEXTURE0 + *texture_slot);
+                gl.bind_texture(*target, Some(texture));
+                gl.uniform_1_i32(Some(&location), *texture_slot as i32);
+                *previous = Some(texture);
+            }
+        }
+        _ => panic!("Expected uniform"),
     }
 }
 
@@ -972,20 +1058,33 @@ impl BevyGlContext {
 
         let locations = T::names()
             .iter()
-            .map(|name| unsafe {
+            .map(|(name, is_texture)| unsafe {
                 self.gl
                     .get_uniform_location(current_program, name)
-                    .map(|location| SlotData {
-                        init: false,
-                        previous: Default::default(),
-                        location,
+                    .map(|location| {
+                        if *is_texture {
+                            let slot = SlotData::Texture {
+                                target: glow::TEXTURE_2D,
+                                texture_slot: self.current_texture_slot_count as u32,
+                                previous: None,
+                                location,
+                            };
+                            self.current_texture_slot_count += 1;
+                            slot
+                        } else {
+                            SlotData::Uniform {
+                                init: false,
+                                previous: Default::default(),
+                                location,
+                            }
+                        }
                     })
             })
             .collect::<Vec<_>>();
 
         self.uniform_slot_map.insert(TypeId::of::<T>(), locations);
     }
-    pub fn bind_uniforms_set<T: UniformSet + 'static>(&mut self, v: &T) {
+    pub fn bind_uniforms_set<T: UniformSet + 'static>(&mut self, gpu_images: &GpuImages, v: &T) {
         for (index, slot) in self
             .uniform_slot_map
             .get_mut(&TypeId::of::<T>())
@@ -994,8 +1093,131 @@ impl BevyGlContext {
             .enumerate()
         {
             if let Some(slot) = slot {
-                v.load(&self.gl, index as u32, slot, &mut self.temp_slot_data);
+                v.load(
+                    &self.gl,
+                    gpu_images,
+                    index as u32,
+                    slot,
+                    &mut self.temp_slot_data,
+                );
             }
         }
+    }
+    #[inline]
+    /// Loads the texture in the next available slot. Returns the texture slot and location if the location is found.
+    /// Call set_tex() to update the texture at this slot.
+    pub fn load_tex(
+        &mut self,
+        name: &str,
+        tex: &Tex,
+        gpu_images: &GpuImages,
+    ) -> Option<(u32, glow::UniformLocation)> {
+        let mut texture = gpu_images.placeholder.unwrap();
+        let mut target = glow::TEXTURE_2D;
+
+        let Some(location) = self.get_uniform_location(name) else {
+            return None;
+        };
+        let texture_slot = self.current_texture_slot_count as u32;
+        self.current_texture_slot_count += 1;
+
+        match tex {
+            Tex::Bevy(image_h) => {
+                if let Some(image_h) = image_h {
+                    if let Some(t) = gpu_images.mapping.get(&image_h.id()) {
+                        texture = t.0;
+                        target = t.1;
+                    }
+                }
+            }
+            Tex::Gl(t) => {
+                texture = *t;
+            }
+        }
+        unsafe {
+            // TODO needs to use info from the texture to actually setup correctly
+            self.gl.active_texture(glow::TEXTURE0 + texture_slot);
+            self.gl.bind_texture(target, Some(texture));
+            self.gl.uniform_1_i32(Some(&location), texture_slot as i32);
+        }
+        Some((texture_slot, location))
+    }
+
+    #[inline]
+    pub fn set_tex(
+        &self,
+        tex: &Tex,
+        gpu_images: &GpuImages,
+        slot_location: (u32, glow::UniformLocation),
+    ) {
+        let mut texture = gpu_images.placeholder.unwrap();
+        let mut target = glow::TEXTURE_2D;
+        match tex {
+            Tex::Bevy(image_h) => {
+                if let Some(image_h) = image_h {
+                    if let Some(t) = gpu_images.mapping.get(&image_h.id()) {
+                        texture = t.0;
+                        target = t.1;
+                    }
+                }
+            }
+            Tex::Gl(t) => {
+                texture = *t;
+            }
+        }
+        unsafe {
+            // TODO needs to use info from the texture to actually setup correctly
+            self.gl.active_texture(glow::TEXTURE0 + slot_location.0);
+            self.gl.bind_texture(target, Some(texture));
+            self.gl
+                .uniform_1_i32(Some(&slot_location.1), slot_location.0 as i32);
+        }
+    }
+}
+
+pub enum SlotData {
+    Uniform {
+        init: bool,
+        previous: StackStack<u32, 16>,
+        location: glow::UniformLocation,
+    },
+    Texture {
+        target: u32,
+        texture_slot: u32,
+        previous: Option<glow::Texture>,
+        location: glow::UniformLocation,
+    },
+}
+
+#[derive(Clone)]
+pub enum Tex {
+    // TODO use references for Handle<Image> so clone isn't needed
+    Bevy(Option<Handle<Image>>),
+    Gl(glow::Texture),
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+impl From<glow::NativeTexture> for Tex {
+    fn from(tex: glow::NativeTexture) -> Self {
+        Tex::Gl(tex)
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+impl From<glow::WebTextureKey> for Tex {
+    fn from(tex: glow::WebTextureKey) -> Self {
+        Tex::Gl(tex)
+    }
+}
+
+impl From<Option<Handle<Image>>> for Tex {
+    fn from(handle: Option<Handle<Image>>) -> Self {
+        Tex::Bevy(handle)
+    }
+}
+
+impl From<Handle<Image>> for Tex {
+    fn from(handle: Handle<Image>) -> Self {
+        Tex::Bevy(Some(handle))
     }
 }

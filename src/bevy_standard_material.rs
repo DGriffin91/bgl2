@@ -5,22 +5,20 @@ use bevy::{
 use itertools::{Either, Itertools};
 
 use crate::{
-    BevyGlContext, UniformSet, UniformValue,
+    BevyGlContext, SlotData, Tex, UniformSet, UniformValue,
     bevy_standard_lighting::{
         DEFAULT_MAX_JOINTS_DEF, DEFAULT_MAX_LIGHTS_DEF, bind_standard_lighting,
     },
     faststack::StackStack,
-    load_if_new, load_tex, load_val,
+    load_if_new, load_tex_if_new,
     phase_shadow::DirectionalLightShadow,
     phase_transparent::DeferredAlphaBlendDraws,
     plane_reflect::{PlaneReflectionTexture, ReflectionPlane},
     prepare_image::GpuImages,
     prepare_joints::JointData,
     prepare_mesh::GPUMeshBufferMap,
-    queue_tex,
     render::{RenderPhase, set_blend_func_from_alpha_mode, transparent_draw_from_alpha_mode},
     shader_cached,
-    uniform_slot_builder::{SlotData, UniformSlotBuilder},
 };
 
 #[derive(Component, Default)]
@@ -144,46 +142,38 @@ pub fn standard_material_render(
     gpu_meshes.reset_bind_cache();
     ctx.use_cached_program(shader_index);
 
-    let mut build =
-        UniformSlotBuilder::<StandardMaterial>::new(&mut ctx, &gpu_images, shader_index);
-
-    queue_tex!(build, base_color_texture);
-
-    build.load("world_from_view", view.world_from_view);
-    build.load("view_position", view.position);
-    build.load("clip_from_world", view.clip_from_world);
-    build.load("view_exposure", view.exposure);
+    ctx.load("world_from_view", view.world_from_view);
+    ctx.load("view_position", view.position);
+    ctx.load("clip_from_world", view.clip_from_world);
+    ctx.load("view_exposure", view.exposure);
 
     let view_resolution = vec2(
         bevy_window.physical_width() as f32,
         bevy_window.physical_height() as f32,
     );
-    load_val!(build, view_resolution);
-    build.load("write_reflection", phase.reflection());
+    ctx.load("view_resolution", view_resolution);
+    ctx.load("write_reflection", phase.reflection());
     let mut reflect_bool_location = None;
 
-    build.ctx.map_uniform_set_locations::<StandardMaterial>();
+    ctx.map_uniform_set_locations::<StandardMaterial>();
 
     if !phase.depth_only() {
-        queue_tex!(build, normal_map_texture);
-        queue_tex!(build, metallic_roughness_texture);
-        queue_tex!(build, emissive_texture);
-
-        reflect_bool_location = build.get_uniform_location("read_reflection");
+        reflect_bool_location = ctx.get_uniform_location("read_reflection");
         if let Some(reflect_texture) = &reflect_texture {
             if reflect_bool_location.is_some() {
                 let reflect_texture = reflect_texture.texture.clone();
-                load_tex!(build, reflect_texture);
+                ctx.load_tex("reflect_texture", &Tex::Gl(reflect_texture), &gpu_images);
             }
         }
 
         if let Some(plane) = &mut plane_reflection {
-            build.load("reflection_plane_position", plane.1.translation());
-            build.load("reflection_plane_normal", plane.1.up().as_vec3());
+            ctx.load("reflection_plane_position", plane.1.translation());
+            ctx.load("reflection_plane_normal", plane.1.up().as_vec3());
         }
 
         bind_standard_lighting(
-            &mut build,
+            &mut ctx,
+            &gpu_images,
             point_lights.iter(),
             spot_lights.iter(),
             directional_lights.single().ok(),
@@ -247,48 +237,52 @@ pub fn standard_material_render(
             }
             reflect_bool_location
                 .clone()
-                .map(|loc| (read_reflect && phase.read_reflect()).load(&build.ctx.gl, &loc));
-            set_blend_func_from_alpha_mode(&build.ctx.gl, &material.alpha_mode);
+                .map(|loc| (read_reflect && phase.read_reflect()).load(&ctx.gl, &loc));
+            set_blend_func_from_alpha_mode(&ctx.gl, &material.alpha_mode);
         }
 
-        load_val!(build, world_from_local);
+        ctx.load("world_from_local", world_from_local);
 
         if let Some(joint_data) = joint_data {
-            build.load("joint_data", joint_data.as_slice());
+            ctx.load("joint_data", joint_data.as_slice());
         }
-        build.load("has_joint_data", joint_data.is_some());
+        ctx.load("has_joint_data", joint_data.is_some());
 
         // Only re-bind if the material has changed.
         if last_material != Some(material_h) {
-            build.run(material);
-            build.ctx.set_cull_mode(material.cull_mode);
-            build.ctx.bind_uniforms_set(material);
+            ctx.set_cull_mode(material.cull_mode);
+            ctx.bind_uniforms_set(&gpu_images, material);
         }
 
-        gpu_meshes.draw_mesh(&build.ctx, mesh.id(), shader_index);
+        gpu_meshes.draw_mesh(&ctx, mesh.id(), shader_index);
         last_material = Some(material_h);
     }
 }
 
 impl UniformSet for StandardMaterial {
-    fn names() -> &'static [&'static str] {
+    fn names() -> &'static [(&'static str, bool)] {
         &[
-            "base_color",
-            "emissive",
-            "perceptual_roughness",
-            "metallic",
-            "double_sided",
-            "diffuse_transmission",
-            "flip_normal_map_y",
-            "reflectance",
-            "alpha_blend",
-            "has_normal_map",
+            ("base_color", false),
+            ("emissive", false),
+            ("perceptual_roughness", false),
+            ("metallic", false),
+            ("double_sided", false),
+            ("diffuse_transmission", false),
+            ("flip_normal_map_y", false),
+            ("reflectance", false),
+            ("alpha_blend", false),
+            ("has_normal_map", false),
+            ("base_color_texture", true),
+            ("normal_map_texture", true),
+            ("metallic_roughness_texture", true),
+            ("emissive_texture", true),
         ]
     }
 
     fn load(
         &self,
         gl: &glow::Context,
+        gpu_images: &GpuImages,
         index: u32,
         slot: &mut SlotData,
         temp: &mut StackStack<u32, 16>,
@@ -327,6 +321,33 @@ impl UniformSet for StandardMaterial {
             }
             9 => {
                 load_if_new(&self.normal_map_texture.is_some(), gl, slot, temp);
+            }
+            10 => {
+                load_tex_if_new(
+                    &self.base_color_texture.clone().into(),
+                    gl,
+                    gpu_images,
+                    slot,
+                );
+            }
+            11 => {
+                load_tex_if_new(
+                    &self.normal_map_texture.clone().into(),
+                    gl,
+                    gpu_images,
+                    slot,
+                );
+            }
+            12 => {
+                load_tex_if_new(
+                    &self.metallic_roughness_texture.clone().into(),
+                    gl,
+                    gpu_images,
+                    slot,
+                );
+            }
+            13 => {
+                load_tex_if_new(&self.emissive_texture.clone().into(), gl, gpu_images, slot);
             }
             _ => unreachable!(),
         }

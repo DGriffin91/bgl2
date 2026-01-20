@@ -3,8 +3,8 @@ use std::f32::consts::PI;
 use bevy::prelude::*;
 
 use crate::{
-    mesh_util::octahedral_encode, phase_shadow::DirectionalLightShadow,
-    uniform_slot_builder::UniformSlotBuilder,
+    BevyGlContext, mesh_util::octahedral_encode, phase_shadow::DirectionalLightShadow,
+    prepare_image::GpuImages,
 };
 
 // It seems like some drivers are limited by code length.
@@ -30,10 +30,9 @@ pub fn standard_shadow_sampling_glsl() -> &'static str {
     include_str!("shaders/shadow_sampling.glsl")
 }
 
-pub fn bind_standard_lighting<'a, T, PI, SI>(
-    // UniformSlotBuilder is only needed here to maintain texture slot consistency.
-    // Consider moving UniformSlotBuilder functionality into BevyGlContext and taking that instead.
-    build: &mut UniformSlotBuilder<T>,
+pub fn bind_standard_lighting<'a, PI, SI>(
+    ctx: &mut BevyGlContext,
+    gpu_images: &GpuImages,
     point_lights: PI,
     spot_lights: SI,
     directional_light: Option<(&'a DirectionalLight, &'a GlobalTransform)>,
@@ -46,27 +45,31 @@ pub fn bind_standard_lighting<'a, T, PI, SI>(
     let env_light = env_light.unwrap();
 
     let specular_map = env_light.specular_map.clone();
-    build.queue_tex("B_specular_map", move |_| specular_map.clone().into());
+    ctx.load_tex("B_specular_map", &specular_map.clone().into(), gpu_images);
     let diffuse_map = env_light.diffuse_map.clone();
-    build.queue_tex("B_diffuse_map", move |_| diffuse_map.clone().into());
-    build.load("B_env_intensity", env_light.intensity);
+    ctx.load_tex("B_diffuse_map", &diffuse_map.clone().into(), gpu_images);
+    ctx.load("B_env_intensity", env_light.intensity);
 
     if let Some(shadow) = &shadow {
         let shadow_texture = shadow.texture.clone();
-        build.queue_tex("B_shadow_texture", move |_| shadow_texture.clone().into());
+        ctx.load_tex(
+            "B_shadow_texture",
+            &shadow_texture.clone().into(),
+            gpu_images,
+        );
         let shadow_clip_from_world = shadow.cascade.clip_from_world;
-        build.load("B_shadow_clip_from_world", shadow_clip_from_world);
+        ctx.load("B_shadow_clip_from_world", shadow_clip_from_world);
     }
 
     if let Some((light, trans)) = directional_light {
-        build.load("B_directional_light_dir", trans.forward().as_vec3());
-        build.load(
+        ctx.load("B_directional_light_dir", trans.forward().as_vec3());
+        ctx.load(
             "B_directional_light_color",
             light.color.to_linear().to_vec3() * light.illuminance,
         );
     } else {
-        build.load("B_directional_light_dir", Vec3::ZERO);
-        build.load("B_directional_light_color", Vec3::ZERO);
+        ctx.load("B_directional_light_dir", Vec3::ZERO);
+        ctx.load("B_directional_light_color", Vec3::ZERO);
     }
 
     let mut point_light_position_range = Vec::new();
@@ -91,16 +94,16 @@ pub fn bind_standard_lighting<'a, T, PI, SI>(
     }
 
     let light_count = point_light_position_range.len() as i32;
-    build.load("B_light_count", light_count);
-    build.load(
+    ctx.load("B_light_count", light_count);
+    ctx.load(
         "B_point_light_position_range",
         point_light_position_range.as_slice(),
     );
-    build.load(
+    ctx.load(
         "B_point_light_color_radius",
         point_light_color_radius.as_slice(),
     );
-    build.load(
+    ctx.load(
         "B_spot_light_dir_offset_scale",
         spot_light_dir_offset_scale.as_slice(),
     );

@@ -7,12 +7,12 @@ use bevy::{
     winit::WinitSettings,
 };
 use bevy_opengl::{
-    BevyGlContext, load_val,
+    BevyGlContext, SlotData, UniformSet,
+    faststack::StackStack,
+    load_if_new, load_tex_if_new,
     prepare_image::{GpuImages, bevy_image_to_gl_texture},
     prepare_mesh::GPUMeshBufferMap,
-    queue_tex, queue_val,
     render::{OpenGLRenderPlugins, RenderPhase, RenderSet, register_render_system},
-    uniform_slot_builder::UniformSlotBuilder,
 };
 use wgpu_types::{Extent3d, TextureDimension, TextureFormat};
 
@@ -98,6 +98,29 @@ struct CustomMaterial {
     emissive: glow::Texture,
 }
 
+impl UniformSet for CustomMaterial {
+    fn names() -> &'static [(&'static str, bool)] {
+        &[("color", false), ("emissive", true)]
+    }
+
+    fn load(
+        &self,
+        gl: &glow::Context,
+        gpu_images: &GpuImages,
+        index: u32,
+        slot: &mut SlotData,
+        temp: &mut StackStack<u32, 16>,
+    ) {
+        match index {
+            0 => load_if_new(&self.color, gl, slot, temp),
+            1 => {
+                load_tex_if_new(&self.emissive.clone().into(), gl, gpu_images, slot);
+            }
+            _ => unreachable!(),
+        }
+    }
+}
+
 #[derive(Component, Deref, DerefMut)]
 struct CustomMaterialHandle(Entity);
 
@@ -138,10 +161,7 @@ fn render_custom_mat(
     gpu_meshes.reset_bind_cache();
     ctx.use_cached_program(shader_index);
 
-    let mut build = UniformSlotBuilder::<CustomMaterial>::new(&mut ctx, &gpu_images, shader_index);
-
-    queue_val!(build, color);
-    queue_tex!(build, emissive);
+    ctx.map_uniform_set_locations::<CustomMaterial>();
 
     for (view_vis, transform, mesh, material_h) in mesh_entities.iter() {
         if !view_vis.get() {
@@ -154,9 +174,9 @@ fn render_custom_mat(
         let world_from_local = transform.to_matrix();
         let clip_from_local = clip_from_world * world_from_local;
 
-        load_val!(build, clip_from_local);
+        ctx.load("clip_from_local", clip_from_local);
 
-        build.run(material);
-        gpu_meshes.draw_mesh(build.ctx, mesh.id(), shader_index);
+        ctx.bind_uniforms_set(&gpu_images, material);
+        gpu_meshes.draw_mesh(&ctx, mesh.id(), shader_index);
     }
 }
