@@ -13,8 +13,8 @@ uniform vec4 B_point_light_position_range[MAX_POINT_LIGHTS];
 uniform vec4 B_point_light_color_radius[MAX_POINT_LIGHTS];
 uniform vec4 B_spot_light_dir_offset_scale[MAX_POINT_LIGHTS];
 
-vec3 apply_pbr_lighting(vec3 V, vec3 diffuse_color, vec3 F0, vec3 vert_normal, vec3 normal, float perceptual_roughness, 
-                        float diffuse_transmission, vec2 screen_uv, vec2 view_resolution, vec3 ws_position) {
+vec3 apply_pbr_lighting(vec3 V, vec3 diffuse_color, vec3 F0, vec3 vert_normal, vec3 normal, float perceptual_roughness,
+    float diffuse_transmission, vec2 screen_uv, vec2 view_resolution, vec3 ws_position) {
     float roughness = perceptual_roughness * perceptual_roughness;
     vec3 output_color = vec3(0.0);
 
@@ -28,6 +28,7 @@ vec3 apply_pbr_lighting(vec3 V, vec3 diffuse_color, vec3 F0, vec3 vert_normal, v
     if (shadow_uvz.x > 0.0 && shadow_uvz.x < 1.0 && shadow_uvz.y > 0.0 && shadow_uvz.y < 1.0) {
         dir_shadow *= bilinear_shadow2(B_shadow_texture, shadow_uvz.xy, shadow_uvz.z, bias, view_resolution);
         //dir_shadow *= sample_shadow_map_castano_thirteen(B_shadow_texture, shadow_uvz.xy, shadow_uvz.z, bias, view_resolution);
+        dir_shadow = hardenedKernel(dir_shadow);
     }
     #endif // SAMPLE_SHADOW
 
@@ -58,8 +59,8 @@ vec3 apply_pbr_lighting(vec3 V, vec3 diffuse_color, vec3 F0, vec3 vert_normal, v
                 vec4 light_color_radius = B_point_light_color_radius[i];
                 vec4 dos = B_spot_light_dir_offset_scale[i];
                 vec3 spot_dir = octahedral_decode(dos.xy);
-                output_color += point_light(V, diffuse_color, F0, normal, roughness, diffuse_transmission, to_light, 
-                                            light_position_range.w, light_color_radius.rgb, spot_dir, dos.z, dos.w);
+                output_color += point_light(V, diffuse_color, F0, normal, roughness, diffuse_transmission, to_light,
+                        light_position_range.w, light_color_radius.rgb, spot_dir, dos.z, dos.w);
             }
         }
     }

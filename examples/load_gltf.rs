@@ -193,14 +193,14 @@ fn setup(
             illuminance: DIRECT_SUNLIGHT,
             shadows_enabled: true,
             shadow_depth_bias: 0.3,
-            shadow_normal_bias: 0.7,
+            shadow_normal_bias: 0.6,
             ..default()
         },
         CascadeShadowConfigBuilder {
             num_cascades: 1,
             minimum_distance: 0.1,
-            maximum_distance: 25.0,
-            first_cascade_far_bound: 70.0,
+            maximum_distance: 22.0,
+            first_cascade_far_bound: 22.0,
             overlap_proportion: 0.2,
         }
         .build(),

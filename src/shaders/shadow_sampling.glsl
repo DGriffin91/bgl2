@@ -1,3 +1,14 @@
+// https://github.com/google/filament/blob/1f6a67b2a2798acdfbf14ea9aba3686dd5530b2a/shaders/src/surface_shadowing.fs#L118
+float hardenedKernel(float x) {
+    // this is basically a stronger smoothstep()
+    x = 2.0 * x - 1.0;
+    float s = sign(x);
+    x = 1.0 - s * x;
+    x = x * x * x;
+    x = s - x * s;
+    return 0.5 * x + 0.5;
+}
+
 float bilinear_shadow(sampler2D shadow_tex, vec2 uv, float receiver_z, float bias, vec2 shadow_res) {
     vec2 step = 1.0 / shadow_res;
 
