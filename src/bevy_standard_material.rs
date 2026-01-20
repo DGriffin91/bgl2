@@ -33,9 +33,11 @@ pub struct OpenGLStandardMaterialPlugin;
 
 impl Plugin for OpenGLStandardMaterialPlugin {
     fn build(&self, app: &mut App) {
+        app.init_resource::<DrawsSortedByMaterial>();
         register_prepare_system(app.world_mut(), standard_material_prepare_view);
         register_render_system::<StandardMaterial, _>(app.world_mut(), standard_material_render);
         app.add_systems(Startup, setup.in_set(RenderSet::Pipeline));
+        app.add_systems(Update, sort_by_material.in_set(RenderSet::Prepare));
     }
 }
 
@@ -63,6 +65,22 @@ pub struct ViewUniforms {
     pub view_position: Vec3,
     pub view_resolution: Vec2,
     pub view_exposure: f32,
+}
+
+#[derive(Resource, Default, Deref, DerefMut)]
+pub struct DrawsSortedByMaterial(Vec<Entity>);
+
+pub fn sort_by_material(
+    mesh_entities: Query<(Entity, &MeshMaterial3d<StandardMaterial>)>,
+    mut sorted: ResMut<DrawsSortedByMaterial>,
+) {
+    sorted.clear();
+    for (entity, _) in mesh_entities
+        .iter()
+        .sorted_by_key(|(_, material_h)| material_h.id())
+    {
+        sorted.push(entity);
+    }
 }
 
 // Runs at each view transition: Before shadows, before reflections, etc..
@@ -150,6 +168,7 @@ pub fn standard_material_render(
     shadow: Option<Res<DirectionalLightShadow>>,
     gpu_images: NonSend<GpuImages>,
     reflect_uniforms: Option<Res<ReflectionUniforms>>,
+    sorted: Res<DrawsSortedByMaterial>,
 ) {
     let (view_uniforms, env_light) = *camera;
     let phase = **phase;
@@ -203,13 +222,7 @@ pub fn standard_material_render(
     let iter = if phase.transparent() {
         Either::Right(mesh_entities.iter_many(transparent_draws.take()))
     } else {
-        // Sort by material. Can be faster if enough entities share materials (faster on bistro and san-miguel).
-        // TODO avoid re-sorting?
-        Either::Left(
-            mesh_entities
-                .iter()
-                .sorted_by_key(|(_, _, _, _, _, material_h, _, _, _)| material_h.id()),
-        )
+        Either::Left(mesh_entities.iter_many(&**sorted))
         // Either::Left(mesh_entities.iter()) // <- Unsorted alternative
     };
 
