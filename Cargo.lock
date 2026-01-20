@@ -1046,6 +1046,7 @@ dependencies = [
  "notify",
  "raw-window-handle",
  "shared_exponent_formats",
+ "uniform_set_derive",
  "wasm-bindgen",
  "web-sys",
  "wgpu-types",
@@ -4782,6 +4783,15 @@ name = "unicode-xid"
 version = "0.2.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ebc1c04c71510c7f702b52b7c350734c9ff1295c464a03335b00bb84fc54f853"
+
+[[package]]
+name = "uniform_set_derive"
+version = "0.1.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
 
 [[package]]
 name = "url"

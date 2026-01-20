@@ -14,6 +14,7 @@ use bevy_opengl::{
     prepare_mesh::GPUMeshBufferMap,
     render::{OpenGLRenderPlugins, RenderPhase, RenderSet, register_render_system},
 };
+use uniform_set_derive::UniformSet;
 use wgpu_types::{Extent3d, TextureDimension, TextureFormat};
 
 fn main() {
@@ -92,33 +93,10 @@ fn create_test_image(color: [u8; 4]) -> Image {
     )
 }
 
-#[derive(Component)]
+#[derive(Component, UniformSet)]
 struct CustomMaterial {
     color: Vec4,
     emissive: glow::Texture,
-}
-
-impl UniformSet for CustomMaterial {
-    fn names() -> &'static [(&'static str, bool)] {
-        &[("color", false), ("emissive", true)]
-    }
-
-    fn load(
-        &self,
-        gl: &glow::Context,
-        gpu_images: &GpuImages,
-        index: u32,
-        slot: &mut SlotData,
-        temp: &mut StackStack<u32, 16>,
-    ) {
-        match index {
-            0 => load_if_new(&self.color, gl, slot, temp),
-            1 => {
-                load_tex_if_new(&self.emissive.clone().into(), gl, gpu_images, slot);
-            }
-            _ => unreachable!(),
-        }
-    }
 }
 
 #[derive(Component, Deref, DerefMut)]
