@@ -1,8 +1,8 @@
-#include math
-#include pbr
-#include agx
-#include shadow_sampling
-#include standard_pbr_lighting
+#include std::math
+#include std::pbr
+#include std::agx
+#include std::shadow_sampling
+#include std::pbr_lighting
 
 varying vec4 clip_position;
 varying vec3 ws_position;

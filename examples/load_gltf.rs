@@ -16,12 +16,8 @@ use bevy::{
 };
 use bevy_mod_mipmap_generator::{MipmapGeneratorPlugin, generate_mipmaps};
 use bevy_opengl::{
-    BevyGlContext,
-    bevy_standard_lighting::{
-        standard_pbr_glsl, standard_pbr_lighting_glsl, standard_shadow_sampling_glsl,
-    },
-    bevy_standard_material::{standard_material_prepare_view, standard_material_render},
-    render::{OpenGLRenderPlugins, RenderSet, register_prepare_system, register_render_system},
+    bevy_standard_material::OpenGLStandardMaterialPlugin,
+    render::{OpenGLRenderPlugins, RenderSet},
 };
 use wgpu_types::Face;
 
@@ -73,9 +69,7 @@ fn main() {
         ));
 
     if !args.bevy {
-        app.add_plugins(OpenGLRenderPlugins);
-        register_prepare_system(app.world_mut(), standard_material_prepare_view);
-        register_render_system::<StandardMaterial, _>(app.world_mut(), standard_material_render);
+        app.add_plugins((OpenGLRenderPlugins, OpenGLStandardMaterialPlugin));
     }
 
     app.add_systems(Update, generate_mipmaps::<StandardMaterial>)
@@ -94,19 +88,10 @@ struct AnimationToPlay {
 fn setup(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
-    mut ctx: Option<NonSendMut<BevyGlContext>>,
     mut _meshes: ResMut<Assets<Mesh>>,
     mut _materials: ResMut<Assets<StandardMaterial>>,
     mut _graphs: ResMut<Assets<AnimationGraph>>,
 ) {
-    if let Some(ctx) = &mut ctx {
-        ctx.add_snippet("agx", include_str!("../assets/shaders/agx.glsl"));
-        ctx.add_snippet("math", include_str!("../assets/shaders/math.glsl"));
-        ctx.add_snippet("shadow_sampling", standard_shadow_sampling_glsl());
-        ctx.add_snippet("pbr", standard_pbr_glsl());
-        ctx.add_snippet("standard_pbr_lighting", standard_pbr_lighting_glsl());
-    }
-
     // --------------------------
     //let (graph, index) = AnimationGraph::from_clip(
     //    asset_server.load(GltfAssetLabel::Animation(2).from_asset(FOX_PATH)),

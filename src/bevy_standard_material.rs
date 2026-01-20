@@ -7,7 +7,8 @@ use itertools::{Either, Itertools};
 use crate::{
     BevyGlContext, SlotData, Tex, UniformSet, UniformValue,
     bevy_standard_lighting::{
-        DEFAULT_MAX_JOINTS_DEF, DEFAULT_MAX_LIGHTS_DEF, bind_standard_lighting,
+        DEFAULT_MAX_JOINTS_DEF, DEFAULT_MAX_LIGHTS_DEF, bind_standard_lighting, standard_pbr_glsl,
+        standard_pbr_lighting_glsl, standard_shadow_sampling_glsl,
     },
     faststack::StackStack,
     load_if_new, load_tex_if_new,
@@ -17,9 +18,33 @@ use crate::{
     prepare_image::GpuImages,
     prepare_joints::JointData,
     prepare_mesh::GPUMeshBufferMap,
-    render::{RenderPhase, set_blend_func_from_alpha_mode, transparent_draw_from_alpha_mode},
+    render::{
+        RenderPhase, RenderSet, register_prepare_system, register_render_system,
+        set_blend_func_from_alpha_mode, transparent_draw_from_alpha_mode,
+    },
     shader_cached,
 };
+
+#[derive(Default)]
+pub struct OpenGLStandardMaterialPlugin;
+
+impl Plugin for OpenGLStandardMaterialPlugin {
+    fn build(&self, app: &mut App) {
+        register_prepare_system(app.world_mut(), standard_material_prepare_view);
+        register_render_system::<StandardMaterial, _>(app.world_mut(), standard_material_render);
+        app.add_systems(Startup, setup.in_set(RenderSet::Pipeline));
+    }
+}
+
+fn setup(mut ctx: Option<NonSendMut<BevyGlContext>>) {
+    if let Some(ctx) = &mut ctx {
+        ctx.add_snippet("std::agx", include_str!("shaders/agx.glsl"));
+        ctx.add_snippet("std::math", include_str!("shaders/math.glsl"));
+        ctx.add_snippet("std::shadow_sampling", standard_shadow_sampling_glsl());
+        ctx.add_snippet("std::pbr", standard_pbr_glsl());
+        ctx.add_snippet("std::pbr_lighting", standard_pbr_lighting_glsl());
+    }
+}
 
 #[derive(Component, Default)]
 pub struct SkipReflection;
@@ -133,8 +158,8 @@ pub fn standard_material_render(
 
     let shader_index = shader_cached!(
         ctx,
-        "../assets/shaders/std_mat.vert",
-        "../assets/shaders/pbr_std_mat.frag",
+        "shaders/std_mat.vert",
+        "shaders/pbr_std_mat.frag",
         &[shadow_def, DEFAULT_MAX_LIGHTS_DEF, DEFAULT_MAX_JOINTS_DEF]
     )
     .unwrap();
