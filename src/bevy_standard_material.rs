@@ -253,21 +253,19 @@ pub fn standard_material_render(
 
         let world_from_local = transform.to_matrix();
 
-        if !phase.depth_only() {
-            // If in opaque phase we must defer any alpha blend draws so they can be sorted and run in order.
-            if !transparent_draws.maybe_defer::<StandardMaterial>(
-                transparent_draw_from_alpha_mode(&material.alpha_mode),
-                phase,
-                entity,
-                transform,
-                aabb,
-                &view_uniforms.view_from_world,
-                &world_from_local,
-            ) {
-                continue;
-            }
-            set_blend_func_from_alpha_mode(&ctx.gl, &material.alpha_mode);
+        // If in opaque phase we must defer any alpha blend draws so they can be sorted and run in order.
+        if !transparent_draws.maybe_defer::<StandardMaterial>(
+            transparent_draw_from_alpha_mode(&material.alpha_mode),
+            phase,
+            entity,
+            transform,
+            aabb,
+            &view_uniforms.view_from_world,
+            &world_from_local,
+        ) {
+            continue;
         }
+        set_blend_func_from_alpha_mode(&ctx.gl, &material.alpha_mode);
 
         ctx.load("world_from_local", world_from_local);
 
