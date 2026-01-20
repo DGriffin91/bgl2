@@ -1,5 +1,6 @@
 use bevy::prelude::*;
 use glow::{HasContext, PixelUnpackData};
+use uniform_set_derive::UniformSet;
 
 use crate::{BevyGlContext, render::RenderSet};
 
@@ -11,6 +12,13 @@ impl Plugin for PlaneReflectPlugin {
     }
 }
 
+#[derive(UniformSet, Resource)]
+pub struct ReflectionUniforms {
+    reflection_plane_position: Vec3,
+    reflection_plane_normal: Vec3,
+    reflect_texture: glow::Texture,
+}
+
 fn update_reflect_tex(
     mut commands: Commands,
     bevy_window: Single<&Window>,
@@ -20,10 +28,15 @@ fn update_reflect_tex(
 ) {
     // Keep reflection texture size up to date.
 
+    let translation;
+    let normal;
     if let Some(plane) = &mut plane_reflection {
+        translation = plane.1.translation();
+        normal = plane.1.up().as_vec3();
         **plane.0 = reflection_plane_matrix(plane.1.translation(), plane.1.up().as_vec3());
     } else {
         commands.remove_resource::<PlaneReflectionTexture>();
+        commands.remove_resource::<ReflectionUniforms>();
         return;
     }
     let width = bevy_window.physical_width().max(1);
@@ -34,16 +47,29 @@ fn update_reflect_tex(
             if shadow_tex.width != width || shadow_tex.height != height {
                 unsafe {
                     ctx.gl.delete_texture(shadow_tex.texture);
-                    commands.insert_resource(PlaneReflectionTexture::new(&ctx.gl, width, height))
+                    let refl = PlaneReflectionTexture::new(&ctx.gl, width, height);
+                    commands.insert_resource(ReflectionUniforms {
+                        reflection_plane_position: translation,
+                        reflection_plane_normal: normal,
+                        reflect_texture: refl.texture,
+                    });
+                    commands.insert_resource(refl);
                 };
             }
         } else {
             unsafe { ctx.gl.delete_texture(shadow_tex.texture) };
             commands.remove_resource::<PlaneReflectionTexture>();
+            commands.remove_resource::<ReflectionUniforms>();
         }
     } else {
         if plane_reflection.is_some() {
-            commands.insert_resource(PlaneReflectionTexture::new(&ctx.gl, width, height))
+            let refl = PlaneReflectionTexture::new(&ctx.gl, width, height);
+            commands.insert_resource(ReflectionUniforms {
+                reflection_plane_position: translation,
+                reflection_plane_normal: normal,
+                reflect_texture: refl.texture,
+            });
+            commands.insert_resource(refl);
         } else {
             return;
         }

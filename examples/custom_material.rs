@@ -7,9 +7,7 @@ use bevy::{
     winit::WinitSettings,
 };
 use bevy_opengl::{
-    BevyGlContext, SlotData, UniformSet,
-    faststack::StackStack,
-    load_if_new, load_tex_if_new,
+    BevyGlContext,
     prepare_image::{GpuImages, bevy_image_to_gl_texture},
     prepare_mesh::GPUMeshBufferMap,
     render::{OpenGLRenderPlugins, RenderPhase, RenderSet, register_render_system},

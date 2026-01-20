@@ -1,9 +1,23 @@
-use proc_macro::TokenStream;
 use quote::quote;
 use syn::{
     Data, DeriveInput, Fields, GenericArgument, PathArguments, Type, TypePath, parse_macro_input,
     spanned::Spanned,
 };
+
+use proc_macro::TokenStream;
+use proc_macro_crate::{FoundCrate, crate_name};
+use proc_macro2::Span;
+use syn::Ident;
+
+fn bevy_opengl_path() -> proc_macro2::TokenStream {
+    match crate_name("bevy_opengl") {
+        Ok(FoundCrate::Name(name)) => {
+            let ident = Ident::new(&name, Span::call_site());
+            quote!(::#ident)
+        }
+        Ok(FoundCrate::Itself) | Err(_) => quote!(::bevy_opengl),
+    }
+}
 
 #[proc_macro_derive(UniformSet)]
 pub fn derive_uniform_set(input: TokenStream) -> TokenStream {
@@ -34,6 +48,8 @@ pub fn derive_uniform_set(input: TokenStream) -> TokenStream {
 
     let mut load_arms = Vec::with_capacity(fields.len());
 
+    let crate_path = bevy_opengl_path();
+
     for (i, field) in fields.iter().enumerate() {
         let Some(field_ident) = &field.ident else {
             continue;
@@ -50,18 +66,18 @@ pub fn derive_uniform_set(input: TokenStream) -> TokenStream {
         if is_tex {
             load_arms.push(quote! {
                 #idx => {
-                    load_tex_if_new(&self.#field_ident.clone().into(), gl, gpu_images, slot);
+                    #crate_path::load_tex_if_new(&self.#field_ident.clone().into(), gl, gpu_images, slot);
                 }
             });
         } else {
             load_arms.push(quote! {
-                #idx => load_if_new(&self.#field_ident, gl, slot, temp)
+                #idx => #crate_path::load_if_new(&self.#field_ident, gl, slot, temp)
             });
         }
     }
 
     let expanded = quote! {
-        impl UniformSet for #ident {
+        impl #crate_path::UniformSet for #ident {
             fn names() -> &'static [(&'static str, bool)] {
                 &[
                     #(#name_entries,)*
@@ -71,10 +87,10 @@ pub fn derive_uniform_set(input: TokenStream) -> TokenStream {
             fn load(
                 &self,
                 gl: &glow::Context,
-                gpu_images: &GpuImages,
+                gpu_images: &#crate_path::prepare_image::GpuImages,
                 index: u32,
-                slot: &mut SlotData,
-                temp: &mut StackStack<u32, 16>,
+                slot: &mut #crate_path::SlotData,
+                temp: &mut #crate_path::faststack::StackStack<u32, 16>,
             ) {
                 match index {
                     #(#load_arms,)*

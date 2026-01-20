@@ -13,6 +13,8 @@ pub mod prepare_mesh;
 pub mod render;
 pub mod watchers;
 
+extern crate self as bevy_opengl;
+
 use anyhow::Error;
 use anyhow::anyhow;
 use bevy::platform::collections::HashSet;
@@ -20,6 +22,7 @@ use bytemuck::cast_slice;
 use core::slice;
 use glow::UniformLocation;
 use std::any::TypeId;
+use std::any::type_name;
 use std::hash::Hash;
 use std::hash::Hasher;
 use std::path::Path;
@@ -283,6 +286,7 @@ impl BevyGlContext {
         self.uniform_location_cache.clear();
         self.current_program = Some(self.shader_cache[index as usize]);
         self.current_texture_slot_count = 0;
+        self.last_cull_mode = None;
         unsafe { self.gl.use_program(self.current_program) };
     }
 
@@ -646,7 +650,7 @@ impl BevyGlContext {
         }
     }
 
-    pub fn set_cull_mode(&mut self, cull_mode: Option<Face>) {
+    pub fn set_cull_mode(&mut self, cull_mode: Option<Face>, flip: bool) {
         if self.last_cull_mode != cull_mode {
             self.last_cull_mode = cull_mode;
             unsafe {
@@ -654,11 +658,13 @@ impl BevyGlContext {
                     Some(face) => match face {
                         wgpu_types::Face::Front => {
                             self.gl.enable(glow::CULL_FACE);
-                            self.gl.cull_face(glow::BACK);
+                            self.gl
+                                .cull_face(if flip { glow::BACK } else { glow::FRONT });
                         }
                         wgpu_types::Face::Back => {
                             self.gl.enable(glow::CULL_FACE);
-                            self.gl.cull_face(glow::BACK);
+                            self.gl
+                                .cull_face(if flip { glow::FRONT } else { glow::BACK });
                         }
                     },
                     None => {
@@ -1088,7 +1094,10 @@ impl BevyGlContext {
         for (index, slot) in self
             .uniform_slot_map
             .get_mut(&TypeId::of::<T>())
-            .unwrap()
+            .expect(&format!(
+                "Uniform map missing. Call ctx.map_uniform_set_locations::<{}>() before bind_uniforms_set().",
+                type_name::<T>()
+            ))
             .iter_mut()
             .enumerate()
         {

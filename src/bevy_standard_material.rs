@@ -1,3 +1,5 @@
+use std::ops::Deref;
+
 use bevy::{
     camera::{Exposure, primitives::Aabb},
     prelude::*,
@@ -6,7 +8,7 @@ use itertools::{Either, Itertools};
 use uniform_set_derive::UniformSet;
 
 use crate::{
-    BevyGlContext, SlotData, Tex, UniformSet, UniformValue,
+    BevyGlContext, SlotData, UniformSet, UniformValue,
     bevy_standard_lighting::{
         DEFAULT_MAX_JOINTS_DEF, DEFAULT_MAX_LIGHTS_DEF, bind_standard_lighting, standard_pbr_glsl,
         standard_pbr_lighting_glsl, standard_shadow_sampling_glsl,
@@ -15,7 +17,7 @@ use crate::{
     load_if_new, load_match, load_tex_if_new,
     phase_shadow::DirectionalLightShadow,
     phase_transparent::DeferredAlphaBlendDraws,
-    plane_reflect::{PlaneReflectionTexture, ReflectionPlane},
+    plane_reflect::{ReflectionPlane, ReflectionUniforms},
     prepare_image::GpuImages,
     prepare_joints::JointData,
     prepare_mesh::GPUMeshBufferMap,
@@ -147,8 +149,7 @@ pub fn standard_material_render(
     mut transparent_draws: ResMut<DeferredAlphaBlendDraws>,
     shadow: Option<Res<DirectionalLightShadow>>,
     gpu_images: NonSend<GpuImages>,
-    reflect_texture: Option<Res<PlaneReflectionTexture>>,
-    mut plane_reflection: Option<Single<(&mut ReflectionPlane, &GlobalTransform)>>,
+    reflect_uniforms: Option<Res<ReflectionUniforms>>,
 ) {
     let (view_uniforms, env_light) = *camera;
     let phase = **phase;
@@ -175,24 +176,17 @@ pub fn standard_material_render(
     ctx.use_cached_program(shader_index);
 
     ctx.load("write_reflection", phase.reflection());
-    let mut reflect_bool_location = None;
 
     ctx.map_uniform_set_locations::<ViewUniforms>();
     ctx.bind_uniforms_set(&gpu_images, view_uniforms);
     ctx.map_uniform_set_locations::<StandardMaterial>();
+    let mut reflect_bool_location = None;
 
     if !phase.depth_only() {
         reflect_bool_location = ctx.get_uniform_location("read_reflection");
-        if let Some(reflect_texture) = &reflect_texture {
-            if reflect_bool_location.is_some() {
-                let reflect_texture = reflect_texture.texture.clone();
-                ctx.load_tex("reflect_texture", &Tex::Gl(reflect_texture), &gpu_images);
-            }
-        }
-
-        if let Some(plane) = &mut plane_reflection {
-            ctx.load("reflection_plane_position", plane.1.translation());
-            ctx.load("reflection_plane_normal", plane.1.up().as_vec3());
+        if let Some(reflect_uniforms) = &reflect_uniforms {
+            ctx.map_uniform_set_locations::<ReflectionUniforms>();
+            ctx.bind_uniforms_set(&gpu_images, reflect_uniforms.deref());
         }
 
         bind_standard_lighting(
@@ -259,9 +253,6 @@ pub fn standard_material_render(
             ) {
                 continue;
             }
-            reflect_bool_location
-                .clone()
-                .map(|loc| (read_reflect && phase.read_reflect()).load(&ctx.gl, &loc));
             set_blend_func_from_alpha_mode(&ctx.gl, &material.alpha_mode);
         }
 
@@ -272,9 +263,13 @@ pub fn standard_material_render(
         }
         ctx.load("has_joint_data", joint_data.is_some());
 
+        reflect_bool_location.clone().map(|loc| {
+            (read_reflect && phase.read_reflect() && reflect_uniforms.is_some()).load(&ctx.gl, &loc)
+        });
+
         // Only re-bind if the material has changed.
         if last_material != Some(material_h) {
-            ctx.set_cull_mode(material.cull_mode);
+            ctx.set_cull_mode(material.cull_mode, phase.reflection());
             ctx.bind_uniforms_set(&gpu_images, material);
         }
 
