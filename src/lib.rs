@@ -286,7 +286,7 @@ impl BevyGlContext {
         self.uniform_location_cache.clear();
         self.current_program = Some(self.shader_cache[index as usize]);
         self.current_texture_slot_count = 0;
-        self.last_cull_mode = None;
+        self.set_cull_mode(Some(Face::Back)); // Cull backfaces by default like bevy.
         unsafe { self.gl.use_program(self.current_program) };
     }
 
@@ -650,7 +650,7 @@ impl BevyGlContext {
         }
     }
 
-    pub fn set_cull_mode(&mut self, cull_mode: Option<Face>, flip: bool) {
+    pub fn set_cull_mode(&mut self, cull_mode: Option<Face>) {
         if self.last_cull_mode != cull_mode {
             self.last_cull_mode = cull_mode;
             unsafe {
@@ -658,13 +658,11 @@ impl BevyGlContext {
                     Some(face) => match face {
                         wgpu_types::Face::Front => {
                             self.gl.enable(glow::CULL_FACE);
-                            self.gl
-                                .cull_face(if flip { glow::BACK } else { glow::FRONT });
+                            self.gl.cull_face(glow::FRONT);
                         }
                         wgpu_types::Face::Back => {
                             self.gl.enable(glow::CULL_FACE);
-                            self.gl
-                                .cull_face(if flip { glow::FRONT } else { glow::BACK });
+                            self.gl.cull_face(glow::BACK);
                         }
                     },
                     None => {
@@ -683,6 +681,17 @@ impl BevyGlContext {
             self.gl_surface.as_ref().unwrap(),
             self.gl_context.as_ref().unwrap(),
         );
+    }
+}
+
+pub fn flip_cull_mode(cull_mode: Option<Face>, flip: bool) -> Option<Face> {
+    if flip && let Some(cull_mode) = cull_mode {
+        Some(match cull_mode {
+            Face::Front => Face::Back,
+            Face::Back => Face::Front,
+        })
+    } else {
+        None
     }
 }
 

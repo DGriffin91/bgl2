@@ -14,7 +14,7 @@ use crate::{
         standard_pbr_lighting_glsl, standard_shadow_sampling_glsl,
     },
     faststack::StackStack,
-    load_if_new, load_match, load_tex_if_new,
+    flip_cull_mode, load_if_new, load_match, load_tex_if_new,
     phase_shadow::DirectionalLightShadow,
     phase_transparent::DeferredAlphaBlendDraws,
     plane_reflect::{ReflectionPlane, ReflectionUniforms},
@@ -280,7 +280,7 @@ pub fn standard_material_render(
 
         // Only re-bind if the material has changed.
         if last_material != Some(material_h) {
-            ctx.set_cull_mode(material.cull_mode, phase.reflection());
+            ctx.set_cull_mode(flip_cull_mode(material.cull_mode, phase.reflection()));
             ctx.bind_uniforms_set(&gpu_images, material);
         }
 
