@@ -103,6 +103,7 @@ pub struct WindowInitData {
     pub width: u32,
     pub height: u32,
 }
+// TODO investigate if this usage is UB. Seems to work so far, even on macos.
 unsafe impl Send for WindowInitData {}
 unsafe impl Sync for WindowInitData {}
 
