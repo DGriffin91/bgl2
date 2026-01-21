@@ -1,7 +1,5 @@
-use std::{
-    sync::mpsc::{Sender, channel},
-    thread,
-};
+use std::sync::mpsc::{SyncSender, sync_channel};
+use std::thread;
 
 use bevy::{ecs::system::SystemState, prelude::*, winit::WINIT_WINDOWS};
 use bevy_opengl::{BevyGlContext, WindowInitData, shader_cached};
@@ -37,7 +35,7 @@ fn init(world: &mut World, params: &mut SystemState<Query<(Entity, &mut Window)>
         return;
     }
 
-    let (sender, receiver) = channel::<CommandEncoder>();
+    let (sender, receiver) = sync_channel::<CommandEncoder>(1);
     WINIT_WINDOWS.with_borrow(|winit_windows| {
         let mut windows = params.get_mut(world);
 
@@ -76,7 +74,7 @@ fn init(world: &mut World, params: &mut SystemState<Query<(Entity, &mut Window)>
 
 #[derive(Resource)]
 pub struct CommandEncoderSender {
-    sender: Sender<CommandEncoder>,
+    sender: SyncSender<CommandEncoder>,
 }
 
 #[derive(Resource, Default)]
