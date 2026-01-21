@@ -1,7 +1,5 @@
-use std::sync::mpsc::{SyncSender, sync_channel};
-use std::thread;
-
 use bevy::{ecs::system::SystemState, prelude::*, winit::WINIT_WINDOWS};
+use bevy_opengl::command_encoder::{CommandEncoder, CommandEncoderPlugin, CommandEncoderSender};
 use bevy_opengl::{BevyGlContext, WindowInitData, shader_cached};
 use bytemuck::cast_slice;
 use glow::HasContext;
@@ -10,7 +8,6 @@ use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
 
 fn main() {
     App::new()
-        .init_resource::<CommandEncoder>()
         .add_plugins((
             MinimalPlugins,
             bevy::input::InputPlugin,
@@ -20,13 +17,10 @@ fn main() {
             bevy::scene::ScenePlugin,
             WindowPlugin::default(),
             ImagePlugin::default_linear(),
-            //bevy::mesh::MeshPlugin,
-            //bevy::camera::CameraPlugin,
-            //bevy::gltf::GltfPlugin::default(),
+            CommandEncoderPlugin,
         ))
         .add_systems(Startup, init)
         .add_systems(PostUpdate, update)
-        .add_systems(Last, send)
         .run();
 }
 
@@ -35,14 +29,13 @@ fn init(world: &mut World, params: &mut SystemState<Query<(Entity, &mut Window)>
         return;
     }
 
-    let (sender, receiver) = sync_channel::<CommandEncoder>(1);
-    WINIT_WINDOWS.with_borrow(|winit_windows| {
+    let sender = WINIT_WINDOWS.with_borrow(|winit_windows| {
         let mut windows = params.get_mut(world);
 
         let (bevy_window_entity, bevy_window) = windows.single_mut().unwrap();
         let Some(winit_window) = winit_windows.get_window(bevy_window_entity) else {
             warn!("No Window Found");
-            return;
+            return None;
         };
 
         let window_init_data = WindowInitData {
@@ -57,29 +50,11 @@ fn init(world: &mut World, params: &mut SystemState<Query<(Entity, &mut Window)>
             height: bevy_window.physical_size().y as u32,
         };
 
-        thread::spawn(move || {
-            let mut ctx = BevyGlContext::new(window_init_data);
-            loop {
-                if let Ok(mut msg) = receiver.recv() {
-                    for cmd in msg.commands.iter_mut() {
-                        cmd(&mut ctx)
-                    }
-                }
-            }
-        });
+        Some(CommandEncoderSender::new(window_init_data))
     });
-
-    world.insert_resource(CommandEncoderSender { sender });
-}
-
-#[derive(Resource)]
-pub struct CommandEncoderSender {
-    sender: SyncSender<CommandEncoder>,
-}
-
-#[derive(Resource, Default)]
-pub struct CommandEncoder {
-    pub commands: Vec<Box<dyn FnMut(&mut BevyGlContext) + Send + Sync>>,
+    if let Some(sender) = sender {
+        world.insert_resource(sender);
+    }
 }
 
 fn update(mut cmd: ResMut<CommandEncoder>) {
@@ -118,10 +93,4 @@ fn update(mut cmd: ResMut<CommandEncoder>) {
 
         ctx.swap();
     }));
-}
-
-fn send(mut cmd: ResMut<CommandEncoder>, sender: Res<CommandEncoderSender>) {
-    let mut new_cmd_encoder = CommandEncoder::default();
-    std::mem::swap(&mut *cmd, &mut new_cmd_encoder);
-    sender.sender.send(new_cmd_encoder).unwrap();
 }

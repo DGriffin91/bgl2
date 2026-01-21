@@ -43,6 +43,7 @@ pub struct OpenGLRenderPlugins;
 impl Plugin for OpenGLRenderPlugins {
     fn build(&self, app: &mut App) {
         app.add_plugins((
+            CommandEncoderPlugin,
             OpenGLMinimalRenderPlugin,
             ShadowPhasePlugin,
             OpaquePhasePlugin,

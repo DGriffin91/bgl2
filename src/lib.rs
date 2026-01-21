@@ -12,6 +12,7 @@ pub mod prepare_image;
 //pub mod prepare_joints;
 //pub mod prepare_mesh;
 //pub mod render;
+pub mod command_encoder;
 pub mod watchers;
 
 extern crate self as bevy_opengl;
