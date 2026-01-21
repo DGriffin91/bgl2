@@ -22,6 +22,7 @@ use crate::{
     BevyGlContext, WindowInitData,
     command_encoder::{CommandEncoder, CommandEncoderPlugin, CommandEncoderSender},
     phase_opaque::OpaquePhasePlugin,
+    prepare_image::PrepareImagePlugin,
     prepare_mesh::PrepareMeshPlugin,
 };
 
@@ -63,9 +64,9 @@ impl Plugin for OpenGLMinimalRenderPlugin {
         app.insert_resource(CompressedImageFormatSupport(CompressedImageFormats::BC)) // TODO query?
             .init_resource::<RenderRunner>()
             .init_resource::<RenderPhase>()
-            .add_plugins(PrepareMeshPlugin);
+            .add_plugins(PrepareMeshPlugin)
+            .add_plugins(PrepareImagePlugin);
         //.add_plugins(PrepareJointsPlugin)
-        //.add_plugins(PrepareImagePlugin);
 
         // TODO reference: https://github.com/bevyengine/bevy/pull/22144
         app.configure_sets(Startup, (RenderSet::Init, RenderSet::Pipeline).chain());

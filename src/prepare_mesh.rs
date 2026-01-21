@@ -30,7 +30,7 @@ impl Plugin for PrepareMeshPlugin {
 }
 
 #[derive(Default)]
-pub struct GPUMeshBufferMap {
+pub struct GpuMeshBufferMap {
     pub last_bind: Option<(ShaderIndex, usize)>, //shader_index, buffer_index
     pub buffers: Vec<Option<(GpuMeshBufferSet, HashSet<AssetId<Mesh>>)>>,
     pub map: HashMap<AssetId<Mesh>, BufferRef>,

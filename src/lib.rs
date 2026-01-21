@@ -50,7 +50,7 @@ use winit::platform::web::WindowExtWebSys;
 use crate::faststack::FastStack;
 use crate::faststack::StackStack;
 use crate::prepare_image::GpuImages;
-use crate::prepare_mesh::GPUMeshBufferMap;
+use crate::prepare_mesh::GpuMeshBufferMap;
 use crate::watchers::Watchers;
 
 pub type ShaderIndex = u32;
@@ -74,7 +74,8 @@ pub struct BevyGlContext {
     pub temp_slot_data: StackStack<u32, 16>,
     pub uniform_location_cache: HashMap<String, Option<UniformLocation>>,
     pub current_texture_slot_count: usize,
-    pub mesh: GPUMeshBufferMap,
+    pub mesh: GpuMeshBufferMap,
+    pub image: GpuImages,
 }
 
 impl Drop for BevyGlContext {
@@ -274,6 +275,7 @@ impl BevyGlContext {
                 uniform_location_cache: Default::default(),
                 current_texture_slot_count: 0,
                 mesh: Default::default(),
+                image: Default::default(),
             };
             ctx.test_for_glsl_lod();
             ctx
@@ -1151,7 +1153,7 @@ impl BevyGlContext {
 
         self.uniform_slot_map.insert(TypeId::of::<T>(), locations);
     }
-    pub fn bind_uniforms_set<T: UniformSet + 'static>(&mut self, gpu_images: &GpuImages, v: &T) {
+    pub fn bind_uniforms_set<T: UniformSet + 'static>(&mut self, v: &T) {
         for (index, slot) in self
             .uniform_slot_map
             .get_mut(&TypeId::of::<T>())
@@ -1165,7 +1167,7 @@ impl BevyGlContext {
             if let Some(slot) = slot {
                 v.load(
                     &self.gl,
-                    gpu_images,
+                    &self.image,
                     index as u32,
                     slot,
                     &mut self.temp_slot_data,

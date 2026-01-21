@@ -9,7 +9,7 @@ use glow::{HasContext, PixelUnpackData};
 use shared_exponent_formats::rgb9e5::rgb9e5_to_vec3;
 use wgpu_types::TextureViewDimension;
 
-use crate::BevyGlContext;
+use crate::{BevyGlContext, command_encoder::CommandEncoder, render::RenderSet};
 
 /// Handles uploading bevy Image assets to the GPU
 pub struct PrepareImagePlugin;
@@ -17,36 +17,52 @@ pub struct PrepareImagePlugin;
 #[derive(Resource, Deref)]
 pub struct DefaultSampler(ImageSamplerDescriptor);
 
-//impl Plugin for PrepareImagePlugin {
-//    fn build(&self, app: &mut App) {
-//        if let Some(image_plugin) = app.get_added_plugins::<ImagePlugin>().first() {
-//            let default_sampler = image_plugin.default_sampler.clone();
-//            app.insert_resource(DefaultSampler(default_sampler));
-//        } else {
-//            warn!("No ImagePlugin found. Try adding PrepareImagePlugin after DefaultPlugins");
-//        }
-//
-//        app.init_non_send_resource::<GpuImages>()
-//            .add_systems(PostUpdate, send_images_to_gpu.in_set(RenderSet::Prepare));
-//    }
-//}
+impl Plugin for PrepareImagePlugin {
+    fn build(&self, app: &mut App) {
+        if let Some(image_plugin) = app.get_added_plugins::<ImagePlugin>().first() {
+            let default_sampler = image_plugin.default_sampler.clone();
+            app.insert_resource(DefaultSampler(default_sampler));
+        } else {
+            warn!("No ImagePlugin found. Try adding PrepareImagePlugin after DefaultPlugins");
+        }
+
+        app.add_systems(PostUpdate, send_images_to_gpu.in_set(RenderSet::Prepare));
+    }
+}
 
 #[derive(Default)]
 pub struct GpuImages {
     // u32 is target glow::TEXTURE_2D or glow::TEXTURE_CUBE_MAP
     pub mapping: HashMap<AssetId<Image>, (glow::Texture, u32)>,
-    pub updated_this_frame: bool,
     pub placeholder: Option<glow::Texture>,
 }
 
 pub fn send_images_to_gpu(
-    mut gpu_images: NonSendMut<GpuImages>,
     images: Res<Assets<Image>>,
     mut image_events: MessageReader<AssetEvent<Image>>,
-    ctx: If<NonSend<BevyGlContext>>,
     default_sampler: Res<DefaultSampler>,
+    mut cmd: ResMut<CommandEncoder>,
 ) {
-    gpu_images.updated_this_frame = false;
+    cmd.record(|ctx| {
+        if ctx.image.placeholder.is_none() {
+            unsafe {
+                let texture = ctx.gl.create_texture().unwrap();
+                ctx.gl.bind_texture(glow::TEXTURE_2D, Some(texture));
+                ctx.gl.tex_image_2d(
+                    glow::TEXTURE_2D,
+                    0,
+                    glow::RGBA as i32,
+                    1,
+                    1,
+                    0,
+                    glow::RGBA,
+                    glow::UNSIGNED_BYTE,
+                    PixelUnpackData::Slice(Some(&[255, 255, 255, 255])),
+                );
+                ctx.image.placeholder = Some(texture);
+            }
+        }
+    });
 
     let mut updated: HashSet<AssetId<Image>> = HashSet::new();
     for event in image_events.read() {
@@ -55,9 +71,12 @@ pub fn send_images_to_gpu(
                 updated.insert(id.clone());
             }
             AssetEvent::Removed { id } => {
-                if let Some(tex) = gpu_images.mapping.remove(id) {
-                    unsafe { ctx.gl.delete_texture(tex.0) };
-                }
+                let id = *id;
+                cmd.record(move |ctx| {
+                    if let Some(tex) = ctx.image.mapping.remove(&id) {
+                        unsafe { ctx.gl.delete_texture(tex.0) };
+                    }
+                });
                 continue;
             }
             _ => (),
@@ -68,27 +87,6 @@ pub fn send_images_to_gpu(
         return;
     }
 
-    if gpu_images.placeholder.is_none() {
-        unsafe {
-            let texture = ctx.gl.create_texture().unwrap();
-            ctx.gl.bind_texture(glow::TEXTURE_2D, Some(texture));
-            ctx.gl.tex_image_2d(
-                glow::TEXTURE_2D,
-                0,
-                glow::RGBA as i32,
-                1,
-                1,
-                0,
-                glow::RGBA,
-                glow::UNSIGNED_BYTE,
-                PixelUnpackData::Slice(Some(&[255, 255, 255, 255])),
-            );
-            gpu_images.placeholder = Some(texture);
-        }
-    }
-
-    gpu_images.updated_this_frame = true;
-
     for asset_id in updated.iter() {
         if let Some(bevy_image) = images.get(*asset_id) {
             let handle: AssetId<Image> = asset_id.clone();
@@ -96,15 +94,19 @@ pub fn send_images_to_gpu(
                 continue;
             }
 
-            let Some((texture, target)) =
-                bevy_image_to_gl_texture(&ctx, Some(default_sampler.0.clone()), bevy_image)
-            else {
-                continue;
-            };
+            let bevy_image = bevy_image.clone();
+            let default_sampler = default_sampler.clone();
+            cmd.record(move |ctx| {
+                let Some((texture, target)) =
+                    bevy_image_to_gl_texture(&ctx, Some(default_sampler.clone()), &bevy_image)
+                else {
+                    return;
+                };
 
-            if let Some(old) = gpu_images.mapping.insert(handle, (texture, target)) {
-                unsafe { ctx.gl.delete_texture(old.0) };
-            }
+                if let Some(old) = ctx.image.mapping.insert(handle, (texture, target)) {
+                    unsafe { ctx.gl.delete_texture(old.0) };
+                }
+            });
         }
     }
 }

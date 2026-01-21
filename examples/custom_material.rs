@@ -1,4 +1,5 @@
 use bevy::{
+    asset::RenderAssetUsages,
     diagnostic::{FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin},
     prelude::*,
     render::{RenderPlugin, settings::WgpuSettings},
@@ -8,10 +9,10 @@ use bevy::{
 use bevy_opengl::{
     BevyGlContext,
     command_encoder::CommandEncoder,
-    prepare_image::GpuImages,
     render::{OpenGLRenderPlugins, RenderPhase, RenderSet, register_render_system},
 };
 use uniform_set_derive::UniformSet;
+use wgpu_types::{Extent3d, TextureDimension, TextureFormat};
 
 fn main() {
     let mut app = App::new();
@@ -47,18 +48,22 @@ fn default_plugins_no_render_backend() -> bevy::app::PluginGroupBuilder {
 }
 
 /// set up a simple 3D scene
-fn setup(mut commands: Commands, mut meshes: ResMut<Assets<Mesh>>) {
+fn setup(
+    mut commands: Commands,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut images: ResMut<Assets<Image>>,
+) {
     for x in -10..10 {
         for y in -10..10 {
             for z in -10..10 {
                 let p = vec3(x as f32, y as f32, z as f32);
                 let color = (p + 10.0) / 20.0;
                 let linear_rgb = LinearRgba::rgb(color.x, color.y, color.z);
-                //let bevy_image = create_test_image(linear_rgb.to_u8_array());
+                let image = create_test_image(linear_rgb.to_u8_array());
                 let material_id = commands
                     .spawn(CustomMaterial {
                         color: linear_rgb.to_vec4(),
-                        //emissive: bevy_image_to_gl_texture(&ctx, None, &bevy_image).unwrap().0,
+                        emissive: images.add(image),
                     })
                     .id();
                 commands.spawn((
@@ -75,24 +80,24 @@ fn setup(mut commands: Commands, mut meshes: ResMut<Assets<Mesh>>) {
     ));
 }
 
-//fn create_test_image(color: [u8; 4]) -> Image {
-//    Image::new(
-//        Extent3d {
-//            width: 1,
-//            height: 1,
-//            ..default()
-//        },
-//        TextureDimension::D2,
-//        color.to_vec(),
-//        TextureFormat::Rgba8UnormSrgb,
-//        RenderAssetUsages::all(),
-//    )
-//}
+fn create_test_image(color: [u8; 4]) -> Image {
+    Image::new(
+        Extent3d {
+            width: 1,
+            height: 1,
+            ..default()
+        },
+        TextureDimension::D2,
+        color.to_vec(),
+        TextureFormat::Rgba8UnormSrgb,
+        RenderAssetUsages::all(),
+    )
+}
 
-#[derive(Copy, Clone, Component, UniformSet)]
+#[derive(Clone, Component, UniformSet)]
 struct CustomMaterial {
     color: Vec4,
-    //emissive: glow::Texture,
+    emissive: Handle<Image>,
 }
 
 #[derive(Component, Deref, DerefMut)]
@@ -144,7 +149,7 @@ fn render_custom_mat(
 
         draws.push(DrawData {
             clip_from_local,
-            material: *material,
+            material: material.clone(),
             mesh: mesh.id(),
         });
     }
@@ -165,7 +170,7 @@ fn render_custom_mat(
 
         for draw in &draws {
             ctx.load("clip_from_local", draw.clip_from_local);
-            ctx.bind_uniforms_set(&GpuImages::default(), &draw.material);
+            ctx.bind_uniforms_set(&draw.material);
             ctx.draw_mesh(draw.mesh, shader_index);
         }
     });
