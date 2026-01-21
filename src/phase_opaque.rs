@@ -1,7 +1,7 @@
 use bevy::{core_pipeline::prepass::DepthPrepass, prelude::*};
 
 use crate::{
-    BevyGlContext,
+    command_encoder::CommandEncoder,
     plane_reflect::{ReflectionPlane, copy_reflection_texture},
     render::{RenderPhase, RenderRunner, RenderSet},
 };
@@ -52,12 +52,14 @@ fn render_opaque(world: &mut World) {
 
 // During the opaque pass the registered systems also write any transparent items to the DeferredAlphaBlendDraws.
 fn opaque(world: &mut World, depth_prepass: bool, write_depth: bool) {
-    let ctx = world.get_non_send_resource_mut::<BevyGlContext>().unwrap();
-    if depth_prepass {
-        ctx.start_depth_only();
-    } else {
-        ctx.start_opaque(write_depth);
-    }
+    let mut cmd = world.resource_mut::<CommandEncoder>();
+    cmd.record(move |ctx| {
+        if depth_prepass {
+            ctx.start_depth_only();
+        } else {
+            ctx.start_opaque(write_depth);
+        }
+    });
 
     let Some(runner) = world.remove_resource::<RenderRunner>() else {
         return;
@@ -78,8 +80,8 @@ fn opaque(world: &mut World, depth_prepass: bool, write_depth: bool) {
 fn clear_color_and_depth(world: &mut World) {
     // Seems faster to clear these together
     let color = world.resource::<ClearColor>().clone();
-    world
-        .get_non_send_resource_mut::<BevyGlContext>()
-        .unwrap()
-        .clear_color_and_depth(Some(color.to_srgba().to_vec4()));
+    let mut cmd = world.resource_mut::<CommandEncoder>();
+    cmd.record(move |ctx| {
+        ctx.clear_color_and_depth(Some(color.to_srgba().to_vec4()));
+    });
 }

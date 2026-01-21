@@ -15,11 +15,13 @@ use glow::HasContext;
 use bevy_egui::egui::ahash::HashSet;
 #[cfg(not(target_arch = "wasm32"))]
 use glutin::surface::GlSurface;
+use glutin_winit::GlWindow;
+use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
 
 use crate::{
-    BevyGlContext, phase_opaque::OpaquePhasePlugin, phase_shadow::ShadowPhasePlugin,
-    phase_transparent::TransparentPhasePlugin, plane_reflect::PlaneReflectPlugin,
-    prepare_image::PrepareImagePlugin, prepare_joints::PrepareJointsPlugin,
+    BevyGlContext, WindowInitData,
+    command_encoder::{CommandEncoder, CommandEncoderPlugin, CommandEncoderSender},
+    phase_opaque::OpaquePhasePlugin,
     prepare_mesh::PrepareMeshPlugin,
 };
 
@@ -36,6 +38,7 @@ pub enum RenderSet {
     RenderTransparent,
     RenderUi,
     Present,
+    SubmitEncoder,
 }
 
 pub struct OpenGLRenderPlugins;
@@ -45,10 +48,10 @@ impl Plugin for OpenGLRenderPlugins {
         app.add_plugins((
             CommandEncoderPlugin,
             OpenGLMinimalRenderPlugin,
-            ShadowPhasePlugin,
+            //ShadowPhasePlugin,
             OpaquePhasePlugin,
-            TransparentPhasePlugin,
-            PlaneReflectPlugin,
+            //TransparentPhasePlugin,
+            //PlaneReflectPlugin,
         ));
     }
 }
@@ -60,7 +63,9 @@ impl Plugin for OpenGLMinimalRenderPlugin {
         app.insert_resource(CompressedImageFormatSupport(CompressedImageFormats::BC)) // TODO query?
             .init_resource::<RenderRunner>()
             .init_resource::<RenderPhase>()
-            .add_plugins((PrepareMeshPlugin, PrepareJointsPlugin, PrepareImagePlugin));
+            .add_plugins(PrepareMeshPlugin);
+        //.add_plugins(PrepareJointsPlugin)
+        //.add_plugins(PrepareImagePlugin);
 
         // TODO reference: https://github.com/bevyengine/bevy/pull/22144
         app.configure_sets(Startup, (RenderSet::Init, RenderSet::Pipeline).chain());
@@ -78,6 +83,7 @@ impl Plugin for OpenGLMinimalRenderPlugin {
                 RenderSet::RenderTransparent,
                 RenderSet::RenderUi,
                 RenderSet::Present,
+                RenderSet::SubmitEncoder,
             )
                 .chain()
                 .after(TransformSystems::Propagate)
@@ -90,43 +96,46 @@ impl Plugin for OpenGLMinimalRenderPlugin {
 }
 
 fn present(
-    ctx: NonSend<BevyGlContext>,
+    mut cmd: ResMut<CommandEncoder>,
     resized: MessageReader<WindowResized>,
     mut bevy_window: Single<(Entity, &mut Window)>,
 ) {
-    ctx.swap();
     #[allow(unused)]
     let (bevy_window_entity, bevy_window) = &mut *bevy_window;
     let width = bevy_window.physical_width().max(1);
     let height = bevy_window.physical_height().max(1);
-    if resized.len() > 0 {
-        #[cfg(not(target_arch = "wasm32"))]
-        {
-            use std::num::NonZeroU32;
-            //let present_mode = bevy_window.present_mode; // TODO update
-            unsafe { ctx.gl.viewport(0, 0, width as i32, height as i32) };
-            unsafe { ctx.gl.scissor(0, 0, width as i32, height as i32) };
-            ctx.gl_surface.as_ref().unwrap().resize(
-                ctx.gl_context.as_ref().unwrap(),
-                NonZeroU32::new(width).unwrap(),
-                NonZeroU32::new(height).unwrap(),
-            );
-        }
-        #[cfg(target_arch = "wasm32")]
-        {
-            use winit::platform::web::WindowExtWebSys;
-            WINIT_WINDOWS.with_borrow(|winit_windows| {
-                let Some(winit_window) = winit_windows.get_window(*bevy_window_entity) else {
-                    warn!("No Window Found");
-                    return;
-                };
-                winit_window.canvas().unwrap().set_width(width);
-                winit_window.canvas().unwrap().set_height(height);
+    let resized = resized.len() > 0;
+    cmd.record(move |ctx| {
+        ctx.swap();
+        if resized {
+            #[cfg(not(target_arch = "wasm32"))]
+            {
+                use std::num::NonZeroU32;
+                //let present_mode = bevy_window.present_mode; // TODO update
                 unsafe { ctx.gl.viewport(0, 0, width as i32, height as i32) };
                 unsafe { ctx.gl.scissor(0, 0, width as i32, height as i32) };
-            });
+                ctx.gl_surface.as_ref().unwrap().resize(
+                    ctx.gl_context.as_ref().unwrap(),
+                    NonZeroU32::new(width).unwrap(),
+                    NonZeroU32::new(height).unwrap(),
+                );
+            }
+            #[cfg(target_arch = "wasm32")]
+            {
+                use winit::platform::web::WindowExtWebSys;
+                WINIT_WINDOWS.with_borrow(|winit_windows| {
+                    let Some(winit_window) = winit_windows.get_window(*bevy_window_entity) else {
+                        warn!("No Window Found");
+                        return;
+                    };
+                    winit_window.canvas().unwrap().set_width(width);
+                    winit_window.canvas().unwrap().set_height(height);
+                    unsafe { ctx.gl.viewport(0, 0, width as i32, height as i32) };
+                    unsafe { ctx.gl.scissor(0, 0, width as i32, height as i32) };
+                });
+            }
         }
-    }
+    });
 }
 
 #[derive(Resource, Default, PartialEq, Eq, Clone, Copy)]
@@ -234,9 +243,19 @@ pub fn init_gl(world: &mut World, params: &mut SystemState<Query<(Entity, &mut W
             return;
         };
 
-        let ctx = BevyGlContext::new(&bevy_window, winit_window);
+        let window_init_data = WindowInitData {
+            attrs: winit_window
+                .build_surface_attributes(Default::default())
+                .unwrap()
+                .clone(),
+            raw_window: winit_window.window_handle().unwrap().clone().as_raw(),
+            raw_display: winit_window.display_handle().unwrap().clone().as_raw(),
+            present_mode: bevy_window.present_mode,
+            width: bevy_window.physical_size().x as u32,
+            height: bevy_window.physical_size().y as u32,
+        };
 
-        world.insert_non_send_resource(ctx);
+        world.insert_resource(CommandEncoderSender::new(window_init_data));
     });
 }
 

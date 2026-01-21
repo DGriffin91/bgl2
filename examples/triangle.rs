@@ -1,7 +1,10 @@
 use bevy::{ecs::system::SystemState, prelude::*, winit::WINIT_WINDOWS};
-use bevy_opengl::{BevyGlContext, shader_cached};
+use bevy_opengl::command_encoder::{CommandEncoder, CommandEncoderPlugin, CommandEncoderSender};
+use bevy_opengl::{BevyGlContext, WindowInitData, shader_cached};
 use bytemuck::cast_slice;
 use glow::HasContext;
+use glutin_winit::GlWindow;
+use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
 
 fn main() {
     App::new()
@@ -14,9 +17,7 @@ fn main() {
             bevy::scene::ScenePlugin,
             WindowPlugin::default(),
             ImagePlugin::default_linear(),
-            //bevy::mesh::MeshPlugin,
-            //bevy::camera::CameraPlugin,
-            //bevy::gltf::GltfPlugin::default(),
+            CommandEncoderPlugin,
         ))
         .add_systems(Startup, init)
         .add_systems(PostUpdate, update)
@@ -27,6 +28,7 @@ fn init(world: &mut World, params: &mut SystemState<Query<(Entity, &mut Window)>
     if world.contains_non_send::<BevyGlContext>() {
         return;
     }
+
     WINIT_WINDOWS.with_borrow(|winit_windows| {
         let mut windows = params.get_mut(world);
 
@@ -36,43 +38,56 @@ fn init(world: &mut World, params: &mut SystemState<Query<(Entity, &mut Window)>
             return;
         };
 
-        let ctx = BevyGlContext::new(&bevy_window, winit_window);
-        world.insert_non_send_resource(ctx);
+        let window_init_data = WindowInitData {
+            attrs: winit_window
+                .build_surface_attributes(Default::default())
+                .unwrap()
+                .clone(),
+            raw_window: winit_window.window_handle().unwrap().clone().as_raw(),
+            raw_display: winit_window.display_handle().unwrap().clone().as_raw(),
+            present_mode: bevy_window.present_mode,
+            width: bevy_window.physical_size().x as u32,
+            height: bevy_window.physical_size().y as u32,
+        };
+
+        world.insert_resource(CommandEncoderSender::new(window_init_data));
     });
 }
 
-fn update(mut ctx: If<NonSendMut<BevyGlContext>>) {
-    let shader_index = shader_cached!(
-        ctx,
-        "../assets/shaders/tri.vert",
-        "../assets/shaders/tri.frag",
-        &[]
-    )
-    .unwrap();
-    unsafe {
-        ctx.use_cached_program(shader_index);
-        ctx.gl.clear_color(0.0, 0.0, 0.0, 1.0);
-        ctx.gl.clear(glow::COLOR_BUFFER_BIT);
+fn update(mut cmd: ResMut<CommandEncoder>) {
+    cmd.record(|ctx: &mut BevyGlContext| {
+        let shader_index = shader_cached!(
+            ctx,
+            "../assets/shaders/tri.vert",
+            "../assets/shaders/tri.frag",
+            &[]
+        )
+        .unwrap();
+        unsafe {
+            ctx.use_cached_program(shader_index);
+            ctx.gl.clear_color(0.0, 0.0, 0.0, 1.0);
+            ctx.gl.clear(glow::COLOR_BUFFER_BIT);
 
-        let vbo = ctx.gl.create_buffer().unwrap();
-        let triangle_vertices = [0.5f32, 1.0, 0.0, 0.0, 1.0, 0.0];
-        ctx.gl.bind_buffer(glow::ARRAY_BUFFER, Some(vbo));
-        ctx.gl.buffer_data_u8_slice(
-            glow::ARRAY_BUFFER,
-            cast_slice(&triangle_vertices),
-            glow::STATIC_DRAW,
-        );
+            let vbo = ctx.gl.create_buffer().unwrap();
+            let triangle_vertices = [0.5f32, 1.0, 0.0, 0.0, 1.0, 0.0];
+            ctx.gl.bind_buffer(glow::ARRAY_BUFFER, Some(vbo));
+            ctx.gl.buffer_data_u8_slice(
+                glow::ARRAY_BUFFER,
+                cast_slice(&triangle_vertices),
+                glow::STATIC_DRAW,
+            );
 
-        let pos_loc = ctx.get_attrib_location(shader_index, "a_position").unwrap();
+            let pos_loc = ctx.get_attrib_location(shader_index, "a_position").unwrap();
 
-        ctx.gl.enable_vertex_attrib_array(pos_loc);
-        ctx.gl
-            .vertex_attrib_pointer_f32(pos_loc, 2, glow::FLOAT, false, 8, 0);
+            ctx.gl.enable_vertex_attrib_array(pos_loc);
+            ctx.gl
+                .vertex_attrib_pointer_f32(pos_loc, 2, glow::FLOAT, false, 8, 0);
 
-        ctx.gl.draw_arrays(glow::TRIANGLES, 0, 3);
+            ctx.gl.draw_arrays(glow::TRIANGLES, 0, 3);
 
-        ctx.gl.delete_buffer(vbo);
-    };
+            ctx.gl.delete_buffer(vbo);
+        };
 
-    ctx.swap();
+        ctx.swap();
+    });
 }

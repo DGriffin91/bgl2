@@ -1,27 +1,29 @@
-//pub mod bevy_standard_lighting;
+pub mod bevy_standard_lighting;
 //pub mod bevy_standard_material;
 //pub mod egui_plugin;
+pub mod command_encoder;
 pub mod faststack;
 pub mod macos_compat;
 pub mod mesh_util;
-//pub mod phase_opaque;
-//pub mod phase_shadow;
-//pub mod phase_transparent;
-//pub mod plane_reflect;
+pub mod phase_opaque;
+pub mod phase_shadow;
+pub mod phase_transparent;
+pub mod plane_reflect;
 pub mod prepare_image;
-//pub mod prepare_joints;
-//pub mod prepare_mesh;
-//pub mod render;
-pub mod command_encoder;
+pub mod prepare_joints;
+pub mod prepare_mesh;
+pub mod render;
 pub mod watchers;
 
 extern crate self as bevy_opengl;
 
 use anyhow::Error;
 use anyhow::anyhow;
+use bevy::mesh::MeshVertexAttribute;
 use bevy::platform::collections::HashSet;
 use bytemuck::cast_slice;
 use core::slice;
+use glow::Context;
 use glow::UniformLocation;
 use glutin::surface::SurfaceAttributes;
 use glutin::surface::WindowSurface;
@@ -48,6 +50,7 @@ use winit::platform::web::WindowExtWebSys;
 use crate::faststack::FastStack;
 use crate::faststack::StackStack;
 use crate::prepare_image::GpuImages;
+use crate::prepare_mesh::GPUMeshBufferMap;
 use crate::watchers::Watchers;
 
 pub type ShaderIndex = u32;
@@ -71,6 +74,7 @@ pub struct BevyGlContext {
     pub temp_slot_data: StackStack<u32, 16>,
     pub uniform_location_cache: HashMap<String, Option<UniformLocation>>,
     pub current_texture_slot_count: usize,
+    pub mesh: GPUMeshBufferMap,
 }
 
 impl Drop for BevyGlContext {
@@ -92,6 +96,32 @@ impl Drop for BevyGlContext {
                 .unwrap();
             }
         };
+    }
+}
+
+#[derive(Clone, Copy)]
+pub struct BufferRef {
+    pub buffer_index: usize,
+    pub indices_start: usize,
+    pub indices_count: usize,
+    pub index_element_type: u32,
+    pub bytes_offset: i32,
+}
+
+pub struct GpuMeshBufferSet {
+    pub buffers: Vec<(MeshVertexAttribute, glow::Buffer)>,
+    pub index: glow::Buffer,
+    pub index_element_type: u32,
+}
+
+impl GpuMeshBufferSet {
+    fn delete(&self, gl: &Context) {
+        unsafe {
+            gl.delete_buffer(self.index);
+            for (_, b) in &self.buffers {
+                gl.delete_buffer(*b)
+            }
+        }
     }
 }
 
@@ -243,6 +273,7 @@ impl BevyGlContext {
                 temp_slot_data: Default::default(),
                 uniform_location_cache: Default::default(),
                 current_texture_slot_count: 0,
+                mesh: Default::default(),
             };
             ctx.test_for_glsl_lod();
             ctx

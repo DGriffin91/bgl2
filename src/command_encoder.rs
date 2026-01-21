@@ -5,14 +5,14 @@ use std::{
 
 use bevy::prelude::*;
 
-use crate::{BevyGlContext, WindowInitData};
+use crate::{BevyGlContext, WindowInitData, render::RenderSet};
 
 pub struct CommandEncoderPlugin;
 
 impl Plugin for CommandEncoderPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<CommandEncoder>()
-            .add_systems(Last, send);
+            .add_systems(PostUpdate, send.in_set(RenderSet::SubmitEncoder));
     }
 }
 
@@ -51,4 +51,14 @@ impl CommandEncoderSender {
 #[derive(Resource, Default)]
 pub struct CommandEncoder {
     pub commands: Vec<Box<dyn FnMut(&mut BevyGlContext) + Send + Sync>>,
+    pub next_buffer_id: usize,
+}
+
+impl CommandEncoder {
+    pub fn record<F>(&mut self, f: F)
+    where
+        F: FnMut(&mut BevyGlContext) + Send + Sync + 'static,
+    {
+        self.commands.push(Box::new(f));
+    }
 }
