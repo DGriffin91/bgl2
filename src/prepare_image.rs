@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use bevy::{
     image::{ImageFilterMode, ImageSampler, ImageSamplerDescriptor},
     platform::collections::{HashMap, HashSet},
@@ -39,17 +37,6 @@ pub struct GpuImages {
     pub mapping: HashMap<AssetId<Image>, (glow::Texture, u32)>,
     pub updated_this_frame: bool,
     pub placeholder: Option<glow::Texture>,
-    pub gl: Option<Arc<glow::Context>>,
-}
-
-impl Drop for GpuImages {
-    fn drop(&mut self) {
-        unsafe {
-            for texture in self.mapping.values() {
-                self.gl.as_ref().unwrap().delete_texture(texture.0);
-            }
-        }
-    }
 }
 
 pub fn send_images_to_gpu(
@@ -59,9 +46,6 @@ pub fn send_images_to_gpu(
     ctx: If<NonSend<BevyGlContext>>,
     default_sampler: Res<DefaultSampler>,
 ) {
-    if gpu_images.gl.is_none() {
-        gpu_images.gl = Some(ctx.gl.clone());
-    }
     gpu_images.updated_this_frame = false;
 
     let mut updated: HashSet<AssetId<Image>> = HashSet::new();

@@ -6,7 +6,7 @@ use bevy::{
 use bytemuck::cast_slice;
 use glow::{Context, HasContext};
 use std::hash::Hash;
-use std::{hash::Hasher, sync::Arc};
+use std::hash::Hasher;
 use wgpu_types::VertexFormat;
 
 use crate::{
@@ -60,18 +60,7 @@ pub struct BufferRef {
 pub struct GPUMeshBufferMap {
     pub buffers: Vec<Option<(GpuMeshBufferSet, HashSet<AssetId<Mesh>>)>>,
     pub map: HashMap<AssetId<Mesh>, BufferRef>,
-    pub gl: Option<Arc<glow::Context>>,
     pub last_bind: Option<(ShaderIndex, usize)>, //shader_index, buffer_index
-}
-
-impl Drop for GPUMeshBufferMap {
-    fn drop(&mut self) {
-        for buffer in &self.buffers {
-            if let Some((buffer, _)) = buffer {
-                buffer.delete(self.gl.as_ref().unwrap());
-            }
-        }
-    }
 }
 
 impl GPUMeshBufferMap {
@@ -142,10 +131,6 @@ pub fn send_standard_meshes_to_gpu(
     mut scratch_floats: Local<Vec<f32>>,
     ctx: If<NonSend<BevyGlContext>>,
 ) {
-    if gpu_meshes.gl.is_none() {
-        gpu_meshes.gl = Some(ctx.gl.clone());
-    }
-
     // key is hash of vertex attribute props
     let mut meshes_by_attr: HashMap<u64, Vec<AssetId<Mesh>>> = HashMap::new();
 
