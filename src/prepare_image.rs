@@ -9,7 +9,7 @@ use glow::{HasContext, PixelUnpackData};
 use shared_exponent_formats::rgb9e5::rgb9e5_to_vec3;
 use wgpu_types::TextureViewDimension;
 
-use crate::{BevyGlContext, render::RenderSet};
+use crate::BevyGlContext;
 
 /// Handles uploading bevy Image assets to the GPU
 pub struct PrepareImagePlugin;
@@ -17,19 +17,19 @@ pub struct PrepareImagePlugin;
 #[derive(Resource, Deref)]
 pub struct DefaultSampler(ImageSamplerDescriptor);
 
-impl Plugin for PrepareImagePlugin {
-    fn build(&self, app: &mut App) {
-        if let Some(image_plugin) = app.get_added_plugins::<ImagePlugin>().first() {
-            let default_sampler = image_plugin.default_sampler.clone();
-            app.insert_resource(DefaultSampler(default_sampler));
-        } else {
-            warn!("No ImagePlugin found. Try adding PrepareImagePlugin after DefaultPlugins");
-        }
-
-        app.init_non_send_resource::<GpuImages>()
-            .add_systems(PostUpdate, send_images_to_gpu.in_set(RenderSet::Prepare));
-    }
-}
+//impl Plugin for PrepareImagePlugin {
+//    fn build(&self, app: &mut App) {
+//        if let Some(image_plugin) = app.get_added_plugins::<ImagePlugin>().first() {
+//            let default_sampler = image_plugin.default_sampler.clone();
+//            app.insert_resource(DefaultSampler(default_sampler));
+//        } else {
+//            warn!("No ImagePlugin found. Try adding PrepareImagePlugin after DefaultPlugins");
+//        }
+//
+//        app.init_non_send_resource::<GpuImages>()
+//            .add_systems(PostUpdate, send_images_to_gpu.in_set(RenderSet::Prepare));
+//    }
+//}
 
 #[derive(Default)]
 pub struct GpuImages {

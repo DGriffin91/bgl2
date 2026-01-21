@@ -1,16 +1,16 @@
-pub mod bevy_standard_lighting;
-pub mod bevy_standard_material;
-pub mod egui_plugin;
+//pub mod bevy_standard_lighting;
+//pub mod bevy_standard_material;
+//pub mod egui_plugin;
 pub mod faststack;
 pub mod mesh_util;
-pub mod phase_opaque;
-pub mod phase_shadow;
-pub mod phase_transparent;
-pub mod plane_reflect;
+//pub mod phase_opaque;
+//pub mod phase_shadow;
+//pub mod phase_transparent;
+//pub mod plane_reflect;
 pub mod prepare_image;
-pub mod prepare_joints;
-pub mod prepare_mesh;
-pub mod render;
+//pub mod prepare_joints;
+//pub mod prepare_mesh;
+//pub mod render;
 pub mod watchers;
 
 extern crate self as bevy_opengl;
@@ -21,6 +21,10 @@ use bevy::platform::collections::HashSet;
 use bytemuck::cast_slice;
 use core::slice;
 use glow::UniformLocation;
+use glutin::surface::SurfaceAttributes;
+use glutin::surface::WindowSurface;
+use raw_window_handle::RawDisplayHandle;
+use raw_window_handle::RawWindowHandle;
 use std::any::TypeId;
 use std::any::type_name;
 use std::hash::Hash;
@@ -89,11 +93,20 @@ impl Drop for BevyGlContext {
     }
 }
 
+#[derive(Debug)]
+pub struct WindowInitData {
+    pub attrs: SurfaceAttributes<WindowSurface>,
+    pub raw_window: RawWindowHandle,
+    pub raw_display: RawDisplayHandle,
+    pub present_mode: bevy::window::PresentMode,
+    pub width: u32,
+    pub height: u32,
+}
+unsafe impl Send for WindowInitData {}
+unsafe impl Sync for WindowInitData {}
+
 impl BevyGlContext {
-    pub fn new(
-        #[allow(unused_variables)] bevy_window: &Window,
-        winit_window: &bevy::window::WindowWrapper<winit::window::Window>,
-    ) -> BevyGlContext {
+    pub fn new(win: WindowInitData) -> BevyGlContext {
         #[cfg(feature = "gl21pipe")]
         unsafe {
             std::env::set_var(
@@ -108,7 +121,7 @@ impl BevyGlContext {
 
         #[cfg(not(target_arch = "wasm32"))]
         let ctx = {
-            let vsync = match bevy_window.present_mode {
+            let vsync = match win.present_mode {
                 bevy::window::PresentMode::AutoVsync => true,
                 bevy::window::PresentMode::AutoNoVsync => false,
                 bevy::window::PresentMode::Fifo => true,
@@ -124,22 +137,16 @@ impl BevyGlContext {
                 prelude::{GlDisplay, NotCurrentGlContext},
                 surface::{GlSurface, SwapInterval},
             };
-            use glutin_winit::GlWindow;
-            use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
             use std::num::NonZeroU32;
 
-            let raw_window = winit_window.window_handle().unwrap();
-            let raw_display = winit_window.display_handle().unwrap();
-
             #[cfg(target_os = "windows")]
-            let preference = DisplayApiPreference::Wgl(Some(raw_window.as_raw()));
+            let preference = DisplayApiPreference::Wgl(Some(win.raw_window));
 
             #[cfg(not(target_os = "windows"))]
             let preference = DisplayApiPreference::Egl;
 
-            let gl_display = unsafe {
-                Display::new(raw_display.as_raw(), preference).expect("Display::new failed")
-            };
+            let gl_display =
+                unsafe { Display::new(win.raw_display, preference).expect("Display::new failed") };
 
             // TODO https://github.com/rust-windowing/glutin/blob/master/glutin-winit/src/lib.rs
             let template = ConfigTemplateBuilder::default()
@@ -163,7 +170,7 @@ impl BevyGlContext {
                     major: 2,
                     minor: 1,
                 })))
-                .build(Some(raw_window.as_raw()));
+                .build(Some(win.raw_window));
 
             let not_current_gl_context = unsafe {
                 gl_display
@@ -171,12 +178,9 @@ impl BevyGlContext {
                     .unwrap()
             };
 
-            let attrs = winit_window
-                .build_surface_attributes(Default::default())
-                .unwrap();
             let gl_surface = unsafe {
                 gl_display
-                    .create_window_surface(&gl_config, &attrs)
+                    .create_window_surface(&gl_config, &win.attrs)
                     .unwrap()
             };
 
@@ -207,10 +211,7 @@ impl BevyGlContext {
                 Err(e) => eprintln!("Couldn't set_swap_interval wait: {e}"),
             };
 
-            let width = bevy_window.physical_size().x as u32;
-            let height = bevy_window.physical_size().y as u32;
-
-            unsafe { gl.viewport(0, 0, width as i32, height as i32) };
+            unsafe { gl.viewport(0, 0, win.width as i32, win.height as i32) };
 
             let has_cube_map_seamless = if gl
                 .supported_extensions()
