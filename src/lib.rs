@@ -2,6 +2,7 @@
 //pub mod bevy_standard_material;
 //pub mod egui_plugin;
 pub mod faststack;
+pub mod macos_compat;
 pub mod mesh_util;
 //pub mod phase_opaque;
 //pub mod phase_shadow;
@@ -140,10 +141,11 @@ impl BevyGlContext {
             use std::num::NonZeroU32;
 
             #[cfg(target_os = "windows")]
-            let preference = DisplayApiPreference::Wgl(Some(win.raw_window));
-
-            #[cfg(not(target_os = "windows"))]
+            let preference = DisplayApiPreference::Wgl(Some(raw_window));
+            #[cfg(target_os = "linux")]
             let preference = DisplayApiPreference::Egl;
+            #[cfg(target_os = "macos")]
+            let preference = DisplayApiPreference::Cgl;
 
             let gl_display =
                 unsafe { Display::new(win.raw_display, preference).expect("Display::new failed") };
@@ -430,20 +432,19 @@ impl BevyGlContext {
         unsafe {
             let program = self.gl.create_program().expect("Cannot create program");
 
-            let shader_sources = [
-                ("vertex", glow::VERTEX_SHADER, vertex),
-                ("fragment", glow::FRAGMENT_SHADER, fragment),
-            ];
+            let mut vertex = vertex.to_string();
+            let mut fragment = fragment.to_string();
 
-            let mut shaders = Vec::with_capacity(shader_sources.len());
-
-            for (stage_name, shader_type, shader_source) in shader_sources.iter() {
-                let shader = self.gl.create_shader(*shader_type).map_err(Error::msg)?;
-
+            for (shader_type, shader_source) in [
+                (glow::VERTEX_SHADER, &mut vertex),
+                (glow::FRAGMENT_SHADER, &mut fragment),
+            ] {
                 #[cfg(target_arch = "wasm32")]
                 let mut preamble = "precision highp float;\n".to_string();
-                #[cfg(not(target_arch = "wasm32"))]
+                #[cfg(any(target_os = "windows", target_os = "linux"))]
                 let mut preamble = "#version 120\n".to_string();
+                #[cfg(target_os = "macos")]
+                let mut preamble = "#version 330\n".to_string();
 
                 shader_defs.into_iter().for_each(|shader_def| {
                     if !(shader_def.0.is_empty() && shader_def.1.is_empty()) {
@@ -454,7 +455,7 @@ impl BevyGlContext {
                 #[cfg(target_arch = "wasm32")]
                 preamble.push_str(&format!("#define WEBGL1\n"));
 
-                if *shader_type == glow::FRAGMENT_SHADER {
+                if shader_type == glow::FRAGMENT_SHADER {
                     //let ext = self.gl.supported_extensions();
                     //#[cfg(not(target_arch = "wasm32"))]
                     //if ext.contains("GL_ARB_shader_texture_lod") {
@@ -465,7 +466,7 @@ impl BevyGlContext {
                             preamble.push_str("vec4 textureCubeLod(samplerCube tex, vec3 dir, float lod) { return textureCubeLodEXT(tex, dir, lod); }\n");
                         }
                     } else {
-                        #[cfg(not(target_arch = "wasm32"))]
+                        #[cfg(not(any(target_os = "macos", target_arch = "wasm32")))]
                         {
                             preamble.push_str("vec4 textureCubeLod(samplerCube tex, vec3 dir, float lod) { return textureCube(tex, dir, lod); }\n");
                         }
@@ -473,28 +474,45 @@ impl BevyGlContext {
                 }
 
                 let mut expanded_shader_source = String::with_capacity(shader_source.len() * 2);
-                let mut already_included_snippets = HashSet::new();
 
-                for (i, line) in shader_source.lines().enumerate() {
-                    if let Some(rest) = line.strip_prefix("#include") {
-                        let snippet_name = rest.trim();
-                        if let Some(snippet) = self.shader_snippets.get(snippet_name) {
-                            if already_included_snippets.insert(snippet_name) {
-                                // TODO index snippets and use source-string-number
-                                expanded_shader_source.push_str(&format!("#line 0 1\n"));
-                                expanded_shader_source.push_str(snippet);
-                                expanded_shader_source.push_str("\n");
-                                expanded_shader_source.push_str(&format!("#line {i} 0\n"));
+                {
+                    let mut already_included_snippets = HashSet::new();
+                    for (i, line) in shader_source.lines().enumerate() {
+                        if let Some(rest) = line.strip_prefix("#include") {
+                            let snippet_name = rest.trim();
+                            if let Some(snippet) = self.shader_snippets.get(snippet_name) {
+                                if already_included_snippets.insert(snippet_name) {
+                                    // TODO index snippets and use source-string-number
+                                    expanded_shader_source.push_str(&format!("#line 0 1\n"));
+                                    expanded_shader_source.push_str(snippet);
+                                    expanded_shader_source.push_str("\n");
+                                    expanded_shader_source.push_str(&format!("#line {i} 0\n"));
+                                }
                             }
+                        } else {
+                            expanded_shader_source.push_str(line);
+                            expanded_shader_source.push_str("\n");
                         }
-                    } else {
-                        expanded_shader_source.push_str(line);
-                        expanded_shader_source.push_str("\n");
                     }
                 }
 
-                self.gl
-                    .shader_source(shader, &format!("{}\n{}", preamble, expanded_shader_source));
+                *shader_source = format!("{}\n{}", preamble, expanded_shader_source);
+            }
+
+            #[cfg(target_os = "macos")]
+            macos_compat::translate_shader_to_330(&mut vertex, &mut fragment);
+
+            let shader_sources = [
+                ("vertex", glow::VERTEX_SHADER, vertex),
+                ("fragment", glow::FRAGMENT_SHADER, fragment),
+            ];
+
+            let mut shaders = Vec::with_capacity(shader_sources.len());
+
+            for (stage_name, shader_type, shader_source) in shader_sources.iter() {
+                let shader = self.gl.create_shader(*shader_type).map_err(Error::msg)?;
+
+                self.gl.shader_source(shader, shader_source);
 
                 self.gl.compile_shader(shader);
 

@@ -1039,6 +1039,7 @@ dependencies = [
  "bevy_mod_mipmap_generator",
  "bytemuck",
  "egui_glow",
+ "fancy-regex",
  "glow",
  "glutin",
  "glutin-winit",
@@ -2242,6 +2243,17 @@ checksum = "8be9f3dfaaffdae2972880079a491a1a8bb7cbed0b8dd7a347f668b4150a3b93"
 dependencies = [
  "event-listener",
  "pin-project-lite",
+]
+
+[[package]]
+name = "fancy-regex"
+version = "0.17.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "72cf461f865c862bb7dc573f643dd6a2b6842f7c30b07882b56bd148cc2761b8"
+dependencies = [
+ "bit-set",
+ "regex-automata",
+ "regex-syntax",
 ]
 
 [[package]]

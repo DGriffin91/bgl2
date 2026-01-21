@@ -109,6 +109,15 @@ impl GPUMeshBufferMap {
     /// Make sure to call reset_bind_cache() before the first iteration of bind(). It doesn't know about whatever random
     /// opengl state came before.
     pub fn draw_mesh(&mut self, ctx: &BevyGlContext, mesh: AssetId<Mesh>, shader_index: u32) {
+        // Extremely slow temporary workaround for initially testing macos
+        #[cfg(target_os = "macos")]
+        self.reset_bind_cache();
+        #[cfg(target_os = "macos")]
+        let vao = unsafe {
+            let vao = ctx.gl.create_vertex_array().unwrap();
+            ctx.gl.bind_vertex_array(Some(vao));
+            vao
+        };
         if let Some(buffer_ref) = self.bind(&ctx, &mesh, shader_index) {
             unsafe {
                 ctx.gl.draw_elements(
@@ -118,6 +127,11 @@ impl GPUMeshBufferMap {
                     buffer_ref.bytes_offset,
                 );
             };
+        }
+        #[cfg(target_os = "macos")]
+        unsafe {
+            ctx.gl.bind_vertex_array(None);
+            ctx.gl.delete_vertex_array(vao);
         }
     }
 }
