@@ -132,12 +132,12 @@ fn setup(
         Tonemapping::TonyMcMapface,
     ));
 
-    //commands
-    //    .spawn((
-    //        SceneRoot(asset_server.load("models/san-miguel/san-miguel.gltf#Scene0")),
-    //        Transform::from_xyz(-18.0, 0.0, 0.0),
-    //    ))
-    //    .observe(proc_scene);
+    commands
+        .spawn((
+            SceneRoot(asset_server.load("models/san-miguel/san-miguel.gltf#Scene0")),
+            Transform::from_xyz(-18.0, 0.0, 0.0),
+        ))
+        .observe(proc_scene);
 
     //commands
     //    .spawn((
@@ -164,27 +164,27 @@ fn setup(
     //    ))
     //    .observe(proc_scene);
 
-    commands.spawn((
-        SceneRoot(
-            asset_server.load(GltfAssetLabel::Scene(0).from_asset("models/DamagedHelmet.glb")),
-        ),
-        Transform::from_scale(Vec3::ONE * 5.0).with_translation(vec3(0.0, 5.0, 0.0)),
-    ));
+    //commands.spawn((
+    //    SceneRoot(
+    //        asset_server.load(GltfAssetLabel::Scene(0).from_asset("models/DamagedHelmet.glb")),
+    //    ),
+    //    Transform::from_scale(Vec3::ONE * 5.0).with_translation(vec3(0.0, 5.0, 0.0)),
+    //));
 
     // Reflection plane
-    commands.spawn((
-        Mesh3d(meshes.add(Plane3d::default().mesh().size(500.0, 500.0))),
-        Transform::from_translation(vec3(0.0, 0.1, 0.0)),
-        ReflectionPlane::default(),
-        MeshMaterial3d(materials.add(StandardMaterial {
-            base_color: Color::linear_rgba(0.0, 0.0, 0.0, 0.8),
-            perceptual_roughness: 0.1,
-            alpha_mode: AlphaMode::Blend,
-            ..default()
-        })),
-        SkipReflection,
-        ReadReflection,
-    ));
+    //commands.spawn((
+    //    Mesh3d(meshes.add(Plane3d::default().mesh().size(500.0, 500.0))),
+    //    Transform::from_translation(vec3(0.0, 0.1, 0.0)),
+    //    ReflectionPlane::default(),
+    //    MeshMaterial3d(materials.add(StandardMaterial {
+    //        base_color: Color::linear_rgba(0.0, 0.0, 0.0, 0.8),
+    //        perceptual_roughness: 0.1,
+    //        alpha_mode: AlphaMode::Blend,
+    //        ..default()
+    //    })),
+    //    SkipReflection,
+    //    ReadReflection,
+    //));
 
     // Sun
     commands.spawn((

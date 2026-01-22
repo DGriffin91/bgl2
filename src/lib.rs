@@ -176,7 +176,7 @@ impl BevyGlContext {
             use std::num::NonZeroU32;
 
             #[cfg(target_os = "windows")]
-            let preference = DisplayApiPreference::Wgl(Some(raw_window));
+            let preference = DisplayApiPreference::Wgl(Some(win.raw_window));
             #[cfg(target_os = "linux")]
             let preference = DisplayApiPreference::Egl;
             #[cfg(target_os = "macos")]
