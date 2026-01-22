@@ -1,7 +1,7 @@
 pub mod bevy_standard_lighting;
 pub mod bevy_standard_material;
-//pub mod egui_plugin;
 pub mod command_encoder;
+pub mod egui_plugin;
 pub mod faststack;
 pub mod macos_compat;
 pub mod mesh_util;
@@ -77,6 +77,7 @@ pub struct BevyGlContext {
     pub current_texture_slot_count: usize,
     pub mesh: GpuMeshBufferMap,
     pub image: GpuImages,
+    pub egui_painter: Option<egui_glow::Painter>, // References gl directly so needs to live on the render thread
 }
 
 impl Drop for BevyGlContext {
@@ -277,6 +278,7 @@ impl BevyGlContext {
                 current_texture_slot_count: 0,
                 mesh: Default::default(),
                 image: Default::default(),
+                egui_painter: Default::default(),
             };
             ctx.test_for_glsl_lod();
             ctx
