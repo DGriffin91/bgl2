@@ -15,8 +15,11 @@ use glow::HasContext;
 use bevy_egui::egui::ahash::HashSet;
 #[cfg(not(target_arch = "wasm32"))]
 use glutin::surface::GlSurface;
+#[cfg(not(target_arch = "wasm32"))]
 use glutin_winit::GlWindow;
 use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
+#[cfg(target_arch = "wasm32")]
+use winit::platform::web::WindowExtWebSys;
 
 use crate::{
     BevyGlContext, WindowInitData,
@@ -108,6 +111,7 @@ fn present(
     let width = bevy_window.physical_width().max(1);
     let height = bevy_window.physical_height().max(1);
     let resized = resized.len() > 0;
+    let bevy_window_entity = *bevy_window_entity;
     cmd.record(move |ctx| {
         ctx.swap();
         if resized {
@@ -127,7 +131,7 @@ fn present(
             {
                 use winit::platform::web::WindowExtWebSys;
                 WINIT_WINDOWS.with_borrow(|winit_windows| {
-                    let Some(winit_window) = winit_windows.get_window(*bevy_window_entity) else {
+                    let Some(winit_window) = winit_windows.get_window(bevy_window_entity) else {
                         warn!("No Window Found");
                         return;
                     };
@@ -247,10 +251,13 @@ pub fn init_gl(world: &mut World, params: &mut SystemState<Query<(Entity, &mut W
         };
 
         let window_init_data = WindowInitData {
+            #[cfg(not(target_arch = "wasm32"))]
             attrs: winit_window
                 .build_surface_attributes(Default::default())
                 .unwrap()
                 .clone(),
+            #[cfg(target_arch = "wasm32")]
+            canvas: winit_window.canvas().unwrap(),
             raw_window: winit_window.window_handle().unwrap().clone().as_raw(),
             raw_display: winit_window.display_handle().unwrap().clone().as_raw(),
             present_mode: bevy_window.present_mode,
@@ -258,7 +265,12 @@ pub fn init_gl(world: &mut World, params: &mut SystemState<Query<(Entity, &mut W
             height: bevy_window.physical_size().y as u32,
         };
 
-        world.insert_resource(CommandEncoderSender::new(window_init_data));
+        let sender = CommandEncoderSender::new(window_init_data);
+
+        #[cfg(not(target_arch = "wasm32"))]
+        world.insert_resource(sender);
+        #[cfg(target_arch = "wasm32")]
+        world.insert_non_send_resource(sender);
     });
 }
 

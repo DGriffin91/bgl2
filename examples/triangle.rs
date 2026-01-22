@@ -3,10 +3,16 @@ use bevy_opengl::command_encoder::{CommandEncoder, CommandEncoderPlugin, Command
 use bevy_opengl::{BevyGlContext, WindowInitData, shader_cached};
 use bytemuck::cast_slice;
 use glow::HasContext;
-use glutin_winit::GlWindow;
 use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
 
+#[cfg(not(target_arch = "wasm32"))]
+use glutin_winit::GlWindow;
+
+#[cfg(target_arch = "wasm32")]
+use winit::platform::web::WindowExtWebSys;
+
 fn main() {
+    console_error_panic_hook::set_once();
     App::new()
         .add_plugins((
             MinimalPlugins,
@@ -39,10 +45,13 @@ fn init(world: &mut World, params: &mut SystemState<Query<(Entity, &mut Window)>
         };
 
         let window_init_data = WindowInitData {
+            #[cfg(not(target_arch = "wasm32"))]
             attrs: winit_window
                 .build_surface_attributes(Default::default())
                 .unwrap()
                 .clone(),
+            #[cfg(target_arch = "wasm32")]
+            canvas: winit_window.canvas().unwrap(),
             raw_window: winit_window.window_handle().unwrap().clone().as_raw(),
             raw_display: winit_window.display_handle().unwrap().clone().as_raw(),
             present_mode: bevy_window.present_mode,
@@ -50,7 +59,12 @@ fn init(world: &mut World, params: &mut SystemState<Query<(Entity, &mut Window)>
             height: bevy_window.physical_size().y as u32,
         };
 
-        world.insert_resource(CommandEncoderSender::new(window_init_data));
+        let sender = CommandEncoderSender::new(window_init_data);
+
+        #[cfg(not(target_arch = "wasm32"))]
+        world.insert_resource(sender);
+        #[cfg(target_arch = "wasm32")]
+        world.insert_non_send_resource(sender);
     });
 }
 

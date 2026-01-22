@@ -25,8 +25,8 @@ use bytemuck::cast_slice;
 use core::slice;
 use glow::Context;
 use glow::UniformLocation;
-use glutin::surface::SurfaceAttributes;
-use glutin::surface::WindowSurface;
+#[cfg(not(target_arch = "wasm32"))]
+use glutin::surface::{SurfaceAttributes, WindowSurface};
 use raw_window_handle::RawDisplayHandle;
 use raw_window_handle::RawWindowHandle;
 use std::any::TypeId;
@@ -43,9 +43,6 @@ use glow::ActiveAttribute;
 use glow::ActiveUniform;
 use glow::Buffer;
 use glow::HasContext;
-
-#[cfg(target_arch = "wasm32")]
-use winit::platform::web::WindowExtWebSys;
 
 use crate::faststack::FastStack;
 use crate::faststack::StackStack;
@@ -130,7 +127,10 @@ impl GpuMeshBufferSet {
 
 #[derive(Debug)]
 pub struct WindowInitData {
+    #[cfg(not(target_arch = "wasm32"))]
     pub attrs: SurfaceAttributes<WindowSurface>,
+    #[cfg(target_arch = "wasm32")]
+    pub canvas: web_sys::HtmlCanvasElement,
     pub raw_window: RawWindowHandle,
     pub raw_display: RawDisplayHandle,
     pub present_mode: bevy::window::PresentMode,
@@ -286,15 +286,10 @@ impl BevyGlContext {
         #[cfg(target_arch = "wasm32")]
         let ctx = {
             use wasm_bindgen::JsCast;
-            let canvas = winit_window.canvas().unwrap();
-
-            let width = bevy_window.physical_size().x as u32;
-            let height = bevy_window.physical_size().y as u32;
-
-            canvas.set_width(width);
-            canvas.set_height(height);
-
-            let webgl_context = canvas
+            win.canvas.set_width(win.width);
+            win.canvas.set_height(win.height);
+            let webgl_context = win
+                .canvas
                 .get_context("webgl")
                 .unwrap()
                 .unwrap()
@@ -308,7 +303,7 @@ impl BevyGlContext {
                 .is_some();
 
             let gl = glow::Context::from_webgl1_context(webgl_context);
-            unsafe { gl.viewport(0, 0, width as i32, height as i32) };
+            unsafe { gl.viewport(0, 0, win.width as i32, win.height as i32) };
             BevyGlContext {
                 gl: Arc::new(gl),
                 shader_cache: Default::default(),
@@ -316,6 +311,15 @@ impl BevyGlContext {
                 shader_snippets: Default::default(),
                 has_glsl_cube_lod,
                 has_cube_map_seamless: false,
+                last_cull_mode: None,
+                uniform_slot_map: Default::default(),
+                current_program: Default::default(),
+                temp_slot_data: Default::default(),
+                uniform_location_cache: Default::default(),
+                current_texture_slot_count: 0,
+                mesh: Default::default(),
+                image: Default::default(),
+                egui_painter: Default::default(),
             }
         };
         ctx

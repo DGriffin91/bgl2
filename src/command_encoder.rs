@@ -1,3 +1,4 @@
+#[cfg(not(target_arch = "wasm32"))]
 use std::{
     sync::mpsc::{Receiver, SyncSender, sync_channel},
     thread,
@@ -18,24 +19,48 @@ impl Plugin for CommandEncoderPlugin {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn send(mut cmd: ResMut<CommandEncoder>, sender: Res<CommandEncoderSender>) {
     let mut new_cmd_encoder = CommandEncoder::default();
     std::mem::swap(&mut *cmd, &mut new_cmd_encoder);
     sender.sender.send(new_cmd_encoder).unwrap();
 }
 
+#[cfg(target_arch = "wasm32")]
+fn send(mut cmd: ResMut<CommandEncoder>, mut sender: NonSendMut<CommandEncoderSender>) {
+    // Could just clear cmd.commands but want to match the multi-threaded version
+    cmd.commands.iter_mut().for_each(|cmd| cmd(&mut sender.ctx));
+    *cmd = CommandEncoder::default();
+}
+
+#[cfg(not(target_arch = "wasm32"))]
 #[derive(Resource)]
 pub struct CommandEncoderSender {
     pub sender: SyncSender<CommandEncoder>,
 }
 
+#[cfg(target_arch = "wasm32")]
+pub struct CommandEncoderSender {
+    pub ctx: BevyGlContext,
+}
+
 impl CommandEncoderSender {
     pub fn new(window_init_data: WindowInitData) -> CommandEncoderSender {
-        let (sender, receiver) = sync_channel::<CommandEncoder>(1);
-        CommandEncoderSender::receiver_thread(window_init_data, receiver);
-        CommandEncoderSender { sender }
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let (sender, receiver) = sync_channel::<CommandEncoder>(1);
+            CommandEncoderSender::receiver_thread(window_init_data, receiver);
+            CommandEncoderSender { sender }
+        }
+        #[cfg(target_arch = "wasm32")]
+        {
+            CommandEncoderSender {
+                ctx: BevyGlContext::new(window_init_data),
+            }
+        }
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     fn receiver_thread(window_init_data: WindowInitData, receiver: Receiver<CommandEncoder>) {
         thread::spawn(move || {
             let mut ctx = BevyGlContext::new(window_init_data);

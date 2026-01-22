@@ -3,8 +3,6 @@ name = "bevy_opengl"
 version = "0.1.0"
 edition = "2024"
 
-[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
-bevy_dylib = "0.18.0"
 
 [dependencies]
 uniform_set_derive = { path = "uniform_set_derive" }
@@ -19,6 +17,7 @@ bevy = { version = "0.18.0", default-features = false, features = [
     "free_camera",
     "gltf_animation",
 ] }
+console_error_panic_hook = "0.1"
 
 
 wgpu-types = "27" #Needed for bevy interop types since bevy doesn't re-export everything
