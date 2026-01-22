@@ -24,6 +24,7 @@ use crate::{
     phase_opaque::OpaquePhasePlugin,
     phase_shadow::ShadowPhasePlugin,
     phase_transparent::TransparentPhasePlugin,
+    plane_reflect::PlaneReflectPlugin,
     prepare_image::PrepareImagePlugin,
     prepare_mesh::PrepareMeshPlugin,
 };
@@ -54,7 +55,7 @@ impl Plugin for OpenGLRenderPlugins {
             ShadowPhasePlugin,
             OpaquePhasePlugin,
             TransparentPhasePlugin,
-            //PlaneReflectPlugin,
+            PlaneReflectPlugin,
         ));
     }
 }

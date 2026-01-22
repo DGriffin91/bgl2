@@ -1,5 +1,3 @@
-use std::ops::Deref;
-
 use bevy::{
     camera::{Exposure, primitives::Aabb},
     prelude::*,
@@ -165,7 +163,7 @@ pub fn standard_material_render(
     phase: Res<RenderPhase>,
     mut transparent_draws: ResMut<DeferredAlphaBlendDraws>,
     shadow: Option<Res<DirectionalLightShadow>>,
-    //reflect_uniforms: Option<Res<ReflectionUniforms>>,
+    reflect_uniforms: Option<Res<ReflectionUniforms>>,
     sorted: Res<DrawsSortedByMaterial>,
     mut cmd: ResMut<CommandEncoder>,
 ) {
@@ -242,21 +240,20 @@ pub fn standard_material_render(
         });
     }
 
-    // -----------------------------
-
-    let mut point_lights = point_lights
+    let point_lights = point_lights
         .iter()
         .map(|(a, b)| (a.clone(), b.clone()))
         .collect::<Vec<_>>();
-    let mut spot_lights = spot_lights
+    let spot_lights = spot_lights
         .iter()
         .map(|(a, b)| (a.clone(), b.clone()))
         .collect::<Vec<_>>();
-    let mut directional_light = clone2(directional_lights.single().ok());
+    let directional_light = clone2(directional_lights.single().ok());
     let env_light = env_light.cloned();
 
     let view_uniforms = view_uniforms.clone();
     let shadow = shadow.as_deref().cloned();
+    let reflect_uniforms = reflect_uniforms.as_deref().cloned();
     cmd.record(move |ctx| {
         let env_light = env_light.clone();
         let shadow_def;
@@ -288,10 +285,10 @@ pub fn standard_material_render(
 
         if !phase.depth_only() {
             reflect_bool_location = ctx.get_uniform_location("read_reflection");
-            //if let Some(reflect_uniforms) = &reflect_uniforms {
-            //    ctx.map_uniform_set_locations::<ReflectionUniforms>();
-            //    ctx.bind_uniforms_set(reflect_uniforms.deref());
-            //}
+            if let Some(reflect_uniforms) = &reflect_uniforms {
+                ctx.map_uniform_set_locations::<ReflectionUniforms>();
+                ctx.bind_uniforms_set(reflect_uniforms);
+            }
 
             let point_lights = point_lights.iter().map(|(a, b)| (a, b));
             let spot_lights = spot_lights.iter().map(|(a, b)| (a, b));
@@ -317,10 +314,10 @@ pub fn standard_material_render(
             }
             ctx.load("has_joint_data", draw.joint_data.is_some());
 
-            //reflect_bool_location.clone().map(|loc| {
-            //    (draw.read_reflect && phase.read_reflect() && reflect_uniforms.is_some())
-            //        .load(&ctx.gl, &loc)
-            //});
+            reflect_bool_location.clone().map(|loc| {
+                (draw.read_reflect && phase.read_reflect() && reflect_uniforms.is_some())
+                    .load(&ctx.gl, &loc)
+            });
 
             // Only re-bind if the material has changed.
             if last_material != Some(draw.material_h) {
