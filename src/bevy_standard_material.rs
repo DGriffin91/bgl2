@@ -164,7 +164,7 @@ pub fn standard_material_render(
     materials: Res<Assets<StandardMaterial>>,
     phase: Res<RenderPhase>,
     mut transparent_draws: ResMut<DeferredAlphaBlendDraws>,
-    //shadow: Option<Res<DirectionalLightShadow>>,
+    shadow: Option<Res<DirectionalLightShadow>>,
     //reflect_uniforms: Option<Res<ReflectionUniforms>>,
     sorted: Res<DrawsSortedByMaterial>,
     mut cmd: ResMut<CommandEncoder>,
@@ -256,22 +256,23 @@ pub fn standard_material_render(
     let env_light = env_light.cloned();
 
     let view_uniforms = view_uniforms.clone();
+    let shadow = shadow.as_deref().cloned();
     cmd.record(move |ctx| {
         let env_light = env_light.clone();
-        //let shadow_def;
-        //if phase.depth_only() {
-        //    shadow_def = shadow
-        //        .as_ref()
-        //        .map_or(("", ""), |_| ("RENDER_DEPTH_ONLY", ""));
-        //} else {
-        //    shadow_def = shadow.as_ref().map_or(("", ""), |_| ("SAMPLE_SHADOW", ""));
-        //}
+        let shadow_def;
+        if phase.depth_only() {
+            shadow_def = shadow
+                .as_ref()
+                .map_or(("", ""), |_| ("RENDER_DEPTH_ONLY", ""));
+        } else {
+            shadow_def = shadow.as_ref().map_or(("", ""), |_| ("SAMPLE_SHADOW", ""));
+        }
 
         let shader_index = shader_cached!(
             ctx,
             "shaders/std_mat.vert",
             "shaders/pbr_std_mat.frag",
-            &[DEFAULT_MAX_LIGHTS_DEF, DEFAULT_MAX_JOINTS_DEF] //shadow_def,
+            &[shadow_def, DEFAULT_MAX_LIGHTS_DEF, DEFAULT_MAX_JOINTS_DEF]
         )
         .unwrap();
 
@@ -301,7 +302,7 @@ pub fn standard_material_render(
                 spot_lights,
                 directional_light,
                 env_light,
-                //shadow.as_deref(),
+                shadow.as_ref(),
             );
         }
 

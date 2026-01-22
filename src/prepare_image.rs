@@ -109,6 +109,13 @@ impl BevyGlContext {
         texture_ref.set(idx);
         idx
     }
+
+    pub fn texture_from_ref(&mut self, texture_ref: &TextureRef) -> Option<(glow::Texture, u32)> {
+        let Some(idx) = texture_ref.get() else {
+            return None;
+        };
+        Some(self.image.raw_textures[idx as usize])
+    }
 }
 
 pub fn send_images_to_gpu(

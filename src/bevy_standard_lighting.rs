@@ -33,7 +33,7 @@ pub fn bind_standard_lighting<'a, PI, SI>(
     spot_lights: SI,
     directional_light: Option<(DirectionalLight, GlobalTransform)>,
     env_light: Option<EnvironmentMapLight>,
-    //shadow: Option<&DirectionalLightShadow>,
+    shadow: Option<&DirectionalLightShadow>,
 ) where
     PI: IntoIterator<Item = (&'a PointLight, &'a GlobalTransform)>,
     SI: IntoIterator<Item = (&'a SpotLight, &'a GlobalTransform)>,
@@ -46,12 +46,12 @@ pub fn bind_standard_lighting<'a, PI, SI>(
     ctx.load_tex("B_diffuse_map", &diffuse_map.clone().into());
     ctx.load("B_env_intensity", env_light.intensity);
 
-    //if let Some(shadow) = &shadow {
-    //    let shadow_texture = shadow.texture.clone();
-    //    ctx.load_tex("B_shadow_texture", &shadow_texture.clone().into());
-    //    let shadow_clip_from_world = shadow.cascade.clip_from_world;
-    //    ctx.load("B_shadow_clip_from_world", shadow_clip_from_world);
-    //}
+    if let Some(shadow) = &shadow {
+        let shadow_texture = shadow.texture.clone();
+        ctx.load_tex("B_shadow_texture", &shadow_texture.clone().into());
+        let shadow_clip_from_world = shadow.cascade.clip_from_world;
+        ctx.load("B_shadow_clip_from_world", shadow_clip_from_world);
+    }
 
     if let Some((light, trans)) = directional_light {
         ctx.load("B_directional_light_dir", trans.forward().as_vec3());
