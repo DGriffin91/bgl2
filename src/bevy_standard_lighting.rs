@@ -2,10 +2,7 @@ use std::f32::consts::PI;
 
 use bevy::prelude::*;
 
-use crate::{
-    BevyGlContext, mesh_util::octahedral_encode, phase_shadow::DirectionalLightShadow,
-    prepare_image::GpuImages,
-};
+use crate::{BevyGlContext, mesh_util::octahedral_encode, phase_shadow::DirectionalLightShadow};
 
 // It seems like some drivers are limited by code length.
 // The point light loop is unrolled so setting this too high can be an issue.
@@ -32,12 +29,11 @@ pub fn standard_shadow_sampling_glsl() -> &'static str {
 
 pub fn bind_standard_lighting<'a, PI, SI>(
     ctx: &mut BevyGlContext,
-    gpu_images: &GpuImages,
     point_lights: PI,
     spot_lights: SI,
-    directional_light: Option<(&'a DirectionalLight, &'a GlobalTransform)>,
-    env_light: Option<&EnvironmentMapLight>,
-    shadow: Option<&DirectionalLightShadow>,
+    directional_light: Option<(DirectionalLight, GlobalTransform)>,
+    env_light: Option<EnvironmentMapLight>,
+    //shadow: Option<&DirectionalLightShadow>,
 ) where
     PI: IntoIterator<Item = (&'a PointLight, &'a GlobalTransform)>,
     SI: IntoIterator<Item = (&'a SpotLight, &'a GlobalTransform)>,
@@ -45,21 +41,17 @@ pub fn bind_standard_lighting<'a, PI, SI>(
     let env_light = env_light.unwrap();
 
     let specular_map = env_light.specular_map.clone();
-    ctx.load_tex("B_specular_map", &specular_map.clone().into(), gpu_images);
+    ctx.load_tex("B_specular_map", &specular_map.clone().into());
     let diffuse_map = env_light.diffuse_map.clone();
-    ctx.load_tex("B_diffuse_map", &diffuse_map.clone().into(), gpu_images);
+    ctx.load_tex("B_diffuse_map", &diffuse_map.clone().into());
     ctx.load("B_env_intensity", env_light.intensity);
 
-    if let Some(shadow) = &shadow {
-        let shadow_texture = shadow.texture.clone();
-        ctx.load_tex(
-            "B_shadow_texture",
-            &shadow_texture.clone().into(),
-            gpu_images,
-        );
-        let shadow_clip_from_world = shadow.cascade.clip_from_world;
-        ctx.load("B_shadow_clip_from_world", shadow_clip_from_world);
-    }
+    //if let Some(shadow) = &shadow {
+    //    let shadow_texture = shadow.texture.clone();
+    //    ctx.load_tex("B_shadow_texture", &shadow_texture.clone().into());
+    //    let shadow_clip_from_world = shadow.cascade.clip_from_world;
+    //    ctx.load("B_shadow_clip_from_world", shadow_clip_from_world);
+    //}
 
     if let Some((light, trans)) = directional_light {
         ctx.load("B_directional_light_dir", trans.forward().as_vec3());

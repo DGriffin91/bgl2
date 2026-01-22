@@ -12,7 +12,7 @@ impl Plugin for PlaneReflectPlugin {
     }
 }
 
-#[derive(UniformSet, Resource)]
+#[derive(UniformSet, Clone, Resource)]
 pub struct ReflectionUniforms {
     reflection_plane_position: Vec3,
     reflection_plane_normal: Vec3,

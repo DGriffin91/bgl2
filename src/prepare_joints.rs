@@ -19,7 +19,7 @@ impl Plugin for PrepareJointsPlugin {
     }
 }
 
-#[derive(Component, Deref, DerefMut, Default)]
+#[derive(Component, Clone, Deref, DerefMut, Default)]
 pub struct JointData(Vec<Mat4>);
 
 pub fn init_bindposes(

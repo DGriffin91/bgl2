@@ -57,6 +57,7 @@ pub fn derive_uniform_set(input: TokenStream) -> TokenStream {
         let field_name = field_ident.to_string();
 
         let is_tex = is_glow_texture(&field.ty)
+            | is_texture_ref(&field.ty)
             | is_handle_image(&field.ty)
             | is_option_handle_image(&field.ty);
         name_entries.push(quote! { (#field_name, #is_tex) });
@@ -118,6 +119,16 @@ fn is_glow_texture(ty: &Type) -> bool {
         return false;
     };
     last.ident == "Texture"
+}
+
+fn is_texture_ref(ty: &Type) -> bool {
+    let Some(tp) = as_type_path(ty) else {
+        return false;
+    };
+    let Some(last) = &tp.path.segments.last() else {
+        return false;
+    };
+    last.ident == "TextureRef"
 }
 
 fn is_handle_image(ty: &Type) -> bool {

@@ -39,9 +39,7 @@ impl CommandEncoderSender {
             let mut ctx = BevyGlContext::new(window_init_data);
             loop {
                 if let Ok(mut msg) = receiver.recv() {
-                    for cmd in msg.commands.iter_mut() {
-                        cmd(&mut ctx)
-                    }
+                    msg.commands.iter_mut().for_each(|cmd| cmd(&mut ctx));
                 }
             }
         });

@@ -22,6 +22,7 @@ use crate::{
     BevyGlContext, WindowInitData,
     command_encoder::{CommandEncoder, CommandEncoderPlugin, CommandEncoderSender},
     phase_opaque::OpaquePhasePlugin,
+    phase_transparent::TransparentPhasePlugin,
     prepare_image::PrepareImagePlugin,
     prepare_mesh::PrepareMeshPlugin,
 };
@@ -51,7 +52,7 @@ impl Plugin for OpenGLRenderPlugins {
             OpenGLMinimalRenderPlugin,
             //ShadowPhasePlugin,
             OpaquePhasePlugin,
-            //TransparentPhasePlugin,
+            TransparentPhasePlugin,
             //PlaneReflectPlugin,
         ));
     }

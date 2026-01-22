@@ -1,3 +1,11 @@
+use std::{
+    sync::{
+        Arc,
+        atomic::{AtomicU32, Ordering},
+    },
+    u32,
+};
+
 use bevy::{
     image::{ImageFilterMode, ImageSampler, ImageSamplerDescriptor},
     platform::collections::{HashMap, HashSet},
@@ -33,8 +41,74 @@ impl Plugin for PrepareImagePlugin {
 #[derive(Default)]
 pub struct GpuImages {
     // u32 is target glow::TEXTURE_2D or glow::TEXTURE_CUBE_MAP
-    pub mapping: HashMap<AssetId<Image>, (glow::Texture, u32)>,
+    pub bevy_textures: HashMap<AssetId<Image>, (glow::Texture, u32)>,
     pub placeholder: Option<glow::Texture>,
+    /// Textures without a corresponding AssetId<Image>. u32 is target
+    pub raw_textures: Vec<(glow::Texture, u32)>,
+}
+
+#[derive(Clone)]
+pub struct TextureRef(Arc<AtomicU32>);
+
+impl TextureRef {
+    pub fn new() -> Self {
+        TextureRef(Arc::new(AtomicU32::new(u32::MAX)))
+    }
+    pub fn get(&self) -> Option<u32> {
+        let idx = self.0.load(Ordering::Relaxed);
+        if idx == u32::MAX { None } else { Some(idx) }
+    }
+    pub fn set(&self, idx: u32) {
+        self.0.store(idx, Ordering::Relaxed);
+    }
+}
+
+impl BevyGlContext {
+    /// returns index into raw_textures
+    pub fn add_bevy_image(
+        &mut self,
+        default_sampler: Option<ImageSamplerDescriptor>,
+        bevy_image: &Image,
+    ) -> Option<u32> {
+        let Some((texture, target)) = bevy_image_to_gl_texture(self, default_sampler, bevy_image)
+        else {
+            return None;
+        };
+        Some(self.add_texture(texture, target))
+    }
+
+    /// sets TextureReference index into raw_textures
+    pub fn add_bevy_image_set_ref(
+        &mut self,
+        default_sampler: Option<ImageSamplerDescriptor>,
+        bevy_image: &Image,
+        texture_ref: &TextureRef,
+    ) -> Option<u32> {
+        let Some(idx) = self.add_bevy_image(default_sampler, bevy_image) else {
+            return None;
+        };
+        texture_ref.set(idx);
+        Some(idx)
+    }
+
+    /// returns index into raw_textures
+    pub fn add_texture(&mut self, texture: glow::Texture, target: u32) -> u32 {
+        let idx = self.image.raw_textures.len() as u32;
+        self.image.raw_textures.push((texture, target));
+        idx
+    }
+
+    /// sets TextureReference index into raw_textures
+    pub fn add_texture_set_ref(
+        &mut self,
+        texture: glow::Texture,
+        target: u32,
+        texture_ref: &TextureRef,
+    ) -> u32 {
+        let idx = self.add_texture(texture, target);
+        texture_ref.set(idx);
+        idx
+    }
 }
 
 pub fn send_images_to_gpu(
@@ -73,7 +147,7 @@ pub fn send_images_to_gpu(
             AssetEvent::Removed { id } => {
                 let id = *id;
                 cmd.record(move |ctx| {
-                    if let Some(tex) = ctx.image.mapping.remove(&id) {
+                    if let Some(tex) = ctx.image.bevy_textures.remove(&id) {
                         unsafe { ctx.gl.delete_texture(tex.0) };
                     }
                 });
@@ -103,7 +177,7 @@ pub fn send_images_to_gpu(
                     return;
                 };
 
-                if let Some(old) = ctx.image.mapping.insert(handle, (texture, target)) {
+                if let Some(old) = ctx.image.bevy_textures.insert(handle, (texture, target)) {
                     unsafe { ctx.gl.delete_texture(old.0) };
                 }
             });

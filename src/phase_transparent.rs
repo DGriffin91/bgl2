@@ -4,7 +4,7 @@ use std::any::TypeId;
 use glow::HasContext;
 
 use crate::{
-    BevyGlContext,
+    command_encoder::CommandEncoder,
     plane_reflect::ReflectionPlane,
     render::{RenderPhase, RenderRunner, RenderSet},
 };
@@ -95,10 +95,11 @@ fn render_transparent(world: &mut World) {
 }
 
 fn transparent(world: &mut World) {
-    world
-        .get_non_send_resource_mut::<BevyGlContext>()
-        .unwrap()
-        .start_alpha_blend();
+    let mut cmd = world.resource_mut::<CommandEncoder>();
+    cmd.record(move |ctx| {
+        ctx.start_alpha_blend();
+    });
+
     *world.get_resource_mut::<RenderPhase>().unwrap() = RenderPhase::Transparent;
 
     let Some(runner) = world.remove_resource::<RenderRunner>() else {
@@ -154,8 +155,11 @@ fn transparent(world: &mut World) {
         }
     }
 
-    let ctx = world.non_send_resource::<BevyGlContext>();
-    unsafe { ctx.gl.bind_vertex_array(None) };
+    let mut cmd = world.resource_mut::<CommandEncoder>();
+    cmd.record(move |ctx| {
+        unsafe { ctx.gl.bind_vertex_array(None) };
+    });
+
     world.insert_resource(runner);
 
     world

@@ -1,5 +1,5 @@
 pub mod bevy_standard_lighting;
-//pub mod bevy_standard_material;
+pub mod bevy_standard_material;
 //pub mod egui_plugin;
 pub mod command_encoder;
 pub mod faststack;
@@ -50,6 +50,7 @@ use winit::platform::web::WindowExtWebSys;
 use crate::faststack::FastStack;
 use crate::faststack::StackStack;
 use crate::prepare_image::GpuImages;
+use crate::prepare_image::TextureRef;
 use crate::prepare_mesh::GpuMeshBufferMap;
 use crate::watchers::Watchers;
 
@@ -1092,7 +1093,7 @@ pub fn load_tex_if_new(tex: &Tex, gl: &glow::Context, gpu_images: &GpuImages, sl
             match tex {
                 Tex::Bevy(image_h) => {
                     if let Some(image_h) = image_h {
-                        if let Some(t) = gpu_images.mapping.get(&image_h.id()) {
+                        if let Some(t) = gpu_images.bevy_textures.get(&image_h.id()) {
                             texture = t.0;
                             *target = t.1;
                         }
@@ -1100,6 +1101,13 @@ pub fn load_tex_if_new(tex: &Tex, gl: &glow::Context, gpu_images: &GpuImages, sl
                 }
                 Tex::Gl(t) => {
                     texture = *t;
+                }
+                Tex::Ref(t_ref) => {
+                    if let Some(idx) = t_ref.get() {
+                        let t = gpu_images.raw_textures[idx as usize];
+                        texture = t.0;
+                        *target = t.1;
+                    }
                 }
             }
             unsafe {
@@ -1178,13 +1186,8 @@ impl BevyGlContext {
     #[inline]
     /// Loads the texture in the next available slot. Returns the texture slot and location if the location is found.
     /// Call set_tex() to update the texture at this slot.
-    pub fn load_tex(
-        &mut self,
-        name: &str,
-        tex: &Tex,
-        gpu_images: &GpuImages,
-    ) -> Option<(u32, glow::UniformLocation)> {
-        let mut texture = gpu_images.placeholder.unwrap();
+    pub fn load_tex(&mut self, name: &str, tex: &Tex) -> Option<(u32, glow::UniformLocation)> {
+        let mut texture = self.image.placeholder.unwrap();
         let mut target = glow::TEXTURE_2D;
 
         let Some(location) = self.get_uniform_location(name) else {
@@ -1196,7 +1199,7 @@ impl BevyGlContext {
         match tex {
             Tex::Bevy(image_h) => {
                 if let Some(image_h) = image_h {
-                    if let Some(t) = gpu_images.mapping.get(&image_h.id()) {
+                    if let Some(t) = self.image.bevy_textures.get(&image_h.id()) {
                         texture = t.0;
                         target = t.1;
                     }
@@ -1204,6 +1207,13 @@ impl BevyGlContext {
             }
             Tex::Gl(t) => {
                 texture = *t;
+            }
+            Tex::Ref(t_ref) => {
+                if let Some(idx) = t_ref.get() {
+                    let t = self.image.raw_textures[idx as usize];
+                    texture = t.0;
+                    target = t.1;
+                }
             }
         }
         unsafe {
@@ -1216,18 +1226,13 @@ impl BevyGlContext {
     }
 
     #[inline]
-    pub fn set_tex(
-        &self,
-        tex: &Tex,
-        gpu_images: &GpuImages,
-        slot_location: (u32, glow::UniformLocation),
-    ) {
-        let mut texture = gpu_images.placeholder.unwrap();
+    pub fn set_tex(&self, tex: &Tex, slot_location: (u32, glow::UniformLocation)) {
+        let mut texture = self.image.placeholder.unwrap();
         let mut target = glow::TEXTURE_2D;
         match tex {
             Tex::Bevy(image_h) => {
                 if let Some(image_h) = image_h {
-                    if let Some(t) = gpu_images.mapping.get(&image_h.id()) {
+                    if let Some(t) = self.image.bevy_textures.get(&image_h.id()) {
                         texture = t.0;
                         target = t.1;
                     }
@@ -1235,6 +1240,13 @@ impl BevyGlContext {
             }
             Tex::Gl(t) => {
                 texture = *t;
+            }
+            Tex::Ref(t_ref) => {
+                if let Some(idx) = t_ref.get() {
+                    let t = self.image.raw_textures[idx as usize];
+                    texture = t.0;
+                    target = t.1;
+                }
             }
         }
         unsafe {
@@ -1263,9 +1275,9 @@ pub enum SlotData {
 
 #[derive(Clone)]
 pub enum Tex {
-    // TODO use references for Handle<Image> so clone isn't needed
     Bevy(Option<Handle<Image>>),
     Gl(glow::Texture),
+    Ref(TextureRef),
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -1294,6 +1306,12 @@ impl From<Handle<Image>> for Tex {
     }
 }
 
+impl From<TextureRef> for Tex {
+    fn from(handle: TextureRef) -> Self {
+        Tex::Ref(handle)
+    }
+}
+
 #[macro_export]
 macro_rules! load_match {
     ($index:expr, $gl:expr, $gpu:expr, $slot:expr, $temp:expr, {
@@ -1314,4 +1332,10 @@ macro_rules! load_match {
     (@do tex, $expr:expr, $gl:expr, $gpu:expr, $slot:expr, $_temp:expr) => {
         load_tex_if_new(&($expr), $gl, $gpu, $slot)
     };
+}
+
+fn clone2(
+    opt: Option<(&DirectionalLight, &GlobalTransform)>,
+) -> Option<(DirectionalLight, GlobalTransform)> {
+    opt.map(|(light, transform)| (light.clone(), transform.clone()))
 }

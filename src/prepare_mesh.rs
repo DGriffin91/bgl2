@@ -42,7 +42,7 @@ impl BevyGlContext {
         self.mesh.last_bind = None;
     }
 
-    /// Make sure to call reset_bind_cache() before the first iteration of bind(). It doesn't know about whatever random
+    /// Make sure to call reset_mesh_bind_cache() before the first iteration of bind(). It doesn't know about whatever random
     /// opengl state came before.
     pub fn bind_mesh(&mut self, mesh: &AssetId<Mesh>, shader_index: u32) -> Option<BufferRef> {
         if let Some(buffer_ref) = self.mesh.map.get(mesh) {
@@ -74,12 +74,12 @@ impl BevyGlContext {
         None
     }
 
-    /// Make sure to call reset_bind_cache() before the first iteration of bind(). It doesn't know about whatever random
+    /// Make sure to call reset_mesh_bind_cache() before the first iteration of bind(). It doesn't know about whatever random
     /// opengl state came before.
     pub fn draw_mesh(&mut self, mesh: AssetId<Mesh>, shader_index: u32) {
         // Extremely slow temporary workaround for initially testing macos
         #[cfg(target_os = "macos")]
-        self.reset_bind_cache();
+        self.reset_mesh_bind_cache();
         #[cfg(target_os = "macos")]
         let vao = unsafe {
             let vao = ctx.gl.create_vertex_array().unwrap();

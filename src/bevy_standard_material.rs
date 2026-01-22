@@ -8,11 +8,13 @@ use itertools::{Either, Itertools};
 use uniform_set_derive::UniformSet;
 
 use crate::{
-    BevyGlContext, SlotData, UniformSet, UniformValue,
+    SlotData, UniformSet, UniformValue,
     bevy_standard_lighting::{
         DEFAULT_MAX_JOINTS_DEF, DEFAULT_MAX_LIGHTS_DEF, bind_standard_lighting, standard_pbr_glsl,
         standard_pbr_lighting_glsl, standard_shadow_sampling_glsl,
     },
+    clone2,
+    command_encoder::CommandEncoder,
     faststack::StackStack,
     flip_cull_mode, load_if_new, load_match, load_tex_if_new,
     phase_shadow::DirectionalLightShadow,
@@ -20,7 +22,6 @@ use crate::{
     plane_reflect::{ReflectionPlane, ReflectionUniforms},
     prepare_image::GpuImages,
     prepare_joints::JointData,
-    prepare_mesh::GPUMeshBufferMap,
     render::{
         RenderPhase, RenderSet, register_prepare_system, register_render_system,
         set_blend_func_from_alpha_mode, transparent_draw_from_alpha_mode,
@@ -41,14 +42,14 @@ impl Plugin for OpenGLStandardMaterialPlugin {
     }
 }
 
-fn setup(mut ctx: Option<NonSendMut<BevyGlContext>>) {
-    if let Some(ctx) = &mut ctx {
+fn setup(mut cmd: ResMut<CommandEncoder>) {
+    cmd.record(|ctx| {
         ctx.add_snippet("std::agx", include_str!("shaders/agx.glsl"));
         ctx.add_snippet("std::math", include_str!("shaders/math.glsl"));
         ctx.add_snippet("std::shadow_sampling", standard_shadow_sampling_glsl());
         ctx.add_snippet("std::pbr", standard_pbr_glsl());
         ctx.add_snippet("std::pbr_lighting", standard_pbr_lighting_glsl());
-    }
+    });
 }
 
 #[derive(Component, Default)]
@@ -86,7 +87,7 @@ pub fn sort_by_material(
 // Runs at each view transition: Before shadows, before reflections, etc..
 pub fn standard_material_prepare_view(
     mut commands: Commands,
-    phase: If<Res<RenderPhase>>,
+    phase: Res<RenderPhase>,
     camera: Single<(
         Entity,
         &Camera,
@@ -109,7 +110,7 @@ pub fn standard_material_prepare_view(
     let view_from_world;
     let clip_from_world;
 
-    if **phase == RenderPhase::Shadow {
+    if *phase == RenderPhase::Shadow {
         if let Some(shadow) = &shadow {
             view_position = shadow.cascade.world_from_cascade.project_point3(Vec3::ZERO);
             //clip_from_view = shadow.cascade.clip_from_cascade;
@@ -160,64 +161,18 @@ pub fn standard_material_render(
     point_lights: Query<(&PointLight, &GlobalTransform)>,
     spot_lights: Query<(&SpotLight, &GlobalTransform)>,
     directional_lights: Query<(&DirectionalLight, &GlobalTransform)>,
-    mut ctx: NonSendMut<BevyGlContext>,
-    mut gpu_meshes: NonSendMut<GPUMeshBufferMap>,
     materials: Res<Assets<StandardMaterial>>,
-    phase: If<Res<RenderPhase>>,
+    phase: Res<RenderPhase>,
     mut transparent_draws: ResMut<DeferredAlphaBlendDraws>,
-    shadow: Option<Res<DirectionalLightShadow>>,
-    gpu_images: NonSend<GpuImages>,
-    reflect_uniforms: Option<Res<ReflectionUniforms>>,
+    //shadow: Option<Res<DirectionalLightShadow>>,
+    //reflect_uniforms: Option<Res<ReflectionUniforms>>,
     sorted: Res<DrawsSortedByMaterial>,
+    mut cmd: ResMut<CommandEncoder>,
 ) {
     let (view_uniforms, env_light) = *camera;
-    let phase = **phase;
+    let view_uniforms = view_uniforms.clone();
 
-    let shadow_def;
-
-    if phase.depth_only() {
-        shadow_def = shadow
-            .as_ref()
-            .map_or(("", ""), |_| ("RENDER_DEPTH_ONLY", ""));
-    } else {
-        shadow_def = shadow.as_ref().map_or(("", ""), |_| ("SAMPLE_SHADOW", ""));
-    }
-
-    let shader_index = shader_cached!(
-        ctx,
-        "shaders/std_mat.vert",
-        "shaders/pbr_std_mat.frag",
-        &[shadow_def, DEFAULT_MAX_LIGHTS_DEF, DEFAULT_MAX_JOINTS_DEF]
-    )
-    .unwrap();
-
-    gpu_meshes.reset_bind_cache();
-    ctx.use_cached_program(shader_index);
-
-    ctx.load("write_reflection", phase.reflection());
-
-    ctx.map_uniform_set_locations::<ViewUniforms>();
-    ctx.bind_uniforms_set(&gpu_images, view_uniforms);
-    ctx.map_uniform_set_locations::<StandardMaterial>();
-    let mut reflect_bool_location = None;
-
-    if !phase.depth_only() {
-        reflect_bool_location = ctx.get_uniform_location("read_reflection");
-        if let Some(reflect_uniforms) = &reflect_uniforms {
-            ctx.map_uniform_set_locations::<ReflectionUniforms>();
-            ctx.bind_uniforms_set(&gpu_images, reflect_uniforms.deref());
-        }
-
-        bind_standard_lighting(
-            &mut ctx,
-            &gpu_images,
-            point_lights.iter(),
-            spot_lights.iter(),
-            directional_lights.single().ok(),
-            env_light,
-            shadow.as_deref(),
-        );
-    }
+    let phase = *phase;
 
     let iter = if phase.transparent() {
         Either::Right(mesh_entities.iter_many(transparent_draws.take()))
@@ -226,7 +181,17 @@ pub fn standard_material_render(
         // Either::Left(mesh_entities.iter()) // <- Unsorted alternative
     };
 
-    let mut last_material = None;
+    struct Draw {
+        world_from_local: Mat4,
+        joint_data: Option<JointData>,
+        material_h: AssetId<StandardMaterial>,
+        material: StandardMaterial,
+        read_reflect: bool,
+        mesh: Handle<Mesh>,
+    }
+
+    let mut draws = Vec::new();
+
     for (
         entity,
         view_vis,
@@ -265,28 +230,107 @@ pub fn standard_material_render(
         ) {
             continue;
         }
-        set_blend_func_from_alpha_mode(&ctx.gl, &material.alpha_mode);
 
-        ctx.load("world_from_local", world_from_local);
-
-        if let Some(joint_data) = joint_data {
-            ctx.load("joint_data", joint_data.as_slice());
-        }
-        ctx.load("has_joint_data", joint_data.is_some());
-
-        reflect_bool_location.clone().map(|loc| {
-            (read_reflect && phase.read_reflect() && reflect_uniforms.is_some()).load(&ctx.gl, &loc)
+        draws.push(Draw {
+            // TODO don't copy full material
+            material: material.clone(),
+            world_from_local,
+            joint_data: joint_data.cloned(),
+            material_h: material_h.id(),
+            read_reflect,
+            mesh: mesh.0.clone(),
         });
+    }
 
-        // Only re-bind if the material has changed.
-        if last_material != Some(material_h) {
-            ctx.set_cull_mode(flip_cull_mode(material.cull_mode, phase.reflection()));
-            ctx.bind_uniforms_set(&gpu_images, material);
+    // -----------------------------
+
+    let mut point_lights = point_lights
+        .iter()
+        .map(|(a, b)| (a.clone(), b.clone()))
+        .collect::<Vec<_>>();
+    let mut spot_lights = spot_lights
+        .iter()
+        .map(|(a, b)| (a.clone(), b.clone()))
+        .collect::<Vec<_>>();
+    let mut directional_light = clone2(directional_lights.single().ok());
+    let env_light = env_light.cloned();
+
+    let view_uniforms = view_uniforms.clone();
+    cmd.record(move |ctx| {
+        let env_light = env_light.clone();
+        //let shadow_def;
+        //if phase.depth_only() {
+        //    shadow_def = shadow
+        //        .as_ref()
+        //        .map_or(("", ""), |_| ("RENDER_DEPTH_ONLY", ""));
+        //} else {
+        //    shadow_def = shadow.as_ref().map_or(("", ""), |_| ("SAMPLE_SHADOW", ""));
+        //}
+
+        let shader_index = shader_cached!(
+            ctx,
+            "shaders/std_mat.vert",
+            "shaders/pbr_std_mat.frag",
+            &[DEFAULT_MAX_LIGHTS_DEF, DEFAULT_MAX_JOINTS_DEF] //shadow_def,
+        )
+        .unwrap();
+
+        ctx.reset_mesh_bind_cache();
+        ctx.use_cached_program(shader_index);
+
+        ctx.load("write_reflection", phase.reflection());
+
+        ctx.map_uniform_set_locations::<ViewUniforms>();
+        ctx.bind_uniforms_set(&view_uniforms);
+        ctx.map_uniform_set_locations::<StandardMaterial>();
+        let mut reflect_bool_location = None;
+
+        if !phase.depth_only() {
+            reflect_bool_location = ctx.get_uniform_location("read_reflection");
+            //if let Some(reflect_uniforms) = &reflect_uniforms {
+            //    ctx.map_uniform_set_locations::<ReflectionUniforms>();
+            //    ctx.bind_uniforms_set(reflect_uniforms.deref());
+            //}
+
+            let point_lights = point_lights.iter().map(|(a, b)| (a, b));
+            let spot_lights = spot_lights.iter().map(|(a, b)| (a, b));
+
+            bind_standard_lighting(
+                ctx,
+                point_lights,
+                spot_lights,
+                directional_light,
+                env_light,
+                //shadow.as_deref(),
+            );
         }
 
-        gpu_meshes.draw_mesh(&ctx, mesh.id(), shader_index);
-        last_material = Some(material_h);
-    }
+        let mut last_material = None;
+        for draw in &draws {
+            set_blend_func_from_alpha_mode(&ctx.gl, &draw.material.alpha_mode);
+
+            ctx.load("world_from_local", draw.world_from_local);
+
+            if let Some(joint_data) = &draw.joint_data {
+                ctx.load("joint_data", joint_data.as_slice());
+            }
+            ctx.load("has_joint_data", draw.joint_data.is_some());
+
+            //reflect_bool_location.clone().map(|loc| {
+            //    (draw.read_reflect && phase.read_reflect() && reflect_uniforms.is_some())
+            //        .load(&ctx.gl, &loc)
+            //});
+
+            // Only re-bind if the material has changed.
+            if last_material != Some(draw.material_h) {
+                ctx.set_cull_mode(flip_cull_mode(draw.material.cull_mode, phase.reflection()));
+                ctx.bind_uniforms_set(&draw.material);
+            }
+
+            ctx.draw_mesh(draw.mesh.id(), shader_index);
+            last_material = Some(draw.material_h);
+        }
+    });
 }
 
 // Implementing this manually for bevy's standard material, see #[derive(UniformSet)] for typical uses.
