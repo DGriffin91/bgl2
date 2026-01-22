@@ -27,12 +27,18 @@ use crate::{
     shader_cached,
 };
 
+#[derive(Resource, Clone, Default)]
+pub struct OpenGLStandardMaterialSettings {
+    pub no_point: bool, // no point light glsl code
+}
+
 #[derive(Default)]
 pub struct OpenGLStandardMaterialPlugin;
 
 impl Plugin for OpenGLStandardMaterialPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<DrawsSortedByMaterial>();
+        app.init_resource::<OpenGLStandardMaterialSettings>();
         register_prepare_system(app.world_mut(), standard_material_prepare_view);
         register_render_system::<StandardMaterial, _>(app.world_mut(), standard_material_render);
         app.add_systems(Startup, setup.in_set(RenderSet::Pipeline));
@@ -166,6 +172,7 @@ pub fn standard_material_render(
     reflect_uniforms: Option<Res<ReflectionUniforms>>,
     sorted: Res<DrawsSortedByMaterial>,
     mut cmd: ResMut<CommandEncoder>,
+    prefs: Res<OpenGLStandardMaterialSettings>,
 ) {
     let (view_uniforms, env_light) = *camera;
     let view_uniforms = view_uniforms.clone();
@@ -263,6 +270,7 @@ pub fn standard_material_render(
     let view_uniforms = view_uniforms.clone();
     let shadow = shadow.as_deref().cloned();
     let reflect_uniforms = reflect_uniforms.as_deref().cloned();
+    let prefs = prefs.clone();
     cmd.record(move |ctx| {
         let env_light = env_light.clone();
         let shadow_def;
@@ -274,11 +282,22 @@ pub fn standard_material_render(
             shadow_def = shadow.as_ref().map_or(("", ""), |_| ("SAMPLE_SHADOW", ""));
         }
 
+        let no_point_def = if prefs.no_point {
+            ("NO_POINT", "")
+        } else {
+            ("", "")
+        };
+
         let shader_index = shader_cached!(
             ctx,
             "shaders/std_mat.vert",
             "shaders/pbr_std_mat.frag",
-            &[shadow_def, DEFAULT_MAX_LIGHTS_DEF, DEFAULT_MAX_JOINTS_DEF]
+            &[
+                no_point_def,
+                shadow_def,
+                DEFAULT_MAX_LIGHTS_DEF,
+                DEFAULT_MAX_JOINTS_DEF
+            ]
         )
         .unwrap();
 

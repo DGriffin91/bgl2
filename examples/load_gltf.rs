@@ -16,7 +16,10 @@ use bevy::{
 };
 use bevy_mod_mipmap_generator::{MipmapGeneratorPlugin, generate_mipmaps};
 use bevy_opengl::{
-    bevy_standard_material::{OpenGLStandardMaterialPlugin, ReadReflection, SkipReflection},
+    bevy_standard_material::{
+        OpenGLStandardMaterialPlugin, OpenGLStandardMaterialSettings, ReadReflection,
+        SkipReflection,
+    },
     plane_reflect::ReflectionPlane,
     render::{OpenGLRenderPlugins, RenderSet},
 };
@@ -28,6 +31,9 @@ pub struct Args {
     /// use default bevy render backend (Also need to enable default plugins)
     #[argh(switch)]
     bevy: bool,
+    /// the windows xp driver often doesn't like point lights (for loop code gen too long, sometimes other things)
+    #[argh(switch)]
+    no_point: bool,
 }
 
 fn main() {
@@ -37,37 +43,40 @@ fn main() {
     let args: Args = argh::from_env();
 
     let mut app = App::new();
-    app.insert_resource(args.clone())
-        //.insert_resource(ClearColor(Color::srgb(1.75 * 0.5, 1.9 * 0.5, 1.99 * 0.5)))
-        .insert_resource(ClearColor(Color::BLACK))
-        .insert_resource(WinitSettings::continuous())
-        .insert_resource(GlobalAmbientLight::NONE)
-        .add_plugins((
-            DefaultPlugins
-                .set(RenderPlugin {
-                    render_creation: WgpuSettings {
-                        backends: if args.bevy {
-                            Some(wgpu_types::Backends::all())
-                        } else {
-                            None
-                        },
-                        ..default()
-                    }
-                    .into(),
+    app.insert_resource(OpenGLStandardMaterialSettings {
+        no_point: args.no_point,
+    })
+    .insert_resource(args.clone())
+    //.insert_resource(ClearColor(Color::srgb(1.75 * 0.5, 1.9 * 0.5, 1.99 * 0.5)))
+    .insert_resource(ClearColor(Color::BLACK))
+    .insert_resource(WinitSettings::continuous())
+    .insert_resource(GlobalAmbientLight::NONE)
+    .add_plugins((
+        DefaultPlugins
+            .set(RenderPlugin {
+                render_creation: WgpuSettings {
+                    backends: if args.bevy {
+                        Some(wgpu_types::Backends::all())
+                    } else {
+                        None
+                    },
                     ..default()
-                })
-                .set(WindowPlugin {
-                    primary_window: Some(Window {
-                        present_mode: PresentMode::Immediate,
-                        ..default()
-                    }),
+                }
+                .into(),
+                ..default()
+            })
+            .set(WindowPlugin {
+                primary_window: Some(Window {
+                    present_mode: PresentMode::Immediate,
                     ..default()
                 }),
-            FreeCameraPlugin,
-            LogDiagnosticsPlugin::default(),
-            FrameTimeDiagnosticsPlugin::default(),
-            MipmapGeneratorPlugin,
-        ));
+                ..default()
+            }),
+        FreeCameraPlugin,
+        LogDiagnosticsPlugin::default(),
+        FrameTimeDiagnosticsPlugin::default(),
+        MipmapGeneratorPlugin,
+    ));
 
     if !args.bevy {
         app.add_plugins((OpenGLRenderPlugins, OpenGLStandardMaterialPlugin));

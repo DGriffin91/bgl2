@@ -50,6 +50,7 @@ vec3 apply_pbr_lighting(vec3 V, vec3 diffuse_color, vec3 F0, vec3 vert_normal, v
         output_color += environment_light(NoV, F0, perceptual_roughness, diffuse_color, env_diffuse, env_specular);
     }
 
+#ifndef NO_POINT
     // Point Lights
     for (int i = 0; i < MAX_POINT_LIGHTS; i++) {
         if (i < B_light_count) {
@@ -64,6 +65,7 @@ vec3 apply_pbr_lighting(vec3 V, vec3 diffuse_color, vec3 F0, vec3 vert_normal, v
             }
         }
     }
+#endif
 
     return output_color;
 }
