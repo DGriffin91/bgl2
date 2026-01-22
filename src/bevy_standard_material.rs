@@ -183,13 +183,16 @@ pub fn standard_material_render(
         world_from_local: Mat4,
         joint_data: Option<JointData>,
         material_h: AssetId<StandardMaterial>,
-        material: StandardMaterial,
+        material_idx: u32,
         read_reflect: bool,
         mesh: Handle<Mesh>,
     }
 
     let mut draws = Vec::new();
+    let mut render_materials = Vec::new();
 
+    let mut last_material = None;
+    let mut current_material_idx = 0;
     for (
         entity,
         view_vis,
@@ -229,9 +232,15 @@ pub fn standard_material_render(
             continue;
         }
 
+        if last_material != Some(material_h) {
+            current_material_idx = render_materials.len() as u32;
+            last_material = Some(material_h);
+            render_materials.push(material.clone());
+        }
+
         draws.push(Draw {
             // TODO don't copy full material
-            material: material.clone(),
+            material_idx: current_material_idx,
             world_from_local,
             joint_data: joint_data.cloned(),
             material_h: material_h.id(),
@@ -305,7 +314,8 @@ pub fn standard_material_render(
 
         let mut last_material = None;
         for draw in &draws {
-            set_blend_func_from_alpha_mode(&ctx.gl, &draw.material.alpha_mode);
+            let material = &render_materials[draw.material_idx as usize];
+            set_blend_func_from_alpha_mode(&ctx.gl, &material.alpha_mode);
 
             ctx.load("world_from_local", draw.world_from_local);
 
@@ -321,8 +331,8 @@ pub fn standard_material_render(
 
             // Only re-bind if the material has changed.
             if last_material != Some(draw.material_h) {
-                ctx.set_cull_mode(flip_cull_mode(draw.material.cull_mode, phase.reflection()));
-                ctx.bind_uniforms_set(&draw.material);
+                ctx.set_cull_mode(flip_cull_mode(material.cull_mode, phase.reflection()));
+                ctx.bind_uniforms_set(material);
             }
 
             ctx.draw_mesh(draw.mesh.id(), shader_index);

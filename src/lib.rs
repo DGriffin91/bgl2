@@ -1336,8 +1336,12 @@ macro_rules! load_match {
     };
 }
 
-fn clone2(
-    opt: Option<(&DirectionalLight, &GlobalTransform)>,
-) -> Option<(DirectionalLight, GlobalTransform)> {
-    opt.map(|(light, transform)| (light.clone(), transform.clone()))
+pub fn clone2<T0: Clone, T1: Clone>(opt: Option<(&T0, &T1)>) -> Option<(T0, T1)> {
+    opt.map(|(t0, t1)| (t0.clone(), t1.clone()))
+}
+
+pub fn clone3<T0: Clone, T1: Clone, T2: Clone>(
+    opt: Option<(&T0, &T1, &T2)>,
+) -> Option<(T0, T1, T2)> {
+    opt.map(|(t0, t1, t2)| (t0.clone(), t1.clone(), t2.clone()))
 }
