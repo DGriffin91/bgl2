@@ -96,9 +96,7 @@ fn render_transparent(world: &mut World) {
 
 fn transparent(world: &mut World) {
     let mut cmd = world.resource_mut::<CommandEncoder>();
-    cmd.record(move |ctx| {
-        ctx.start_alpha_blend();
-    });
+    cmd.start_alpha_blend();
 
     *world.get_resource_mut::<RenderPhase>().unwrap() = RenderPhase::Transparent;
 

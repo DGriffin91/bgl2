@@ -53,13 +53,12 @@ fn render_opaque(world: &mut World) {
 // During the opaque pass the registered systems also write any transparent items to the DeferredAlphaBlendDraws.
 fn opaque(world: &mut World, depth_prepass: bool, write_depth: bool) {
     let mut cmd = world.resource_mut::<CommandEncoder>();
-    cmd.record(move |ctx| {
-        if depth_prepass {
-            ctx.start_depth_only();
-        } else {
-            ctx.start_opaque(write_depth);
-        }
-    });
+
+    if depth_prepass {
+        cmd.start_depth_only();
+    } else {
+        cmd.start_opaque(write_depth);
+    }
 
     let Some(runner) = world.remove_resource::<RenderRunner>() else {
         return;
@@ -81,7 +80,5 @@ fn clear_color_and_depth(world: &mut World) {
     // Seems faster to clear these together
     let color = world.resource::<ClearColor>().clone();
     let mut cmd = world.resource_mut::<CommandEncoder>();
-    cmd.record(move |ctx| {
-        ctx.clear_color_and_depth(Some(color.to_srgba().to_vec4()));
-    });
+    cmd.clear_color_and_depth(Some(color.to_srgba().to_vec4()));
 }

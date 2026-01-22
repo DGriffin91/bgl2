@@ -152,12 +152,7 @@ pub fn send_images_to_gpu(
                 updated.insert(id.clone());
             }
             AssetEvent::Removed { id } => {
-                let id = *id;
-                cmd.record(move |ctx| {
-                    if let Some(tex) = ctx.image.bevy_textures.remove(&id) {
-                        unsafe { ctx.gl.delete_texture(tex.0) };
-                    }
-                });
+                cmd.delete_image(*id);
                 continue;
             }
             _ => (),

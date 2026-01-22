@@ -68,12 +68,7 @@ fn update_reflect_tex(
                 });
             }
         } else {
-            let texture_ref = shadow_tex.texture.clone();
-            cmd.record(move |ctx| {
-                if let Some((tex, _target)) = ctx.texture_from_ref(&texture_ref) {
-                    unsafe { ctx.gl.delete_texture(tex) };
-                }
-            });
+            cmd.delete_texture_ref(shadow_tex.texture.clone());
             commands.remove_resource::<PlaneReflectionTexture>();
             commands.remove_resource::<ReflectionUniforms>();
         }

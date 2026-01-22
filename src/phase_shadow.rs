@@ -58,12 +58,7 @@ fn update_shadow_tex(
                 });
             }
         } else {
-            let prev_texture_ref = shadow_tex.texture.clone();
-            cmd.record(move |ctx| unsafe {
-                if let Some((tex, _target)) = ctx.texture_from_ref(&prev_texture_ref) {
-                    ctx.gl.delete_texture(tex);
-                }
-            });
+            cmd.delete_texture_ref(shadow_tex.texture.clone());
             commands.remove_resource::<DirectionalLightShadow>();
         }
     } else {
@@ -90,10 +85,8 @@ fn render_shadow(world: &mut World) {
         return;
     };
     let mut cmd = world.resource_mut::<CommandEncoder>();
-    cmd.record(move |ctx| {
-        ctx.start_opaque(true); // Reading from depth not supported so we need to write depth to color
-        ctx.clear_color_and_depth(None);
-    });
+    cmd.start_opaque(true); // Reading from depth not supported so we need to write depth to color
+    cmd.clear_color_and_depth(None);
 
     *world.get_resource_mut::<RenderPhase>().unwrap() = RenderPhase::Shadow;
 

@@ -59,20 +59,12 @@ fn setup(
                 let p = vec3(x as f32, y as f32, z as f32);
                 let color = (p + 10.0) / 20.0;
                 let linear_rgb = LinearRgba::rgb(color.x, color.y, color.z);
-                let emissive_ref = TextureRef::new();
                 let material_id = commands
                     .spawn(CustomMaterial {
                         color: linear_rgb.to_vec4(),
-                        emissive: emissive_ref.clone(),
+                        emissive: cmd.bevy_image(create_test_image(linear_rgb.to_u8_array())),
                     })
                     .id();
-                cmd.record(move |ctx| {
-                    ctx.add_bevy_image_set_ref(
-                        None,
-                        &create_test_image(linear_rgb.to_u8_array()),
-                        &emissive_ref,
-                    );
-                });
                 commands.spawn((
                     Mesh3d(meshes.add(Cuboid::default())),
                     Transform::from_translation(p),
