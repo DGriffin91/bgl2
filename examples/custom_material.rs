@@ -7,6 +7,7 @@ use bevy::{
     winit::WinitSettings,
 };
 use bevy_opengl::{
+    UniformSet,
     command_encoder::CommandEncoder,
     prepare_image::TextureRef,
     render::{OpenGLRenderPlugins, RenderPhase, RenderSet, register_render_system},
@@ -157,7 +158,8 @@ fn render_custom_mat(
             ctx,
             "../assets/shaders/custom_material.vert",
             "../assets/shaders/custom_material.frag",
-            &[]
+            &[],
+            &[CustomMaterial::bindings()]
         )
         .unwrap();
 

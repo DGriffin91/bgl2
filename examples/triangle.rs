@@ -74,6 +74,7 @@ fn update(mut cmd: ResMut<CommandEncoder>) {
             ctx,
             "../assets/shaders/tri.vert",
             "../assets/shaders/tri.frag",
+            &[],
             &[]
         )
         .unwrap();

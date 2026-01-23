@@ -1,7 +1,7 @@
 use quote::quote;
 use syn::{
-    Data, DeriveInput, Fields, GenericArgument, PathArguments, Type, TypePath, parse_macro_input,
-    spanned::Spanned,
+    Attribute, Data, DeriveInput, Field, Fields, GenericArgument, LitStr, PathArguments, Type,
+    TypePath, parse_macro_input, spanned::Spanned,
 };
 
 use proc_macro::TokenStream;
@@ -19,7 +19,7 @@ fn bevy_opengl_path() -> proc_macro2::TokenStream {
     }
 }
 
-#[proc_macro_derive(UniformSet)]
+#[proc_macro_derive(UniformSet, attributes(array_max, base_type))]
 pub fn derive_uniform_set(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
 
@@ -45,6 +45,7 @@ pub fn derive_uniform_set(input: TokenStream) -> TokenStream {
     };
 
     let mut name_entries = Vec::with_capacity(fields.len());
+    let mut glsl_bindings = Vec::with_capacity(fields.len());
 
     let mut load_arms = Vec::with_capacity(fields.len());
 
@@ -61,6 +62,9 @@ pub fn derive_uniform_set(input: TokenStream) -> TokenStream {
             | is_handle_image(&field.ty)
             | is_option_handle_image(&field.ty);
         name_entries.push(quote! { (#field_name, #is_tex) });
+
+        let binding = get_glsl_binding(&field, &field_name, is_tex);
+        glsl_bindings.push(quote! { #binding });
 
         let idx = i as u32;
 
@@ -82,6 +86,12 @@ pub fn derive_uniform_set(input: TokenStream) -> TokenStream {
             fn names() -> &'static [(&'static str, bool)] {
                 &[
                     #(#name_entries,)*
+                ]
+            }
+
+            fn bindings() -> &'static [&'static str] {
+                &[
+                    #(#glsl_bindings,)*
                 ]
             }
 
@@ -131,6 +141,60 @@ fn is_texture_ref(ty: &Type) -> bool {
     last.ident == "TextureRef"
 }
 
+fn get_glsl_binding(field: &Field, field_name: &str, texture: bool) -> String {
+    let ty = &field.ty;
+    let Some(tp) = as_type_path(ty) else {
+        panic!("unrecognized type {ty:?}")
+    };
+    let Some(last) = &tp.path.segments.last() else {
+        panic!("unrecognized type {ty:?}")
+    };
+
+    let ty_str = last.ident.to_string();
+
+    let array_type = vec_of(ty);
+    let explicit_type = parse_attr_str(&field.attrs, "base_type").map(|v| v.value());
+    let gl_ty = if let Some(explicit_type) = &explicit_type {
+        explicit_type.as_str()
+    } else {
+        let base_ty = if let Some(array_type) = &array_type {
+            array_type.as_str()
+        } else {
+            ty_str.as_str()
+        };
+        if texture {
+            "sampler2D"
+        } else {
+            match base_ty {
+                "f32" => "float",
+                "Vec2" => "vec2",
+                "Vec3" => "vec3",
+                "Vec4" => "vec4",
+                "i32" => "int",
+                "IVec2" => "ivec2",
+                "IVec3" => "ivec3",
+                "IVec4" => "ivec4",
+                "Mat2" => "mat2",
+                "Mat3" => "mat3",
+                "Mat4" => "mat4",
+                "bool" => "bool",
+                _ => panic!("unrecognized type {base_ty}"),
+            }
+        }
+    };
+
+    let arr_max = if array_type.is_some() {
+        let arr_max = parse_attr_str(&field.attrs, "array_max")
+            .expect(&format!("Vec field {field_name:?} is missing array_max()"))
+            .value();
+        format!("[{arr_max}]")
+    } else {
+        String::from("")
+    };
+
+    format!("uniform {gl_ty} {field_name}{arr_max};")
+}
+
 fn is_handle_image(ty: &Type) -> bool {
     let Some(tp) = as_type_path(ty) else {
         return false;
@@ -157,6 +221,35 @@ fn is_handle_image(ty: &Type) -> bool {
     })
 }
 
+fn vec_of(ty: &Type) -> Option<String> {
+    let Some(tp) = as_type_path(ty) else {
+        return None;
+    };
+    let Some(last) = &tp.path.segments.last() else {
+        return None;
+    };
+    if last.ident != "Vec" {
+        return None;
+    }
+    // Handle<...>
+    let PathArguments::AngleBracketed(args) = &last.arguments else {
+        return None;
+    };
+    // Look for a type argument whose last path segment ident is "Image"
+    let Some(arg) = args.args.iter().next() else {
+        return None;
+    };
+
+    let Some(seg) = (match arg {
+        GenericArgument::Type(Type::Path(inner_tp)) => inner_tp.path.segments.last(),
+        _ => return None,
+    }) else {
+        return None;
+    };
+
+    Some(seg.ident.to_string())
+}
+
 fn is_option_handle_image(ty: &Type) -> bool {
     let Some(tp) = as_type_path(ty) else {
         return false;
@@ -175,4 +268,14 @@ fn is_option_handle_image(ty: &Type) -> bool {
         GenericArgument::Type(inner_ty) => is_handle_image(inner_ty),
         _ => false,
     })
+}
+
+fn parse_attr_str(attrs: &[Attribute], ident: &str) -> Option<LitStr> {
+    for attr in attrs {
+        if attr.path().is_ident(ident) {
+            let lit: LitStr = attr.parse_args().expect("{ident} expects a string literal");
+            return Some(lit);
+        }
+    }
+    None
 }

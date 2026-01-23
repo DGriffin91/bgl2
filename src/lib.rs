@@ -425,14 +425,15 @@ impl BevyGlContext {
         vertex: &P,
         fragment: &P,
         shader_defs: &[(&str, &str)],
+        bindings: &[&'static [&'static str]],
     ) -> Option<ShaderIndex> {
-        let key = shader_key(vertex.as_ref(), fragment.as_ref(), shader_defs);
+        let key = shader_key(vertex.as_ref(), fragment.as_ref(), shader_defs, bindings);
         if let Some((index, watcher)) = self.shader_cache_map.get(&key) {
             if watcher.check() {
                 let vertex_src = std::fs::read_to_string(vertex).unwrap();
                 let fragment_src = std::fs::read_to_string(fragment).unwrap();
                 let old_shader = self.shader_cache[*index as usize];
-                let new_shader = self.shader(&vertex_src, &fragment_src, shader_defs);
+                let new_shader = self.shader(&vertex_src, &fragment_src, shader_defs, bindings);
                 match new_shader {
                     Ok(shader) => {
                         self.shader_cache[*index as usize] = shader;
@@ -445,7 +446,7 @@ impl BevyGlContext {
         } else {
             let vertex_src = std::fs::read_to_string(vertex).unwrap();
             let fragment_src = std::fs::read_to_string(fragment).unwrap();
-            let new_shader = self.shader(&vertex_src, &fragment_src, shader_defs);
+            let new_shader = self.shader(&vertex_src, &fragment_src, shader_defs, bindings);
             match new_shader {
                 Ok(shader) => {
                     let index = self.shader_cache.len() as u32;
@@ -470,6 +471,7 @@ impl BevyGlContext {
         vertex: &str,
         fragment: &str,
         shader_defs: &[(&str, &str)],
+        bindings: &[&'static [&'static str]],
     ) -> Result<glow::Program, anyhow::Error> {
         unsafe {
             let program = self.gl.create_program().expect("Cannot create program");
@@ -515,6 +517,13 @@ impl BevyGlContext {
                     }
                 }
 
+                for binding_set in bindings {
+                    for binding in *binding_set {
+                        preamble.push_str(binding);
+                        preamble.push_str("\n");
+                    }
+                }
+
                 let mut expanded_shader_source = String::with_capacity(shader_source.len() * 2);
 
                 {
@@ -538,7 +547,7 @@ impl BevyGlContext {
                     }
                 }
 
-                *shader_source = format!("{}\n{}", preamble, expanded_shader_source);
+                *shader_source = format!("{}\n#line 0 0\n{}", preamble, expanded_shader_source);
             }
 
             #[cfg(target_os = "macos")]
@@ -560,7 +569,7 @@ impl BevyGlContext {
 
                 if !self.gl.get_shader_compile_status(shader) {
                     return Err(anyhow!(
-                        "{stage_name} shader compilation error: {}",
+                        "{stage_name} shader compilation error: {}\n\n{shader_source}",
                         self.gl.get_shader_info_log(shader)
                     ));
                 }
@@ -594,7 +603,7 @@ impl BevyGlContext {
         self.has_glsl_cube_lod = self
             .shader("void main() { gl_Position = vec4(0.0); }",
                 "uniform samplerCube cube; void main() { gl_FragColor = textureCubeLod(cube, vec3(1.0), 0.0); }",
-                Default::default()
+                Default::default(),Default::default()
             )
             .is_ok();
     }
@@ -844,11 +853,17 @@ impl AttribType {
     }
 }
 
-pub fn shader_key(vertex: &Path, fragment: &Path, shader_defs: &[(&str, &str)]) -> u64 {
+pub fn shader_key(
+    vertex: &Path,
+    fragment: &Path,
+    shader_defs: &[(&str, &str)],
+    bindings: &[&'static [&'static str]],
+) -> u64 {
     let mut hasher = std::hash::DefaultHasher::new();
     vertex.hash(&mut hasher);
     fragment.hash(&mut hasher);
     shader_defs.hash(&mut hasher);
+    bindings.hash(&mut hasher);
     hasher.finish()
 }
 
@@ -1059,16 +1074,26 @@ impl UniformValue for Color {
 /// if target_arch = wasm32 or the bundle_shaders feature is enabled the shader strings will be included in the binary.
 /// otherwise they will be hot reloaded when modified.
 macro_rules! shader_cached {
-    ($bevy_gl_context:expr, $vertex:expr, $fragment:expr, $shader_defs:expr) => {{
+    ($bevy_gl_context:expr, $vertex:expr, $fragment:expr, $shader_defs:expr, $bindings:expr) => {{
         #[cfg(not(any(target_arch = "wasm32", feature = "bundle_shaders")))]
         {
             let path = std::path::Path::new(file!()).parent().unwrap();
-            $bevy_gl_context.shader_cached(&path.join($vertex), &path.join($fragment), $shader_defs)
+            $bevy_gl_context.shader_cached(
+                &path.join($vertex),
+                &path.join($fragment),
+                $shader_defs,
+                $bindings,
+            )
         }
 
         #[cfg(any(target_arch = "wasm32", feature = "bundle_shaders"))]
         {
-            let key = $crate::shader_key($vertex.as_ref(), $fragment.as_ref(), $shader_defs);
+            let key = $crate::shader_key(
+                $vertex.as_ref(),
+                $fragment.as_ref(),
+                $shader_defs,
+                $bindings,
+            );
             if let Some((index, _)) = $bevy_gl_context.shader_cache_map.get(&key) {
                 Some(*index)
             } else {
@@ -1076,6 +1101,7 @@ macro_rules! shader_cached {
                     &include_str!($vertex),
                     &include_str!($fragment),
                     $shader_defs,
+                    $bindings,
                 ) {
                     let index = $bevy_gl_context.shader_cache.len() as u32;
                     $bevy_gl_context.shader_cache.push(shader);
@@ -1096,6 +1122,8 @@ pub trait UniformSet {
     // TODO could cache a names/location set for each combination of ShaderProgram+TypeId.
     /// if bool is true uniform is texture
     fn names() -> &'static [(&'static str, bool)];
+    /// glsl binding code str
+    fn bindings() -> &'static [&'static str];
     /// The index for load should correspond to the order returned from names()
     /// location is where this value should be put
     /// if the current item differs from prev_value bind it and update prev_value

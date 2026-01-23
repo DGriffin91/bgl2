@@ -1,18 +1,3 @@
-uniform sampler2D ub_shadow_texture;
-
-uniform mat4 ub_shadow_clip_from_world;
-uniform vec3 ub_directional_light_dir;
-uniform vec3 ub_directional_light_color;
-
-uniform samplerCube ub_specular_map;
-uniform samplerCube ub_diffuse_map;
-uniform float ub_env_intensity;
-
-uniform int ub_light_count;
-uniform vec4 ub_point_light_position_range[MAX_POINT_LIGHTS];
-uniform vec4 ub_point_light_color_radius[MAX_POINT_LIGHTS];
-uniform vec4 ub_spot_light_dir_offset_scale[MAX_POINT_LIGHTS];
-
 vec3 apply_pbr_lighting(vec3 V, vec3 diffuse_color, vec3 F0, vec3 vert_normal, vec3 normal, float perceptual_roughness,
     float diffuse_transmission, vec2 screen_uv, vec2 view_resolution, vec3 ws_position) {
     float roughness = perceptual_roughness * perceptual_roughness;

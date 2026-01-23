@@ -20,12 +20,17 @@ pub const DEFAULT_MAX_JOINTS_DEF: (&str, &str) = ("MAX_JOINTS", "32");
 
 #[derive(UniformSet, Resource, Clone, Default)]
 pub struct StandardLightingUniforms {
+    #[array_max("MAX_POINT_LIGHTS")]
     pub ub_point_light_position_range: Vec<Vec4>,
+    #[array_max("MAX_POINT_LIGHTS")]
     pub ub_point_light_color_radius: Vec<Vec4>,
+    #[array_max("MAX_POINT_LIGHTS")]
     pub ub_spot_light_dir_offset_scale: Vec<Vec4>,
     pub ub_directional_light_dir: Vec3,
     pub ub_directional_light_color: Vec3,
+    #[base_type("samplerCube")]
     pub ub_specular_map: Option<Handle<Image>>,
+    #[base_type("samplerCube")]
     pub ub_diffuse_map: Option<Handle<Image>>,
     pub ub_shadow_texture: TextureRef,
     pub ub_env_intensity: f32,

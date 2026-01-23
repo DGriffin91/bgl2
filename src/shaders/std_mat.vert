@@ -7,8 +7,6 @@ attribute vec4 Vertex_JointWeight;
 attribute vec4 Vertex_JointIndex;
 
 uniform mat4 world_from_local;
-uniform mat4 world_from_view;
-uniform mat4 clip_from_world;
 uniform mat4 joint_data[MAX_JOINTS];
 uniform bool has_joint_data;
 

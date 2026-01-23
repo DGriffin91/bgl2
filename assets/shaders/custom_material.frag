@@ -1,6 +1,4 @@
 
-uniform vec4 color;
-uniform sampler2D emissive;
 varying vec4 clip_position;
 
 void main() {

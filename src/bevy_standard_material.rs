@@ -280,6 +280,11 @@ pub fn standard_material_render(
                 shadow_def,
                 DEFAULT_MAX_LIGHTS_DEF,
                 DEFAULT_MAX_JOINTS_DEF
+            ],
+            &[
+                ViewUniforms::bindings(),
+                StandardMaterial::bindings(),
+                StandardLightingUniforms::bindings()
             ]
         )
         .unwrap();
@@ -351,6 +356,25 @@ impl UniformSet for StandardMaterial {
             ("normal_map_texture", true),
             ("metallic_roughness_texture", true),
             ("emissive_texture", true),
+        ]
+    }
+
+    fn bindings() -> &'static [&'static str] {
+        &[
+            ("uniform vec4 base_color;"),
+            ("uniform vec4 emissive;"),
+            ("uniform float perceptual_roughness;"),
+            ("uniform float metallic;"),
+            ("uniform bool double_sided;"),
+            ("uniform float diffuse_transmission;"),
+            ("uniform bool flip_normal_map_y;"),
+            ("uniform vec3 reflectance;"),
+            ("uniform bool alpha_blend;"),
+            ("uniform bool has_normal_map;"),
+            ("uniform sampler2D base_color_texture;"),
+            ("uniform sampler2D normal_map_texture;"),
+            ("uniform sampler2D metallic_roughness_texture;"),
+            ("uniform sampler2D emissive_texture;"),
         ]
     }
 
