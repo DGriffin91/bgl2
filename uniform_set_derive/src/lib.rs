@@ -19,7 +19,7 @@ fn bevy_opengl_path() -> proc_macro2::TokenStream {
     }
 }
 
-#[proc_macro_derive(UniformSet, attributes(array_max, base_type))]
+#[proc_macro_derive(UniformSet, attributes(array_max, base_type, exclude))]
 pub fn derive_uniform_set(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
 
@@ -55,6 +55,9 @@ pub fn derive_uniform_set(input: TokenStream) -> TokenStream {
         let Some(field_ident) = &field.ident else {
             continue;
         };
+        if has_attr(&field.attrs, "exclude") {
+            continue;
+        }
         let field_name = field_ident.to_string();
 
         let is_tex = is_glow_texture(&field.ty)
@@ -278,4 +281,13 @@ fn parse_attr_str(attrs: &[Attribute], ident: &str) -> Option<LitStr> {
         }
     }
     None
+}
+
+fn has_attr(attrs: &[Attribute], ident: &str) -> bool {
+    for attr in attrs {
+        if attr.path().is_ident(ident) {
+            return true;
+        }
+    }
+    return false;
 }

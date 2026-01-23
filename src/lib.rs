@@ -519,6 +519,12 @@ impl BevyGlContext {
 
                 for binding_set in bindings {
                     for binding in *binding_set {
+                        // Some drivers don't support texture samplers in the vertex shader
+                        if shader_type == glow::VERTEX_SHADER
+                            && (binding.contains("sampler2D") || binding.contains("samplerCube"))
+                        {
+                            continue;
+                        }
                         preamble.push_str(binding);
                         preamble.push_str("\n");
                     }

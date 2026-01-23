@@ -4,20 +4,19 @@ use bevy::{
 };
 use itertools::{Either, Itertools};
 use uniform_set_derive::UniformSet;
+use wgpu_types::Face;
 
 use crate::{
-    SlotData, UniformSet, UniformValue,
+    UniformSet, UniformValue,
     bevy_standard_lighting::{
         DEFAULT_MAX_JOINTS_DEF, DEFAULT_MAX_LIGHTS_DEF, StandardLightingUniforms,
         standard_pbr_glsl, standard_pbr_lighting_glsl, standard_shadow_sampling_glsl,
     },
     command_encoder::CommandEncoder,
-    faststack::StackStack,
-    flip_cull_mode, load_if_new, load_match, load_tex_if_new,
+    flip_cull_mode,
     phase_shadow::DirectionalLightShadow,
     phase_transparent::DeferredAlphaBlendDraws,
     plane_reflect::{ReflectionPlane, ReflectionUniforms},
-    prepare_image::GpuImages,
     prepare_joints::JointData,
     render::{
         RenderPhase, RenderSet, register_prepare_system, register_render_system,
@@ -192,7 +191,7 @@ pub fn standard_material_render(
     }
 
     let mut draws = Vec::new();
-    let mut render_materials = Vec::new();
+    let mut render_materials: Vec<StandardMaterialUniforms> = Vec::new();
 
     let mut last_material = None;
     let mut current_material_idx = 0;
@@ -236,7 +235,7 @@ pub fn standard_material_render(
         if last_material != Some(material_h) {
             current_material_idx = render_materials.len() as u32;
             last_material = Some(material_h);
-            render_materials.push(material.clone());
+            render_materials.push(material.into());
         }
 
         draws.push(Draw {
@@ -283,7 +282,7 @@ pub fn standard_material_render(
             ],
             &[
                 ViewUniforms::bindings(),
-                StandardMaterial::bindings(),
+                StandardMaterialUniforms::bindings(),
                 StandardLightingUniforms::bindings()
             ]
         )
@@ -295,7 +294,7 @@ pub fn standard_material_render(
         ctx.load("write_reflection", phase.reflection());
 
         ctx.map_uniform_set_locations::<ViewUniforms>();
-        ctx.map_uniform_set_locations::<StandardMaterial>();
+        ctx.map_uniform_set_locations::<StandardMaterialUniforms>();
         ctx.map_uniform_set_locations::<StandardLightingUniforms>();
         ctx.bind_uniforms_set(&view_uniforms);
         ctx.bind_uniforms_set(&standard_lighting);
@@ -338,69 +337,47 @@ pub fn standard_material_render(
     });
 }
 
-// Implementing this manually for bevy's standard material, see #[derive(UniformSet)] for typical uses.
-impl UniformSet for StandardMaterial {
-    fn names() -> &'static [(&'static str, bool)] {
-        &[
-            ("base_color", false),
-            ("emissive", false),
-            ("perceptual_roughness", false),
-            ("metallic", false),
-            ("double_sided", false),
-            ("diffuse_transmission", false),
-            ("flip_normal_map_y", false),
-            ("reflectance", false),
-            ("alpha_blend", false),
-            ("has_normal_map", false),
-            ("base_color_texture", true),
-            ("normal_map_texture", true),
-            ("metallic_roughness_texture", true),
-            ("emissive_texture", true),
-        ]
-    }
+#[derive(UniformSet, Component, Clone)]
+struct StandardMaterialUniforms {
+    base_color: Vec4,
+    emissive: Vec4,
+    perceptual_roughness: f32,
+    metallic: f32,
+    double_sided: bool,
+    diffuse_transmission: f32,
+    flip_normal_map_y: bool,
+    reflectance: Vec3,
+    alpha_blend: bool,
+    has_normal_map: bool,
+    base_color_texture: Option<Handle<Image>>,
+    normal_map_texture: Option<Handle<Image>>,
+    metallic_roughness_texture: Option<Handle<Image>>,
+    emissive_texture: Option<Handle<Image>>,
+    #[exclude]
+    alpha_mode: AlphaMode,
+    #[exclude]
+    cull_mode: Option<Face>,
+}
 
-    fn bindings() -> &'static [&'static str] {
-        &[
-            ("uniform vec4 base_color;"),
-            ("uniform vec4 emissive;"),
-            ("uniform float perceptual_roughness;"),
-            ("uniform float metallic;"),
-            ("uniform bool double_sided;"),
-            ("uniform float diffuse_transmission;"),
-            ("uniform bool flip_normal_map_y;"),
-            ("uniform vec3 reflectance;"),
-            ("uniform bool alpha_blend;"),
-            ("uniform bool has_normal_map;"),
-            ("uniform sampler2D base_color_texture;"),
-            ("uniform sampler2D normal_map_texture;"),
-            ("uniform sampler2D metallic_roughness_texture;"),
-            ("uniform sampler2D emissive_texture;"),
-        ]
-    }
-
-    fn load(
-        &self,
-        gl: &glow::Context,
-        gpu_images: &GpuImages,
-        index: u32,
-        slot: &mut SlotData,
-        temp: &mut StackStack<u32, 16>,
-    ) {
-        load_match!(index, gl, gpu_images, slot, temp, {
-            0 => value(self.base_color),
-            1 => value(self.emissive),
-            2 => value(self.perceptual_roughness),
-            3 => value(self.metallic),
-            4 => value(self.double_sided),
-            5 => value(self.diffuse_transmission),
-            6 => value(self.flip_normal_map_y),
-            7 => value(self.specular_tint.to_linear().to_vec3() * self.reflectance),
-            8 => value(transparent_draw_from_alpha_mode(&self.alpha_mode)),
-            9 => value(self.normal_map_texture.is_some()),
-            10 => tex(self.base_color_texture.clone().into()),
-            11 => tex(self.normal_map_texture.clone().into()),
-            12 => tex(self.metallic_roughness_texture.clone().into()),
-            13 => tex(self.emissive_texture.clone().into()),
-        });
+impl From<&StandardMaterial> for StandardMaterialUniforms {
+    fn from(mat: &StandardMaterial) -> Self {
+        Self {
+            base_color: mat.base_color.to_linear().to_vec4(),
+            emissive: mat.emissive.to_vec4(),
+            perceptual_roughness: mat.perceptual_roughness,
+            metallic: mat.metallic,
+            double_sided: mat.double_sided,
+            diffuse_transmission: mat.diffuse_transmission,
+            flip_normal_map_y: mat.flip_normal_map_y,
+            reflectance: mat.specular_tint.to_linear().to_vec3() * mat.reflectance,
+            alpha_blend: transparent_draw_from_alpha_mode(&mat.alpha_mode),
+            has_normal_map: mat.normal_map_texture.is_some(),
+            base_color_texture: mat.base_color_texture.clone(),
+            normal_map_texture: mat.normal_map_texture.clone(),
+            metallic_roughness_texture: mat.metallic_roughness_texture.clone(),
+            emissive_texture: mat.emissive_texture.clone(),
+            alpha_mode: mat.alpha_mode,
+            cull_mode: mat.cull_mode,
+        }
     }
 }
