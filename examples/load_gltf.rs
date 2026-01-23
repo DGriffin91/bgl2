@@ -16,6 +16,7 @@ use bevy::{
 };
 use bevy_mod_mipmap_generator::{MipmapGeneratorPlugin, generate_mipmaps};
 use bevy_opengl::{
+    bevy_standard_lighting::OpenGLStandardLightingPlugin,
     bevy_standard_material::{
         OpenGLStandardMaterialPlugin, OpenGLStandardMaterialSettings, ReadReflection,
         SkipReflection,
@@ -79,7 +80,11 @@ fn main() {
     ));
 
     if !args.bevy {
-        app.add_plugins((OpenGLRenderPlugins, OpenGLStandardMaterialPlugin));
+        app.add_plugins((
+            OpenGLRenderPlugins,
+            OpenGLStandardLightingPlugin,
+            OpenGLStandardMaterialPlugin,
+        ));
     }
 
     app.add_systems(Update, generate_mipmaps::<StandardMaterial>)

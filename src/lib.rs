@@ -854,16 +854,18 @@ pub fn shader_key(vertex: &Path, fragment: &Path, shader_defs: &[(&str, &str)]) 
 
 pub trait UniformValue: Sized {
     fn load(&self, gl: &glow::Context, loc: &glow::UniformLocation);
-    fn read_raw(&self, out: &mut StackStack<u32, 16>);
+    // Return false is read raw is not supported
+    fn read_raw(&self, out: &mut StackStack<u32, 16>) -> bool;
 }
 
 impl UniformValue for bool {
     fn load(&self, gl: &glow::Context, loc: &glow::UniformLocation) {
         unsafe { gl.uniform_1_i32(Some(&loc), if *self { 1 } else { 0 }) };
     }
-    fn read_raw(&self, out: &mut StackStack<u32, 16>) {
+    fn read_raw(&self, out: &mut StackStack<u32, 16>) -> bool {
         out.clear();
         out.push(if *self { 1 } else { 0 });
+        true
     }
 }
 
@@ -871,9 +873,10 @@ impl UniformValue for f32 {
     fn load(&self, gl: &glow::Context, loc: &glow::UniformLocation) {
         unsafe { gl.uniform_1_f32(Some(&loc), *self) };
     }
-    fn read_raw(&self, out: &mut StackStack<u32, 16>) {
+    fn read_raw(&self, out: &mut StackStack<u32, 16>) -> bool {
         out.clear();
         out.push(self.to_bits());
+        true
     }
 }
 
@@ -881,8 +884,8 @@ impl UniformValue for &[f32] {
     fn load(&self, gl: &glow::Context, loc: &glow::UniformLocation) {
         unsafe { gl.uniform_1_f32_slice(Some(&loc), &bytemuck::cast_slice(self)) };
     }
-    fn read_raw(&self, _out: &mut StackStack<u32, 16>) {
-        unimplemented!("read_raw for slices not supported");
+    fn read_raw(&self, _out: &mut StackStack<u32, 16>) -> bool {
+        false
     }
 }
 
@@ -890,9 +893,10 @@ impl UniformValue for i32 {
     fn load(&self, gl: &glow::Context, loc: &glow::UniformLocation) {
         unsafe { gl.uniform_1_i32(Some(&loc), *self) };
     }
-    fn read_raw(&self, out: &mut StackStack<u32, 16>) {
+    fn read_raw(&self, out: &mut StackStack<u32, 16>) -> bool {
         out.clear();
         out.push(*self as u32);
+        true
     }
 }
 
@@ -900,9 +904,10 @@ impl UniformValue for Vec2 {
     fn load(&self, gl: &glow::Context, loc: &glow::UniformLocation) {
         unsafe { gl.uniform_2_f32_slice(Some(&loc), &self.to_array()) };
     }
-    fn read_raw(&self, out: &mut StackStack<u32, 16>) {
+    fn read_raw(&self, out: &mut StackStack<u32, 16>) -> bool {
         out.clear();
         self.to_array().iter().for_each(|n| out.push(n.to_bits()));
+        true
     }
 }
 
@@ -910,8 +915,17 @@ impl UniformValue for &[Vec2] {
     fn load(&self, gl: &glow::Context, loc: &glow::UniformLocation) {
         unsafe { gl.uniform_2_f32_slice(Some(&loc), &bytemuck::cast_slice(self)) };
     }
-    fn read_raw(&self, _out: &mut StackStack<u32, 16>) {
-        unimplemented!("read_raw for slices not supported");
+    fn read_raw(&self, _out: &mut StackStack<u32, 16>) -> bool {
+        false
+    }
+}
+
+impl UniformValue for Vec<Vec2> {
+    fn load(&self, gl: &glow::Context, loc: &glow::UniformLocation) {
+        unsafe { gl.uniform_2_f32_slice(Some(&loc), &bytemuck::cast_slice(self.as_slice())) };
+    }
+    fn read_raw(&self, _out: &mut StackStack<u32, 16>) -> bool {
+        false
     }
 }
 
@@ -919,9 +933,10 @@ impl UniformValue for Vec3 {
     fn load(&self, gl: &glow::Context, loc: &glow::UniformLocation) {
         unsafe { gl.uniform_3_f32_slice(Some(&loc), &self.to_array()) };
     }
-    fn read_raw(&self, out: &mut StackStack<u32, 16>) {
+    fn read_raw(&self, out: &mut StackStack<u32, 16>) -> bool {
         out.clear();
         self.to_array().iter().for_each(|n| out.push(n.to_bits()));
+        true
     }
 }
 
@@ -929,8 +944,17 @@ impl UniformValue for &[Vec3] {
     fn load(&self, gl: &glow::Context, loc: &glow::UniformLocation) {
         unsafe { gl.uniform_3_f32_slice(Some(&loc), &bytemuck::cast_slice(self)) };
     }
-    fn read_raw(&self, _out: &mut StackStack<u32, 16>) {
-        unimplemented!("read_raw for slices not supported");
+    fn read_raw(&self, _out: &mut StackStack<u32, 16>) -> bool {
+        false
+    }
+}
+
+impl UniformValue for Vec<Vec3> {
+    fn load(&self, gl: &glow::Context, loc: &glow::UniformLocation) {
+        unsafe { gl.uniform_3_f32_slice(Some(&loc), &bytemuck::cast_slice(self.as_slice())) };
+    }
+    fn read_raw(&self, _out: &mut StackStack<u32, 16>) -> bool {
+        false
     }
 }
 
@@ -938,9 +962,10 @@ impl UniformValue for Vec4 {
     fn load(&self, gl: &glow::Context, loc: &glow::UniformLocation) {
         unsafe { gl.uniform_4_f32_slice(Some(&loc), &self.to_array()) };
     }
-    fn read_raw(&self, out: &mut StackStack<u32, 16>) {
+    fn read_raw(&self, out: &mut StackStack<u32, 16>) -> bool {
         out.clear();
         self.to_array().iter().for_each(|n| out.push(n.to_bits()));
+        true
     }
 }
 
@@ -948,8 +973,17 @@ impl UniformValue for &[Vec4] {
     fn load(&self, gl: &glow::Context, loc: &glow::UniformLocation) {
         unsafe { gl.uniform_4_f32_slice(Some(&loc), &bytemuck::cast_slice(self)) };
     }
-    fn read_raw(&self, _out: &mut StackStack<u32, 16>) {
-        unimplemented!("read_raw for slices not supported");
+    fn read_raw(&self, _out: &mut StackStack<u32, 16>) -> bool {
+        false
+    }
+}
+
+impl UniformValue for Vec<Vec4> {
+    fn load(&self, gl: &glow::Context, loc: &glow::UniformLocation) {
+        unsafe { gl.uniform_4_f32_slice(Some(&loc), &bytemuck::cast_slice(self.as_slice())) };
+    }
+    fn read_raw(&self, _out: &mut StackStack<u32, 16>) -> bool {
+        false
     }
 }
 
@@ -963,11 +997,12 @@ impl UniformValue for Mat4 {
             )
         };
     }
-    fn read_raw(&self, out: &mut StackStack<u32, 16>) {
+    fn read_raw(&self, out: &mut StackStack<u32, 16>) -> bool {
         out.clear();
         self.to_cols_array()
             .iter()
             .for_each(|n| out.push(n.to_bits()));
+        true
     }
 }
 
@@ -975,8 +1010,19 @@ impl UniformValue for &[Mat4] {
     fn load(&self, gl: &glow::Context, loc: &glow::UniformLocation) {
         unsafe { gl.uniform_matrix_4_f32_slice(Some(&loc), false, &bytemuck::cast_slice(self)) };
     }
-    fn read_raw(&self, _out: &mut StackStack<u32, 16>) {
-        unimplemented!("read_raw for slices not supported");
+    fn read_raw(&self, _out: &mut StackStack<u32, 16>) -> bool {
+        false
+    }
+}
+
+impl UniformValue for Vec<Mat4> {
+    fn load(&self, gl: &glow::Context, loc: &glow::UniformLocation) {
+        unsafe {
+            gl.uniform_matrix_4_f32_slice(Some(&loc), false, &bytemuck::cast_slice(self.as_slice()))
+        };
+    }
+    fn read_raw(&self, _out: &mut StackStack<u32, 16>) -> bool {
+        false
     }
 }
 
@@ -984,12 +1030,13 @@ impl UniformValue for LinearRgba {
     fn load(&self, gl: &glow::Context, loc: &glow::UniformLocation) {
         unsafe { gl.uniform_4_f32_slice(Some(&loc), &self.to_vec4().to_array()) };
     }
-    fn read_raw(&self, out: &mut StackStack<u32, 16>) {
+    fn read_raw(&self, out: &mut StackStack<u32, 16>) -> bool {
         out.clear();
         self.to_vec4()
             .to_array()
             .iter()
             .for_each(|n| out.push(n.to_bits()));
+        true
     }
 }
 
@@ -997,13 +1044,14 @@ impl UniformValue for Color {
     fn load(&self, gl: &glow::Context, loc: &glow::UniformLocation) {
         unsafe { gl.uniform_4_f32_slice(Some(&loc), &self.to_linear().to_vec4().to_array()) };
     }
-    fn read_raw(&self, out: &mut StackStack<u32, 16>) {
+    fn read_raw(&self, out: &mut StackStack<u32, 16>) -> bool {
         out.clear();
         self.to_linear()
             .to_vec4()
             .to_array()
             .iter()
             .for_each(|n| out.push(n.to_bits()));
+        true
     }
 }
 
@@ -1075,8 +1123,9 @@ pub fn load_if_new<T: UniformValue>(
             previous,
             location,
         } => {
-            v.read_raw(temp);
-            if !*init || temp != previous {
+            if !v.read_raw(temp) {
+                v.load(&gl, &location);
+            } else if !*init || temp != previous {
                 *init = true;
                 std::mem::swap(previous, temp);
                 v.load(&gl, &location);
@@ -1117,11 +1166,11 @@ pub fn load_tex_if_new(tex: &Tex, gl: &glow::Context, gpu_images: &GpuImages, sl
                 }
             }
             unsafe {
-                if let Some(previous) = previous.as_ref() {
-                    if previous == &texture {
-                        return;
-                    }
-                }
+                //if let Some(previous) = previous.as_ref() {
+                //    if previous == &texture {
+                //        return;
+                //    }
+                //}
                 // TODO needs to use info from the texture to actually setup correctly
                 gl.active_texture(glow::TEXTURE0 + *texture_slot);
                 gl.bind_texture(*target, Some(texture));

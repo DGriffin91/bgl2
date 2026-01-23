@@ -8,10 +8,9 @@ use uniform_set_derive::UniformSet;
 use crate::{
     SlotData, UniformSet, UniformValue,
     bevy_standard_lighting::{
-        DEFAULT_MAX_JOINTS_DEF, DEFAULT_MAX_LIGHTS_DEF, bind_standard_lighting, standard_pbr_glsl,
-        standard_pbr_lighting_glsl, standard_shadow_sampling_glsl,
+        DEFAULT_MAX_JOINTS_DEF, DEFAULT_MAX_LIGHTS_DEF, StandardLightingUniforms,
+        standard_pbr_glsl, standard_pbr_lighting_glsl, standard_shadow_sampling_glsl,
     },
-    clone2,
     command_encoder::CommandEncoder,
     faststack::StackStack,
     flip_cull_mode, load_if_new, load_match, load_tex_if_new,
@@ -161,20 +160,17 @@ pub fn standard_material_render(
         Has<ReadReflection>,
         Option<&JointData>,
     )>,
-    camera: Single<(&ViewUniforms, Option<&EnvironmentMapLight>)>,
-    point_lights: Query<(&PointLight, &GlobalTransform)>,
-    spot_lights: Query<(&SpotLight, &GlobalTransform)>,
-    directional_lights: Query<(&DirectionalLight, &GlobalTransform)>,
+    view_uniforms: Single<&ViewUniforms>,
     materials: Res<Assets<StandardMaterial>>,
     phase: Res<RenderPhase>,
     mut transparent_draws: ResMut<DeferredAlphaBlendDraws>,
-    shadow: Option<Res<DirectionalLightShadow>>,
     reflect_uniforms: Option<Res<ReflectionUniforms>>,
     sorted: Res<DrawsSortedByMaterial>,
     mut cmd: ResMut<CommandEncoder>,
     prefs: Res<OpenGLStandardMaterialSettings>,
+    shadow: Option<Res<DirectionalLightShadow>>,
+    standard_lighting: Res<StandardLightingUniforms>,
 ) {
-    let (view_uniforms, env_light) = *camera;
     let view_uniforms = view_uniforms.clone();
 
     let phase = *phase;
@@ -212,11 +208,9 @@ pub fn standard_material_render(
         joint_data,
     ) in iter
     {
-        if phase.can_use_camera_frustum_cull() && !view_vis.get() {
-            continue;
-        }
-
-        if skip_reflect && phase.reflection() {
+        if (phase.can_use_camera_frustum_cull() && !view_vis.get())
+            || (skip_reflect && phase.reflection())
+        {
             continue;
         }
 
@@ -256,23 +250,12 @@ pub fn standard_material_render(
         });
     }
 
-    let point_lights = point_lights
-        .iter()
-        .map(|(a, b)| (a.clone(), b.clone()))
-        .collect::<Vec<_>>();
-    let spot_lights = spot_lights
-        .iter()
-        .map(|(a, b)| (a.clone(), b.clone()))
-        .collect::<Vec<_>>();
-    let directional_light = clone2(directional_lights.single().ok());
-    let env_light = env_light.cloned();
-
     let view_uniforms = view_uniforms.clone();
-    let shadow = shadow.as_deref().cloned();
     let reflect_uniforms = reflect_uniforms.as_deref().cloned();
     let prefs = prefs.clone();
+    let standard_lighting = standard_lighting.clone();
+    let shadow = shadow.as_deref().cloned();
     cmd.record(move |ctx| {
-        let env_light = env_light.clone();
         let shadow_def;
         if phase.depth_only() {
             shadow_def = shadow
@@ -307,8 +290,10 @@ pub fn standard_material_render(
         ctx.load("write_reflection", phase.reflection());
 
         ctx.map_uniform_set_locations::<ViewUniforms>();
-        ctx.bind_uniforms_set(&view_uniforms);
         ctx.map_uniform_set_locations::<StandardMaterial>();
+        ctx.map_uniform_set_locations::<StandardLightingUniforms>();
+        ctx.bind_uniforms_set(&view_uniforms);
+        ctx.bind_uniforms_set(&standard_lighting);
         let mut reflect_bool_location = None;
 
         if !phase.depth_only() {
@@ -317,18 +302,6 @@ pub fn standard_material_render(
                 ctx.map_uniform_set_locations::<ReflectionUniforms>();
                 ctx.bind_uniforms_set(reflect_uniforms);
             }
-
-            let point_lights = point_lights.iter().map(|(a, b)| (a, b));
-            let spot_lights = spot_lights.iter().map(|(a, b)| (a, b));
-
-            bind_standard_lighting(
-                ctx,
-                point_lights,
-                spot_lights,
-                directional_light,
-                env_light,
-                shadow.as_ref(),
-            );
         }
 
         let mut last_material = None;

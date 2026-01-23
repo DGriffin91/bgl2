@@ -72,8 +72,8 @@ void main() {
         normal = apply_normal_mapping(normal_map_texture, vert_normal, tangent, uv_0, flip_normal_map_y, double_sided);
     }
 
-    vec3 output_color = apply_pbr_lighting(V, diffuse_color, F0, vert_normal, normal, perceptual_roughness, 
-                                          diffuse_transmission, screen_uv, view_resolution, ws_position);
+    vec3 output_color = apply_pbr_lighting(V, diffuse_color, F0, vert_normal, normal, perceptual_roughness,
+            diffuse_transmission, screen_uv, view_resolution, ws_position);
 
     // TODO return struct from standard_lighting so the env map can be properly replaced by reflection?
     if (read_reflection && perceptual_roughness < 0.2) {

@@ -1,8 +1,12 @@
-use std::f32::consts::PI;
+use std::{f32::consts::PI, ops::Deref};
 
 use bevy::prelude::*;
+use uniform_set_derive::UniformSet;
 
-use crate::{BevyGlContext, mesh_util::octahedral_encode, phase_shadow::DirectionalLightShadow};
+use crate::{
+    clone2, mesh_util::octahedral_encode, phase_shadow::DirectionalLightShadow,
+    prepare_image::TextureRef, render::RenderSet,
+};
 
 // It seems like some drivers are limited by code length.
 // The point light loop is unrolled so setting this too high can be an issue.
@@ -13,6 +17,49 @@ pub const DEFAULT_MAX_LIGHTS_DEF: (&str, &str) = ("MAX_POINT_LIGHTS", "8");
 // vertex shader uniform capacity can be limited on some drivers (though not as much as in the frag shader.)
 pub const DEFAULT_MAX_JOINTS: usize = 32;
 pub const DEFAULT_MAX_JOINTS_DEF: (&str, &str) = ("MAX_JOINTS", "32");
+
+#[derive(UniformSet, Resource, Clone, Default)]
+pub struct StandardLightingUniforms {
+    pub ub_point_light_position_range: Vec<Vec4>,
+    pub ub_point_light_color_radius: Vec<Vec4>,
+    pub ub_spot_light_dir_offset_scale: Vec<Vec4>,
+    pub ub_directional_light_dir: Vec3,
+    pub ub_directional_light_color: Vec3,
+    pub ub_specular_map: Option<Handle<Image>>,
+    pub ub_diffuse_map: Option<Handle<Image>>,
+    pub ub_shadow_texture: TextureRef,
+    pub ub_env_intensity: f32,
+    pub ub_shadow_clip_from_world: Mat4,
+    pub ub_light_count: i32,
+}
+
+#[derive(Default)]
+pub struct OpenGLStandardLightingPlugin;
+
+impl Plugin for OpenGLStandardLightingPlugin {
+    fn build(&self, app: &mut App) {
+        app.init_resource::<StandardLightingUniforms>()
+            .add_systems(Update, prepare_standard_lighting.in_set(RenderSet::Prepare));
+    }
+}
+
+fn prepare_standard_lighting(
+    point_lights: Query<(&PointLight, &GlobalTransform)>,
+    spot_lights: Query<(&SpotLight, &GlobalTransform)>,
+    directional_lights: Query<(&DirectionalLight, &GlobalTransform)>,
+    shadow: Option<Res<DirectionalLightShadow>>,
+    env_light: Single<Option<&EnvironmentMapLight>, With<Camera3d>>,
+    mut standard_lighting: ResMut<StandardLightingUniforms>,
+) {
+    *standard_lighting = StandardLightingUniforms::new(
+        point_lights,
+        spot_lights,
+        clone2(directional_lights.single().ok()),
+        *env_light.deref(),
+        shadow.as_deref(),
+        DEFAULT_MAX_POINT_LIGHTS,
+    );
+}
 
 /// Expects SAMPLE_SHADOW shader def based on shadow availability
 pub fn standard_pbr_lighting_glsl() -> &'static str {
@@ -27,81 +74,72 @@ pub fn standard_shadow_sampling_glsl() -> &'static str {
     include_str!("shaders/shadow_sampling.glsl")
 }
 
-pub fn bind_standard_lighting<'a, PI, SI>(
-    ctx: &mut BevyGlContext,
-    point_lights: PI,
-    spot_lights: SI,
-    directional_light: Option<(DirectionalLight, GlobalTransform)>,
-    env_light: Option<EnvironmentMapLight>,
-    shadow: Option<&DirectionalLightShadow>,
-) where
-    PI: IntoIterator<Item = (&'a PointLight, &'a GlobalTransform)>,
-    SI: IntoIterator<Item = (&'a SpotLight, &'a GlobalTransform)>,
-{
-    let env_light = env_light.unwrap();
+impl StandardLightingUniforms {
+    pub fn new<'a, PI, SI>(
+        point_lights: PI,
+        spot_lights: SI,
+        directional_light: Option<(DirectionalLight, GlobalTransform)>,
+        env_light: Option<&EnvironmentMapLight>,
+        shadow: Option<&DirectionalLightShadow>,
+        max_point_spot: usize,
+    ) -> Self
+    where
+        PI: IntoIterator<Item = (&'a PointLight, &'a GlobalTransform)>,
+        SI: IntoIterator<Item = (&'a SpotLight, &'a GlobalTransform)>,
+    {
+        let mut data = StandardLightingUniforms::default();
 
-    let specular_map = env_light.specular_map.clone();
-    ctx.load_tex("B_specular_map", &specular_map.clone().into());
-    let diffuse_map = env_light.diffuse_map.clone();
-    ctx.load_tex("B_diffuse_map", &diffuse_map.clone().into());
-    ctx.load("B_env_intensity", env_light.intensity);
+        for (light, trans) in point_lights {
+            if data.ub_point_light_position_range.len() >= max_point_spot {
+                break;
+            }
+            data.ub_point_light_position_range
+                .push(trans.translation().extend(light.range));
+            data.ub_point_light_color_radius.push(
+                (light.color.to_linear().to_vec3() * light.intensity * POWER_TO_INTENSITY)
+                    .extend(light.radius),
+            );
+            data.ub_spot_light_dir_offset_scale
+                .push(vec4(1.0, 0.0, 2.0, 1.0));
+        }
 
-    if let Some(shadow) = &shadow {
-        let shadow_texture = shadow.texture.clone();
-        ctx.load_tex("B_shadow_texture", &shadow_texture.clone().into());
-        let shadow_clip_from_world = shadow.cascade.clip_from_world;
-        ctx.load("B_shadow_clip_from_world", shadow_clip_from_world);
+        for (light, trans) in spot_lights {
+            if data.ub_point_light_position_range.len() >= max_point_spot {
+                break;
+            }
+            data.ub_point_light_position_range
+                .push(trans.translation().extend(light.range));
+            data.ub_point_light_color_radius.push(
+                (light.color.to_linear().to_vec3() * light.intensity * POWER_TO_INTENSITY)
+                    .extend(light.radius),
+            );
+            data.ub_spot_light_dir_offset_scale
+                .push(calc_spot_dir_offset_scale(light, trans));
+        }
+
+        data.ub_light_count = data.ub_point_light_position_range.len() as i32;
+
+        if let Some((light, trans)) = directional_light {
+            data.ub_directional_light_dir = trans.forward().as_vec3();
+            data.ub_directional_light_color = light.color.to_linear().to_vec3() * light.illuminance;
+        }
+
+        if let Some(env_light) = env_light {
+            data.ub_specular_map = Some(env_light.specular_map.clone());
+            data.ub_diffuse_map = Some(env_light.diffuse_map.clone());
+            data.ub_env_intensity = env_light.intensity;
+        }
+
+        if let Some(shadow) = &shadow {
+            data.ub_shadow_texture = shadow.texture.clone();
+            data.ub_shadow_clip_from_world = shadow.cascade.clip_from_world;
+        }
+
+        data
     }
-
-    if let Some((light, trans)) = directional_light {
-        ctx.load("B_directional_light_dir", trans.forward().as_vec3());
-        ctx.load(
-            "B_directional_light_color",
-            light.color.to_linear().to_vec3() * light.illuminance,
-        );
-    } else {
-        ctx.load("B_directional_light_dir", Vec3::ZERO);
-        ctx.load("B_directional_light_color", Vec3::ZERO);
-    }
-
-    let mut point_light_position_range = Vec::new();
-    let mut point_light_color_radius = Vec::new();
-    let mut spot_light_dir_offset_scale = Vec::new();
-    for (light, trans) in point_lights {
-        point_light_position_range.push(trans.translation().extend(light.range));
-        point_light_color_radius.push(
-            (light.color.to_linear().to_vec3() * light.intensity * POWER_TO_INTENSITY)
-                .extend(light.radius),
-        );
-        spot_light_dir_offset_scale.push(vec4(1.0, 0.0, 2.0, 1.0));
-    }
-
-    for (light, trans) in spot_lights {
-        point_light_position_range.push(trans.translation().extend(light.range));
-        point_light_color_radius.push(
-            (light.color.to_linear().to_vec3() * light.intensity * POWER_TO_INTENSITY)
-                .extend(light.radius),
-        );
-        spot_light_dir_offset_scale.push(spot_dir_offset_scale(light, trans));
-    }
-
-    let light_count = point_light_position_range.len() as i32;
-    ctx.load("B_light_count", light_count);
-    ctx.load(
-        "B_point_light_position_range",
-        point_light_position_range.as_slice(),
-    );
-    ctx.load(
-        "B_point_light_color_radius",
-        point_light_color_radius.as_slice(),
-    );
-    ctx.load(
-        "B_spot_light_dir_offset_scale",
-        spot_light_dir_offset_scale.as_slice(),
-    );
 }
 
-pub fn spot_dir_offset_scale(light: &SpotLight, trans: &GlobalTransform) -> Vec4 {
+pub fn calc_spot_dir_offset_scale(light: &SpotLight, trans: &GlobalTransform) -> Vec4 {
     // https://github.com/bevyengine/bevy/blob/abb8c353f49a6fe9e039e82adbe1040488ad910a/crates/bevy_pbr/src/render/light.rs#L846
     let cos_outer = light.outer_angle.cos();
     let spot_scale = 1.0 / (light.inner_angle.cos() - cos_outer).max(1e-4);

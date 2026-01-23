@@ -50,6 +50,12 @@ pub struct GpuImages {
 #[derive(Clone)]
 pub struct TextureRef(Arc<AtomicU32>);
 
+impl Default for TextureRef {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl TextureRef {
     pub fn new() -> Self {
         TextureRef(Arc::new(AtomicU32::new(u32::MAX)))

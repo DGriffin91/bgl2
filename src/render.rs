@@ -111,6 +111,7 @@ fn present(
     let width = bevy_window.physical_width().max(1);
     let height = bevy_window.physical_height().max(1);
     let resized = resized.len() > 0;
+    #[cfg(target_arch = "wasm32")]
     let bevy_window_entity = *bevy_window_entity;
     cmd.record(move |ctx| {
         ctx.swap();
