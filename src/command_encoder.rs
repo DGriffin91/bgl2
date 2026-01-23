@@ -8,7 +8,11 @@ use bevy::prelude::*;
 use glow::HasContext;
 use wgpu_types::Face;
 
-use crate::{BevyGlContext, WindowInitData, prepare_image::TextureRef, render::RenderSet};
+use crate::{
+    BevyGlContext, WindowInitData,
+    prepare_image::{GpuImages, TextureRef},
+    render::RenderSet,
+};
 
 pub struct CommandEncoderPlugin;
 
@@ -64,9 +68,12 @@ impl CommandEncoderSender {
     fn receiver_thread(window_init_data: WindowInitData, receiver: Receiver<CommandEncoder>) {
         thread::spawn(move || {
             let mut ctx = BevyGlContext::new(window_init_data);
+            let mut world = World::new();
             loop {
                 if let Ok(mut msg) = receiver.recv() {
-                    msg.commands.iter_mut().for_each(|cmd| cmd(&mut ctx));
+                    msg.commands
+                        .iter_mut()
+                        .for_each(|cmd| cmd(&mut ctx, &mut world));
                 }
             }
         });
@@ -75,14 +82,14 @@ impl CommandEncoderSender {
 
 #[derive(Resource, Default)]
 pub struct CommandEncoder {
-    pub commands: Vec<Box<dyn FnMut(&mut BevyGlContext) + Send + Sync>>,
+    pub commands: Vec<Box<dyn FnMut(&mut BevyGlContext, &mut World) + Send + Sync>>,
     pub next_buffer_id: usize,
 }
 
 impl CommandEncoder {
     pub fn record<F>(&mut self, f: F)
     where
-        F: FnMut(&mut BevyGlContext) + Send + Sync + 'static,
+        F: FnMut(&mut BevyGlContext, &mut World) + Send + Sync + 'static,
     {
         self.commands.push(Box::new(f));
     }
@@ -90,73 +97,81 @@ impl CommandEncoder {
     pub fn bevy_image(&mut self, image: Image) -> TextureRef {
         let texture_ref = TextureRef::new();
         let return_tex = texture_ref.clone();
-        self.record(move |ctx| {
-            ctx.add_bevy_image_set_ref(None, &image, &texture_ref);
+        self.record(move |ctx, world| {
+            world.resource_mut::<GpuImages>().add_bevy_image_set_ref(
+                ctx,
+                None,
+                &image,
+                &texture_ref,
+            );
         });
         return_tex
     }
 
     pub fn clear_color_and_depth(&mut self, color: Option<Vec4>) {
-        self.record(move |ctx| {
+        self.record(move |ctx, _world| {
             ctx.clear_color_and_depth(color);
         });
     }
 
     pub fn clear_color(&mut self, color: Option<Vec4>) {
-        self.record(move |ctx| {
+        self.record(move |ctx, _world| {
             ctx.clear_color(color);
         });
     }
 
     pub fn clear_depth(&mut self) {
-        self.record(move |ctx| {
+        self.record(move |ctx, _world| {
             ctx.clear_depth();
         });
     }
 
     pub fn start_alpha_blend(&mut self) {
-        self.record(move |ctx| {
+        self.record(move |ctx, _world| {
             ctx.start_alpha_blend();
         });
     }
 
     /// It's not necessary to write depth after a prepass if everything is also included in opaque.
     pub fn start_opaque(&mut self, write_depth: bool) {
-        self.record(move |ctx| {
+        self.record(move |ctx, _world| {
             ctx.start_opaque(write_depth);
         });
     }
 
     pub fn start_depth_only(&mut self) {
-        self.record(move |ctx| {
+        self.record(move |ctx, _world| {
             ctx.start_depth_only();
         });
     }
 
     pub fn set_cull_mode(&mut self, cull_mode: Option<Face>) {
-        self.record(move |ctx| {
+        self.record(move |ctx, _world| {
             ctx.set_cull_mode(cull_mode);
         });
     }
 
     /// Only calls flush on webgl
     pub fn swap(&mut self) {
-        self.record(move |ctx| {
+        self.record(move |ctx, _world| {
             ctx.swap();
         });
     }
 
     pub fn delete_texture_ref(&mut self, texture_ref: TextureRef) {
-        self.record(move |ctx| unsafe {
-            if let Some((tex, _target)) = ctx.texture_from_ref(&texture_ref) {
+        self.record(move |ctx, world| unsafe {
+            if let Some((tex, _target)) = world
+                .resource_mut::<GpuImages>()
+                .texture_from_ref(&texture_ref)
+            {
                 ctx.gl.delete_texture(tex);
             }
         });
     }
 
     pub fn delete_image(&mut self, id: AssetId<Image>) {
-        self.record(move |ctx| {
-            if let Some(tex) = ctx.image.bevy_textures.remove(&id) {
+        self.record(move |ctx, world| {
+            if let Some(tex) = world.resource_mut::<GpuImages>().bevy_textures.remove(&id) {
                 unsafe { ctx.gl.delete_texture(tex.0) };
             }
         });

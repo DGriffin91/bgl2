@@ -34,11 +34,20 @@ impl Plugin for PrepareImagePlugin {
             warn!("No ImagePlugin found. Try adding PrepareImagePlugin after DefaultPlugins");
         }
 
-        app.add_systems(PostUpdate, send_images_to_gpu.in_set(RenderSet::Prepare));
+        app.add_systems(
+            Startup,
+            (|mut cmd: ResMut<CommandEncoder>| {
+                cmd.record(|_ctx, world| {
+                    world.init_resource::<GpuImages>();
+                });
+            })
+            .in_set(RenderSet::Init),
+        )
+        .add_systems(PostUpdate, send_images_to_gpu.in_set(RenderSet::Prepare));
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Resource)]
 pub struct GpuImages {
     // u32 is target glow::TEXTURE_2D or glow::TEXTURE_CUBE_MAP
     pub bevy_textures: HashMap<AssetId<Image>, (glow::Texture, u32)>,
@@ -69,14 +78,15 @@ impl TextureRef {
     }
 }
 
-impl BevyGlContext {
+impl GpuImages {
     /// returns index into raw_textures
     pub fn add_bevy_image(
         &mut self,
+        ctx: &BevyGlContext,
         default_sampler: Option<ImageSamplerDescriptor>,
         bevy_image: &Image,
     ) -> Option<u32> {
-        let Some((texture, target)) = bevy_image_to_gl_texture(self, default_sampler, bevy_image)
+        let Some((texture, target)) = bevy_image_to_gl_texture(ctx, default_sampler, bevy_image)
         else {
             return None;
         };
@@ -86,11 +96,12 @@ impl BevyGlContext {
     /// sets TextureReference index into raw_textures
     pub fn add_bevy_image_set_ref(
         &mut self,
+        ctx: &BevyGlContext,
         default_sampler: Option<ImageSamplerDescriptor>,
         bevy_image: &Image,
         texture_ref: &TextureRef,
     ) -> Option<u32> {
-        let Some(idx) = self.add_bevy_image(default_sampler, bevy_image) else {
+        let Some(idx) = self.add_bevy_image(ctx, default_sampler, bevy_image) else {
             return None;
         };
         texture_ref.set(idx);
@@ -99,8 +110,8 @@ impl BevyGlContext {
 
     /// returns index into raw_textures
     pub fn add_texture(&mut self, texture: glow::Texture, target: u32) -> u32 {
-        let idx = self.image.raw_textures.len() as u32;
-        self.image.raw_textures.push((texture, target));
+        let idx = self.raw_textures.len() as u32;
+        self.raw_textures.push((texture, target));
         idx
     }
 
@@ -120,7 +131,7 @@ impl BevyGlContext {
         let Some(idx) = texture_ref.get() else {
             return None;
         };
-        Some(self.image.raw_textures[idx as usize])
+        Some(self.raw_textures[idx as usize])
     }
 }
 
@@ -130,8 +141,9 @@ pub fn send_images_to_gpu(
     default_sampler: Res<DefaultSampler>,
     mut cmd: ResMut<CommandEncoder>,
 ) {
-    cmd.record(|ctx| {
-        if ctx.image.placeholder.is_none() {
+    cmd.record(|ctx, world| {
+        let mut image = world.resource_mut::<GpuImages>();
+        if image.placeholder.is_none() {
             unsafe {
                 let texture = ctx.gl.create_texture().unwrap();
                 ctx.gl.bind_texture(glow::TEXTURE_2D, Some(texture));
@@ -146,7 +158,7 @@ pub fn send_images_to_gpu(
                     glow::UNSIGNED_BYTE,
                     PixelUnpackData::Slice(Some(&[255, 255, 255, 255])),
                 );
-                ctx.image.placeholder = Some(texture);
+                image.placeholder = Some(texture);
             }
         }
     });
@@ -178,14 +190,15 @@ pub fn send_images_to_gpu(
 
             let bevy_image = bevy_image.clone();
             let default_sampler = default_sampler.clone();
-            cmd.record(move |ctx| {
+            cmd.record(move |ctx, world| {
+                let mut image = world.resource_mut::<GpuImages>();
                 let Some((texture, target)) =
                     bevy_image_to_gl_texture(&ctx, Some(default_sampler.clone()), &bevy_image)
                 else {
                     return;
                 };
 
-                if let Some(old) = ctx.image.bevy_textures.insert(handle, (texture, target)) {
+                if let Some(old) = image.bevy_textures.insert(handle, (texture, target)) {
                     unsafe { ctx.gl.delete_texture(old.0) };
                 }
             });

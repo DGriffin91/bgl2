@@ -48,7 +48,6 @@ use crate::faststack::FastStack;
 use crate::faststack::StackStack;
 use crate::prepare_image::GpuImages;
 use crate::prepare_image::TextureRef;
-use crate::prepare_mesh::GpuMeshBufferMap;
 use crate::watchers::Watchers;
 
 pub type ShaderIndex = u32;
@@ -72,9 +71,6 @@ pub struct BevyGlContext {
     pub temp_slot_data: StackStack<u32, 16>,
     pub uniform_location_cache: HashMap<String, Option<UniformLocation>>,
     pub current_texture_slot_count: usize,
-    pub mesh: GpuMeshBufferMap,
-    pub image: GpuImages,
-    pub egui_painter: Option<egui_glow::Painter>, // References gl directly so needs to live on the render thread
 }
 
 impl Drop for BevyGlContext {
@@ -276,9 +272,6 @@ impl BevyGlContext {
                 temp_slot_data: Default::default(),
                 uniform_location_cache: Default::default(),
                 current_texture_slot_count: 0,
-                mesh: Default::default(),
-                image: Default::default(),
-                egui_painter: Default::default(),
             };
             ctx.test_for_glsl_lod();
             ctx
@@ -1250,7 +1243,7 @@ impl BevyGlContext {
 
         self.uniform_slot_map.insert(TypeId::of::<T>(), locations);
     }
-    pub fn bind_uniforms_set<T: UniformSet + 'static>(&mut self, v: &T) {
+    pub fn bind_uniforms_set<T: UniformSet + 'static>(&mut self, images: &GpuImages, v: &T) {
         for (index, slot) in self
             .uniform_slot_map
             .get_mut(&TypeId::of::<T>())
@@ -1264,7 +1257,7 @@ impl BevyGlContext {
             if let Some(slot) = slot {
                 v.load(
                     &self.gl,
-                    &self.image,
+                    &images,
                     index as u32,
                     slot,
                     &mut self.temp_slot_data,
@@ -1275,8 +1268,13 @@ impl BevyGlContext {
     #[inline]
     /// Loads the texture in the next available slot. Returns the texture slot and location if the location is found.
     /// Call set_tex() to update the texture at this slot.
-    pub fn load_tex(&mut self, name: &str, tex: &Tex) -> Option<(u32, glow::UniformLocation)> {
-        let mut texture = self.image.placeholder.unwrap();
+    pub fn load_tex(
+        &mut self,
+        images: &GpuImages,
+        name: &str,
+        tex: &Tex,
+    ) -> Option<(u32, glow::UniformLocation)> {
+        let mut texture = images.placeholder.unwrap();
         let mut target = glow::TEXTURE_2D;
 
         let Some(location) = self.get_uniform_location(name) else {
@@ -1288,7 +1286,7 @@ impl BevyGlContext {
         match tex {
             Tex::Bevy(image_h) => {
                 if let Some(image_h) = image_h {
-                    if let Some(t) = self.image.bevy_textures.get(&image_h.id()) {
+                    if let Some(t) = images.bevy_textures.get(&image_h.id()) {
                         texture = t.0;
                         target = t.1;
                     }
@@ -1299,7 +1297,7 @@ impl BevyGlContext {
             }
             Tex::Ref(t_ref) => {
                 if let Some(idx) = t_ref.get() {
-                    let t = self.image.raw_textures[idx as usize];
+                    let t = images.raw_textures[idx as usize];
                     texture = t.0;
                     target = t.1;
                 }
@@ -1315,13 +1313,18 @@ impl BevyGlContext {
     }
 
     #[inline]
-    pub fn set_tex(&self, tex: &Tex, slot_location: (u32, glow::UniformLocation)) {
-        let mut texture = self.image.placeholder.unwrap();
+    pub fn set_tex(
+        &self,
+        tex: &Tex,
+        images: &GpuImages,
+        slot_location: (u32, glow::UniformLocation),
+    ) {
+        let mut texture = images.placeholder.unwrap();
         let mut target = glow::TEXTURE_2D;
         match tex {
             Tex::Bevy(image_h) => {
                 if let Some(image_h) = image_h {
-                    if let Some(t) = self.image.bevy_textures.get(&image_h.id()) {
+                    if let Some(t) = images.bevy_textures.get(&image_h.id()) {
                         texture = t.0;
                         target = t.1;
                     }
@@ -1332,7 +1335,7 @@ impl BevyGlContext {
             }
             Tex::Ref(t_ref) => {
                 if let Some(idx) = t_ref.get() {
-                    let t = self.image.raw_textures[idx as usize];
+                    let t = images.raw_textures[idx as usize];
                     texture = t.0;
                     target = t.1;
                 }

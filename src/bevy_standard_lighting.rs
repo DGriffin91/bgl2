@@ -4,8 +4,8 @@ use bevy::prelude::*;
 use uniform_set_derive::UniformSet;
 
 use crate::{
-    clone2, mesh_util::octahedral_encode, phase_shadow::DirectionalLightShadow,
-    prepare_image::TextureRef, render::RenderSet,
+    clone2, command_encoder::CommandEncoder, mesh_util::octahedral_encode,
+    phase_shadow::DirectionalLightShadow, prepare_image::TextureRef, render::RenderSet,
 };
 
 // It seems like some drivers are limited by code length.
@@ -54,9 +54,9 @@ fn prepare_standard_lighting(
     directional_lights: Query<(&DirectionalLight, &GlobalTransform)>,
     shadow: Option<Res<DirectionalLightShadow>>,
     env_light: Single<Option<&EnvironmentMapLight>, With<Camera3d>>,
-    mut standard_lighting: ResMut<StandardLightingUniforms>,
+    mut cmd: ResMut<CommandEncoder>,
 ) {
-    *standard_lighting = StandardLightingUniforms::new(
+    let lighting_uniform = StandardLightingUniforms::new(
         point_lights,
         spot_lights,
         clone2(directional_lights.single().ok()),
@@ -64,6 +64,9 @@ fn prepare_standard_lighting(
         shadow.as_deref(),
         DEFAULT_MAX_POINT_LIGHTS,
     );
+    cmd.record(move |_ctx, world| {
+        world.insert_resource(lighting_uniform.clone());
+    });
 }
 
 /// Expects SAMPLE_SHADOW shader def based on shadow availability

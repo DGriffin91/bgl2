@@ -3,7 +3,10 @@ use glow::{HasContext, PixelUnpackData};
 use uniform_set_derive::UniformSet;
 
 use crate::{
-    BevyGlContext, command_encoder::CommandEncoder, prepare_image::TextureRef, render::RenderSet,
+    BevyGlContext,
+    command_encoder::CommandEncoder,
+    prepare_image::{GpuImages, TextureRef},
+    render::RenderSet,
 };
 
 pub struct PlaneReflectPlugin;
@@ -58,12 +61,21 @@ fn update_reflect_tex(
                     reflection_plane_normal: normal,
                     reflect_texture: texture_ref.clone(),
                 });
-                cmd.record(move |ctx| {
+                cmd.record(move |ctx, world| {
                     unsafe {
-                        if let Some((tex, _target)) = ctx.texture_from_ref(&texture_ref) {
+                        if let Some((tex, _target)) = world
+                            .resource_mut::<GpuImages>()
+                            .texture_from_ref(&texture_ref)
+                        {
                             ctx.gl.delete_texture(tex);
                         }
-                        PlaneReflectionTexture::init(ctx, &texture_ref, width, height);
+                        PlaneReflectionTexture::init(
+                            ctx,
+                            &mut world.resource_mut::<GpuImages>(),
+                            &texture_ref,
+                            width,
+                            height,
+                        );
                     };
                 });
             }
@@ -85,8 +97,14 @@ fn update_reflect_tex(
                 width,
                 height,
             });
-            cmd.record(move |ctx| {
-                PlaneReflectionTexture::init(ctx, &texture_ref, width, height);
+            cmd.record(move |ctx, world| {
+                PlaneReflectionTexture::init(
+                    ctx,
+                    &mut world.resource_mut::<GpuImages>(),
+                    &texture_ref,
+                    width,
+                    height,
+                );
             });
         } else {
             return;
@@ -106,10 +124,16 @@ pub struct PlaneReflectionTexture {
 }
 
 impl PlaneReflectionTexture {
-    fn init(ctx: &mut BevyGlContext, texture_ref: &TextureRef, width: u32, height: u32) {
+    fn init(
+        ctx: &mut BevyGlContext,
+        images: &mut GpuImages,
+        texture_ref: &TextureRef,
+        width: u32,
+        height: u32,
+    ) {
         unsafe {
             let texture = ctx.gl.create_texture().unwrap();
-            ctx.add_texture_set_ref(texture, glow::TEXTURE_2D, &texture_ref);
+            images.add_texture_set_ref(texture, glow::TEXTURE_2D, &texture_ref);
             ctx.gl.bind_texture(glow::TEXTURE_2D, Some(texture));
             ctx.gl.tex_parameter_i32(
                 glow::TEXTURE_2D,
@@ -166,10 +190,13 @@ pub fn copy_reflection_texture(world: &mut World) {
         return;
     };
     let mut cmd = world.resource_mut::<CommandEncoder>();
-    cmd.record(move |ctx| {
+    cmd.record(move |ctx, world| {
         unsafe {
-            if let Some((tex, _target)) = ctx.texture_from_ref(&plane_reflection_texture.texture) {
-                ctx.gl.bind_texture(glow::TEXTURE_2D, Some(tex));
+            if let Some((tex, _target)) = &mut world
+                .resource_mut::<GpuImages>()
+                .texture_from_ref(&plane_reflection_texture.texture)
+            {
+                ctx.gl.bind_texture(glow::TEXTURE_2D, Some(*tex));
                 ctx.gl.copy_tex_image_2d(
                     glow::TEXTURE_2D,
                     0,

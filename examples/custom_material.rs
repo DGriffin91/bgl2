@@ -9,7 +9,8 @@ use bevy::{
 use bevy_opengl::{
     UniformSet,
     command_encoder::CommandEncoder,
-    prepare_image::TextureRef,
+    prepare_image::{GpuImages, TextureRef},
+    prepare_mesh::GpuMeshes,
     render::{OpenGLRenderPlugins, RenderPhase, RenderSet, register_render_system},
 };
 use uniform_set_derive::UniformSet;
@@ -153,7 +154,7 @@ fn render_custom_mat(
         });
     }
 
-    cmd.record(move |ctx| {
+    cmd.record(move |ctx, world| {
         let shader_index = bevy_opengl::shader_cached!(
             ctx,
             "../assets/shaders/custom_material.vert",
@@ -163,15 +164,17 @@ fn render_custom_mat(
         )
         .unwrap();
 
-        ctx.reset_mesh_bind_cache();
+        world.resource_mut::<GpuMeshes>().reset_mesh_bind_cache();
         ctx.use_cached_program(shader_index);
 
         ctx.map_uniform_set_locations::<CustomMaterial>();
 
         for draw in &draws {
             ctx.load("clip_from_local", draw.clip_from_local);
-            ctx.bind_uniforms_set(&draw.material);
-            ctx.draw_mesh(draw.mesh, shader_index);
+            ctx.bind_uniforms_set(world.resource::<GpuImages>(), &draw.material);
+            world
+                .resource_mut::<GpuMeshes>()
+                .draw_mesh(ctx, draw.mesh, shader_index);
         }
     });
 }

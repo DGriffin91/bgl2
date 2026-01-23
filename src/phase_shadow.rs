@@ -7,7 +7,7 @@ use glow::{HasContext, PixelUnpackData};
 use crate::{
     BevyGlContext,
     command_encoder::CommandEncoder,
-    prepare_image::TextureRef,
+    prepare_image::{GpuImages, TextureRef},
     render::{RenderPhase, RenderRunner, RenderSet},
 };
 
@@ -50,10 +50,19 @@ fn update_shadow_tex(
                 shadow_tex.width = width;
                 shadow_tex.height = height;
                 shadow_tex.cascade = shadow_cascade;
-                cmd.record(move |ctx| unsafe {
-                    if let Some((tex, _target)) = ctx.texture_from_ref(&texture_ref) {
+                cmd.record(move |ctx, world| unsafe {
+                    if let Some((tex, _target)) = world
+                        .resource_mut::<GpuImages>()
+                        .texture_from_ref(&texture_ref)
+                    {
                         ctx.gl.delete_texture(tex);
-                        DirectionalLightShadow::init(ctx, &texture_ref, width, height)
+                        DirectionalLightShadow::init(
+                            ctx,
+                            &mut world.resource_mut::<GpuImages>(),
+                            &texture_ref,
+                            width,
+                            height,
+                        )
                     }
                 });
             }
@@ -73,7 +82,15 @@ fn update_shadow_tex(
                 width,
                 height,
             });
-            cmd.record(move |ctx| DirectionalLightShadow::init(ctx, &texture_ref, width, height));
+            cmd.record(move |ctx, world| {
+                DirectionalLightShadow::init(
+                    ctx,
+                    &mut world.resource_mut::<GpuImages>(),
+                    &texture_ref,
+                    width,
+                    height,
+                )
+            });
         } else {
             return;
         }
@@ -105,8 +122,11 @@ fn render_shadow(world: &mut World) {
     world.insert_resource(runner);
 
     let mut cmd = world.resource_mut::<CommandEncoder>();
-    cmd.record(move |ctx| {
-        if let Some((texture, target)) = ctx.texture_from_ref(&shadow_texture.texture) {
+    cmd.record(move |ctx, world| {
+        if let Some((texture, target)) = world
+            .resource_mut::<GpuImages>()
+            .texture_from_ref(&shadow_texture.texture)
+        {
             unsafe {
                 ctx.gl.bind_texture(target, Some(texture));
                 ctx.gl.copy_tex_image_2d(
@@ -134,10 +154,16 @@ pub struct DirectionalLightShadow {
 }
 
 impl DirectionalLightShadow {
-    fn init(ctx: &mut BevyGlContext, texture_ref: &TextureRef, width: u32, height: u32) {
+    fn init(
+        ctx: &mut BevyGlContext,
+        images: &mut GpuImages,
+        texture_ref: &TextureRef,
+        width: u32,
+        height: u32,
+    ) {
         unsafe {
             let texture = ctx.gl.create_texture().unwrap();
-            ctx.add_texture_set_ref(texture, glow::TEXTURE_2D, &texture_ref);
+            images.add_texture_set_ref(texture, glow::TEXTURE_2D, &texture_ref);
             ctx.gl.bind_texture(glow::TEXTURE_2D, Some(texture));
             ctx.gl.tex_parameter_i32(
                 glow::TEXTURE_2D,

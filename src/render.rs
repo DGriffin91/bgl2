@@ -113,7 +113,7 @@ fn present(
     let resized = resized.len() > 0;
     #[cfg(target_arch = "wasm32")]
     let bevy_window_entity = *bevy_window_entity;
-    cmd.record(move |ctx| {
+    cmd.record(move |ctx, _world| {
         ctx.swap();
         if resized {
             #[cfg(not(target_arch = "wasm32"))]

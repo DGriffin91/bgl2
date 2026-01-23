@@ -17,7 +17,9 @@ use crate::{
     phase_shadow::DirectionalLightShadow,
     phase_transparent::DeferredAlphaBlendDraws,
     plane_reflect::{ReflectionPlane, ReflectionUniforms},
+    prepare_image::GpuImages,
     prepare_joints::JointData,
+    prepare_mesh::GpuMeshes,
     render::{
         RenderPhase, RenderSet, register_prepare_system, register_render_system,
         set_blend_func_from_alpha_mode, transparent_draw_from_alpha_mode,
@@ -45,7 +47,7 @@ impl Plugin for OpenGLStandardMaterialPlugin {
 }
 
 fn setup(mut cmd: ResMut<CommandEncoder>) {
-    cmd.record(|ctx| {
+    cmd.record(|ctx, _world| {
         ctx.add_snippet("std::agx", include_str!("shaders/agx.glsl"));
         ctx.add_snippet("std::math", include_str!("shaders/math.glsl"));
         ctx.add_snippet("std::shadow_sampling", standard_shadow_sampling_glsl());
@@ -60,7 +62,7 @@ pub struct SkipReflection;
 #[derive(Component, Default)]
 pub struct ReadReflection;
 
-#[derive(UniformSet, Component, Clone)]
+#[derive(UniformSet, Component, Resource, Clone)]
 pub struct ViewUniforms {
     pub world_from_view: Mat4,
     pub view_from_world: Mat4,
@@ -100,6 +102,7 @@ pub fn standard_material_prepare_view(
     shadow: Option<Res<DirectionalLightShadow>>,
     reflect: Option<Single<&ReflectionPlane>>,
     bevy_window: Single<&Window>,
+    mut cmd: ResMut<CommandEncoder>,
 ) {
     let (camera_entity, _camera, cam_global_trans, cam_proj, exposure) = *camera;
     let view_resolution = vec2(
@@ -135,7 +138,7 @@ pub fn standard_material_prepare_view(
         clip_from_world = clip_from_view * view_from_world;
     }
 
-    commands.entity(camera_entity).insert(ViewUniforms {
+    let view_uniforms = ViewUniforms {
         world_from_view,
         view_from_world,
         clip_from_world,
@@ -144,6 +147,10 @@ pub fn standard_material_prepare_view(
         view_exposure: exposure
             .map(|e| e.exposure())
             .unwrap_or_else(|| Exposure::default().exposure()),
+    };
+    commands.entity(camera_entity).insert(view_uniforms.clone());
+    cmd.record(move |_ctx, world| {
+        world.insert_resource(view_uniforms.clone());
     });
 }
 
@@ -168,7 +175,6 @@ pub fn standard_material_render(
     mut cmd: ResMut<CommandEncoder>,
     prefs: Res<OpenGLStandardMaterialSettings>,
     shadow: Option<Res<DirectionalLightShadow>>,
-    standard_lighting: Res<StandardLightingUniforms>,
 ) {
     let view_uniforms = view_uniforms.clone();
 
@@ -249,12 +255,11 @@ pub fn standard_material_render(
         });
     }
 
-    let view_uniforms = view_uniforms.clone();
+    //let view_uniforms = view_uniforms.clone();
     let reflect_uniforms = reflect_uniforms.as_deref().cloned();
     let prefs = prefs.clone();
-    let standard_lighting = standard_lighting.clone();
     let shadow = shadow.as_deref().cloned();
-    cmd.record(move |ctx| {
+    cmd.record(move |ctx, world| {
         let shadow_def;
         if phase.depth_only() {
             shadow_def = shadow
@@ -288,7 +293,7 @@ pub fn standard_material_render(
         )
         .unwrap();
 
-        ctx.reset_mesh_bind_cache();
+        world.resource_mut::<GpuMeshes>().reset_mesh_bind_cache();
         ctx.use_cached_program(shader_index);
 
         ctx.load("write_reflection", phase.reflection());
@@ -296,15 +301,21 @@ pub fn standard_material_render(
         ctx.map_uniform_set_locations::<ViewUniforms>();
         ctx.map_uniform_set_locations::<StandardMaterialUniforms>();
         ctx.map_uniform_set_locations::<StandardLightingUniforms>();
-        ctx.bind_uniforms_set(&view_uniforms);
-        ctx.bind_uniforms_set(&standard_lighting);
+        ctx.bind_uniforms_set(
+            world.resource::<GpuImages>(),
+            world.resource::<ViewUniforms>(),
+        );
+        ctx.bind_uniforms_set(
+            world.resource::<GpuImages>(),
+            world.resource::<StandardLightingUniforms>(),
+        );
         let mut reflect_bool_location = None;
 
         if !phase.depth_only() {
             reflect_bool_location = ctx.get_uniform_location("read_reflection");
             if let Some(reflect_uniforms) = &reflect_uniforms {
                 ctx.map_uniform_set_locations::<ReflectionUniforms>();
-                ctx.bind_uniforms_set(reflect_uniforms);
+                ctx.bind_uniforms_set(world.resource::<GpuImages>(), reflect_uniforms);
             }
         }
 
@@ -328,10 +339,12 @@ pub fn standard_material_render(
             // Only re-bind if the material has changed.
             if last_material != Some(draw.material_h) {
                 ctx.set_cull_mode(flip_cull_mode(material.cull_mode, phase.reflection()));
-                ctx.bind_uniforms_set(material);
+                ctx.bind_uniforms_set(world.resource::<GpuImages>(), material);
             }
 
-            ctx.draw_mesh(draw.mesh.id(), shader_index);
+            world
+                .resource_mut::<GpuMeshes>()
+                .draw_mesh(ctx, draw.mesh.id(), shader_index);
             last_material = Some(draw.material_h);
         }
     });

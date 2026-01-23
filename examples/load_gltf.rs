@@ -17,11 +17,7 @@ use bevy::{
 use bevy_mod_mipmap_generator::{MipmapGeneratorPlugin, generate_mipmaps};
 use bevy_opengl::{
     bevy_standard_lighting::OpenGLStandardLightingPlugin,
-    bevy_standard_material::{
-        OpenGLStandardMaterialPlugin, OpenGLStandardMaterialSettings, ReadReflection,
-        SkipReflection,
-    },
-    plane_reflect::ReflectionPlane,
+    bevy_standard_material::{OpenGLStandardMaterialPlugin, OpenGLStandardMaterialSettings},
     render::{OpenGLRenderPlugins, RenderSet},
 };
 use wgpu_types::Face;

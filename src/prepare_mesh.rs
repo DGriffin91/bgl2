@@ -21,6 +21,15 @@ pub struct PrepareMeshPlugin;
 impl Plugin for PrepareMeshPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(
+            Startup,
+            (|mut cmd: ResMut<CommandEncoder>| {
+                cmd.record(|_ctx, world| {
+                    world.init_resource::<GpuMeshes>();
+                });
+            })
+            .in_set(RenderSet::Init),
+        )
+        .add_systems(
             PostUpdate,
             (send_standard_meshes_to_gpu)
                 .chain()
@@ -29,38 +38,43 @@ impl Plugin for PrepareMeshPlugin {
     }
 }
 
-#[derive(Default)]
-pub struct GpuMeshBufferMap {
+#[derive(Default, Resource)]
+pub struct GpuMeshes {
     pub last_bind: Option<(ShaderIndex, usize)>, //shader_index, buffer_index
     pub buffers: Vec<Option<(GpuMeshBufferSet, HashSet<AssetId<Mesh>>)>>,
     pub map: HashMap<AssetId<Mesh>, BufferRef>,
 }
 
-impl BevyGlContext {
+impl GpuMeshes {
     /// Call before using bind() or draw_mesh()
     pub fn reset_mesh_bind_cache(&mut self) {
-        self.mesh.last_bind = None;
+        self.last_bind = None;
     }
 
     /// Make sure to call reset_mesh_bind_cache() before the first iteration of bind(). It doesn't know about whatever random
     /// opengl state came before.
-    pub fn bind_mesh(&mut self, mesh: &AssetId<Mesh>, shader_index: u32) -> Option<BufferRef> {
-        if let Some(buffer_ref) = self.mesh.map.get(mesh) {
-            if let Some((buffers, _)) = &self.mesh.buffers[buffer_ref.buffer_index] {
+    pub fn bind_mesh(
+        &mut self,
+        ctx: &mut BevyGlContext,
+        mesh: &AssetId<Mesh>,
+        shader_index: u32,
+    ) -> Option<BufferRef> {
+        if let Some(buffer_ref) = self.map.get(mesh) {
+            if let Some((buffers, _)) = &self.buffers[buffer_ref.buffer_index] {
                 let this_bind_set = Some((shader_index, buffer_ref.buffer_index));
-                if this_bind_set == self.mesh.last_bind {
+                if this_bind_set == self.last_bind {
                     return Some(*buffer_ref);
                 }
-                self.mesh.last_bind = this_bind_set;
+                self.last_bind = this_bind_set;
                 unsafe {
-                    self.gl
+                    ctx.gl
                         .bind_buffer(glow::ELEMENT_ARRAY_BUFFER, Some(buffers.index));
                 };
                 for (att, buffer) in &buffers.buffers {
                     // TODO use caching to avoid looking up from the name here
-                    if let Some(loc) = self.get_attrib_location(shader_index, att.name) {
+                    if let Some(loc) = ctx.get_attrib_location(shader_index, att.name) {
                         let attrib_type = AttribType::from_bevy_vertex_format(att.format);
-                        self.bind_vertex_attrib(
+                        ctx.bind_vertex_attrib(
                             loc,
                             att.format.size() as u32 / attrib_type.gl_type_bytes(),
                             attrib_type,
@@ -76,7 +90,7 @@ impl BevyGlContext {
 
     /// Make sure to call reset_mesh_bind_cache() before the first iteration of bind(). It doesn't know about whatever random
     /// opengl state came before.
-    pub fn draw_mesh(&mut self, mesh: AssetId<Mesh>, shader_index: u32) {
+    pub fn draw_mesh(&mut self, ctx: &mut BevyGlContext, mesh: AssetId<Mesh>, shader_index: u32) {
         // Extremely slow temporary workaround for initially testing macos
         #[cfg(target_os = "macos")]
         self.reset_mesh_bind_cache();
@@ -86,9 +100,9 @@ impl BevyGlContext {
             ctx.gl.bind_vertex_array(Some(vao));
             vao
         };
-        if let Some(buffer_ref) = self.bind_mesh(&mesh, shader_index) {
+        if let Some(buffer_ref) = self.bind_mesh(ctx, &mesh, shader_index) {
             unsafe {
-                self.gl.draw_elements(
+                ctx.gl.draw_elements(
                     glow::TRIANGLES,
                     buffer_ref.indices_count as i32,
                     buffer_ref.index_element_type,
@@ -106,7 +120,6 @@ impl BevyGlContext {
 
 pub fn send_standard_meshes_to_gpu(
     bevy_meshes: Res<Assets<Mesh>>,
-    //mut gpu_meshes: NonSendMut<GPUMeshBufferMap>,
     mut mesh_events: MessageReader<AssetEvent<Mesh>>,
     mut cmd: ResMut<CommandEncoder>,
 ) {
@@ -121,20 +134,21 @@ pub fn send_standard_meshes_to_gpu(
             | AssetEvent::Modified { id } => id,
             AssetEvent::Removed { id } => {
                 let id = *id;
-                cmd.record(move |ctx: &mut BevyGlContext| {
-                    if let Some(buffer_ref) = ctx.mesh.map.remove(&id) {
+                cmd.record(move |ctx, world| {
+                    let mut meshes = world.resource_mut::<GpuMeshes>();
+                    if let Some(buffer_ref) = meshes.map.remove(&id) {
                         // after removing mapping, also remove it from the old set
                         // If the old set now has zero references, remove the buffer.
                         let mut buffer_unused = false;
                         if let Some((_old_buffer, set)) =
-                            &mut ctx.mesh.buffers[buffer_ref.buffer_index]
+                            &mut meshes.buffers[buffer_ref.buffer_index]
                         {
                             set.remove(&id);
                             buffer_unused = set.is_empty();
                         }
                         if buffer_unused {
                             if let Some((old_buffer, _)) =
-                                ctx.mesh.buffers[buffer_ref.buffer_index].take()
+                                meshes.buffers[buffer_ref.buffer_index].take()
                             {
                                 old_buffer.delete(&ctx.gl);
                             }
@@ -171,7 +185,7 @@ pub fn send_standard_meshes_to_gpu(
     }
 
     let mut meshes_by_attr = meshes_by_attr;
-    cmd.record(move |ctx: &mut BevyGlContext| {
+    cmd.record(move |ctx, world| {
         // TODO reuse allocations
         let mut index_buffer_data_u16 = Vec::new();
         let mut index_buffer_data_u32 = Vec::new();
@@ -232,10 +246,10 @@ pub fn send_standard_meshes_to_gpu(
                 mesh_groups.push(mesh_group);
             }
         }
-
+        let mut gpu_meshes = world.resource_mut::<GpuMeshes>();
         // For each group of matching meshes, collect the vertex attributes and offset indices
         for mesh_handles in mesh_groups {
-            let next_buffer_set_index = ctx.mesh.buffers.len();
+            let next_buffer_set_index = gpu_meshes.buffers.len();
             index_buffer_data_u16.clear();
             index_buffer_data_u32.clear();
 
@@ -293,9 +307,9 @@ pub fn send_standard_meshes_to_gpu(
 
                 // Add mapping from mesh handle to buffer. If this handle already had a mapping, remove it from the old set.
                 // If the old set now has zero references, remove the buffer.
-                if let Some(old_buffer_ref) = ctx.mesh.map.insert(mesh_h.clone(), buffer_ref) {
+                if let Some(old_buffer_ref) = gpu_meshes.map.insert(mesh_h.clone(), buffer_ref) {
                     let mut buffer_unused = false;
-                    if let Some(b) = ctx.mesh.buffers.get_mut(old_buffer_ref.buffer_index) {
+                    if let Some(b) = gpu_meshes.buffers.get_mut(old_buffer_ref.buffer_index) {
                         if let Some((_old_buffer, set)) = b {
                             set.remove(mesh_h);
                             buffer_unused = set.is_empty();
@@ -303,7 +317,7 @@ pub fn send_standard_meshes_to_gpu(
                     }
                     if buffer_unused {
                         if let Some((old_buffer, _)) =
-                            ctx.mesh.buffers[old_buffer_ref.buffer_index].take()
+                            gpu_meshes.buffers[old_buffer_ref.buffer_index].take()
                         {
                             old_buffer.delete(&ctx.gl);
                         }
@@ -349,7 +363,7 @@ pub fn send_standard_meshes_to_gpu(
                 })
                 .collect();
 
-            ctx.mesh.buffers.push(Some((
+            gpu_meshes.buffers.push(Some((
                 GpuMeshBufferSet {
                     buffers,
                     index: index_buffer,
