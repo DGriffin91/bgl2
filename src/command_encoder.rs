@@ -32,8 +32,8 @@ fn send(mut enc: ResMut<CommandEncoder>, sender: Res<CommandEncoderSender>) {
 
 #[cfg(target_arch = "wasm32")]
 fn send(mut enc: ResMut<CommandEncoder>, mut sender: NonSendMut<CommandEncoderSender>) {
-    // Could just clear cmd.commands but want to match the multi-threaded version
-    enc.commands.iter_mut().for_each(|cmd| cmd(&mut sender.ctx));
+    let CommandEncoderSender { ctx, world } = &mut *sender;
+    enc.commands.drain(..).for_each(|cmd| cmd(ctx, world));
     *enc = CommandEncoder::default();
 }
 
@@ -46,6 +46,7 @@ pub struct CommandEncoderSender {
 #[cfg(target_arch = "wasm32")]
 pub struct CommandEncoderSender {
     pub ctx: BevyGlContext,
+    pub world: World,
 }
 
 impl CommandEncoderSender {
@@ -60,6 +61,7 @@ impl CommandEncoderSender {
         {
             CommandEncoderSender {
                 ctx: BevyGlContext::new(window_init_data),
+                world: World::new(),
             }
         }
     }

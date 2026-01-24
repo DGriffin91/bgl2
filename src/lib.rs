@@ -310,9 +310,6 @@ impl BevyGlContext {
                 temp_slot_data: Default::default(),
                 uniform_location_cache: Default::default(),
                 current_texture_slot_count: 0,
-                mesh: Default::default(),
-                image: Default::default(),
-                egui_painter: Default::default(),
             }
         };
         ctx
@@ -477,7 +474,7 @@ impl BevyGlContext {
                 (glow::FRAGMENT_SHADER, &mut fragment),
             ] {
                 #[cfg(target_arch = "wasm32")]
-                let mut preamble = "precision highp float;\n".to_string();
+                let mut preamble = "precision highp float;\nprecision highp int;\n".to_string();
                 #[cfg(any(target_os = "windows", target_os = "linux"))]
                 let mut preamble = "#version 120\n".to_string();
                 #[cfg(target_os = "macos")]

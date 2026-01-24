@@ -31,7 +31,6 @@ impl Plugin for GlowEguiPlugin {
     }
 }
 
-#[derive(Resource)]
 pub struct EguiPainter(pub Painter);
 
 fn setup(world: &mut World) {
@@ -42,7 +41,7 @@ fn setup(world: &mut World) {
             let shader_version = ShaderVersion::Es100;
             #[cfg(not(target_arch = "wasm32"))]
             let shader_version = ShaderVersion::Gl120;
-            world.insert_resource(EguiPainter(
+            world.insert_non_send_resource(EguiPainter(
                 Painter::new(ctx.gl.clone(), "", Some(shader_version), false).unwrap(),
             ));
         });
@@ -61,7 +60,7 @@ fn egui_render(
         let textures_delta = render_output.textures_delta.clone();
         let pixels_per_point = context.get_mut().pixels_per_point();
         enc.record(move |_ctx, world| {
-            let painter = &mut world.resource_mut::<EguiPainter>().0;
+            let painter = &mut world.non_send_resource_mut::<EguiPainter>().0;
             painter.paint_and_update_textures(
                 [width, height],
                 pixels_per_point,
