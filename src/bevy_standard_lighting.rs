@@ -54,7 +54,7 @@ fn prepare_standard_lighting(
     directional_lights: Query<(&DirectionalLight, &GlobalTransform)>,
     shadow: Option<Res<DirectionalLightShadow>>,
     env_light: Single<Option<&EnvironmentMapLight>, With<Camera3d>>,
-    mut cmd: ResMut<CommandEncoder>,
+    mut enc: ResMut<CommandEncoder>,
 ) {
     let lighting_uniform = StandardLightingUniforms::new(
         point_lights,
@@ -64,7 +64,7 @@ fn prepare_standard_lighting(
         shadow.as_deref(),
         DEFAULT_MAX_POINT_LIGHTS,
     );
-    cmd.record(move |_ctx, world| {
+    enc.record(move |_ctx, world| {
         world.insert_resource(lighting_uniform);
     });
 }

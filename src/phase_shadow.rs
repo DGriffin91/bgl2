@@ -25,7 +25,7 @@ fn update_shadow_tex(
     bevy_window: Single<&Window>,
     shadow_tex: Option<ResMut<DirectionalLightShadow>>,
     directional_lights: Query<(&DirectionalLight, &Cascades)>,
-    mut cmd: ResMut<CommandEncoder>,
+    mut enc: ResMut<CommandEncoder>,
 ) {
     // Keep shadow texture size up to date.
     let mut shadow_cascade = None;
@@ -50,7 +50,7 @@ fn update_shadow_tex(
                 shadow_tex.width = width;
                 shadow_tex.height = height;
                 shadow_tex.cascade = shadow_cascade;
-                cmd.record(move |ctx, world| unsafe {
+                enc.record(move |ctx, world| unsafe {
                     if let Some((tex, _target)) = world
                         .resource_mut::<GpuImages>()
                         .texture_from_ref(&texture_ref)
@@ -67,7 +67,7 @@ fn update_shadow_tex(
                 });
             }
         } else {
-            cmd.delete_texture_ref(shadow_tex.texture.clone());
+            enc.delete_texture_ref(shadow_tex.texture.clone());
             commands.remove_resource::<DirectionalLightShadow>();
         }
     } else {
@@ -82,7 +82,7 @@ fn update_shadow_tex(
                 width,
                 height,
             });
-            cmd.record(move |ctx, world| {
+            enc.record(move |ctx, world| {
                 DirectionalLightShadow::init(
                     ctx,
                     &mut world.resource_mut::<GpuImages>(),

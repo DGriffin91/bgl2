@@ -22,8 +22,8 @@ impl Plugin for PrepareMeshPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(
             Startup,
-            (|mut cmd: ResMut<CommandEncoder>| {
-                cmd.record(|_ctx, world| {
+            (|mut enc: ResMut<CommandEncoder>| {
+                enc.record(|_ctx, world| {
                     world.init_resource::<GpuMeshes>();
                 });
             })
@@ -121,7 +121,7 @@ impl GpuMeshes {
 pub fn send_standard_meshes_to_gpu(
     bevy_meshes: Res<Assets<Mesh>>,
     mut mesh_events: MessageReader<AssetEvent<Mesh>>,
-    mut cmd: ResMut<CommandEncoder>,
+    mut enc: ResMut<CommandEncoder>,
 ) {
     // key is hash of vertex attribute props
     let mut meshes_by_attr: HashMap<u64, Vec<AssetId<Mesh>>> = HashMap::new();
@@ -134,7 +134,7 @@ pub fn send_standard_meshes_to_gpu(
             | AssetEvent::Modified { id } => id,
             AssetEvent::Removed { id } => {
                 let id = *id;
-                cmd.record(move |ctx, world| {
+                enc.record(move |ctx, world| {
                     let mut meshes = world.resource_mut::<GpuMeshes>();
                     if let Some(buffer_ref) = meshes.map.remove(&id) {
                         // after removing mapping, also remove it from the old set
@@ -184,7 +184,7 @@ pub fn send_standard_meshes_to_gpu(
         }
     }
 
-    cmd.record(move |ctx, world| {
+    enc.record(move |ctx, world| {
         // TODO reuse allocations
         let mut index_buffer_data_u16 = Vec::new();
         let mut index_buffer_data_u32 = Vec::new();

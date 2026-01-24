@@ -53,7 +53,7 @@ fn default_plugins_no_render_backend() -> bevy::app::PluginGroupBuilder {
 fn setup(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
-    mut cmd: ResMut<CommandEncoder>,
+    mut enc: ResMut<CommandEncoder>,
 ) {
     for x in -10..10 {
         for y in -10..10 {
@@ -64,7 +64,7 @@ fn setup(
                 let material_id = commands
                     .spawn(CustomMaterial {
                         color: linear_rgb.to_vec4(),
-                        emissive: cmd.bevy_image(create_test_image(linear_rgb.to_u8_array())),
+                        emissive: enc.bevy_image(create_test_image(linear_rgb.to_u8_array())),
                     })
                     .id();
                 commands.spawn((
@@ -114,7 +114,7 @@ fn render_custom_mat(
     camera: Single<(Entity, &Camera, &GlobalTransform, &Projection)>,
     materials: Query<&CustomMaterial>,
     phase: If<Res<RenderPhase>>,
-    mut cmd: ResMut<CommandEncoder>,
+    mut enc: ResMut<CommandEncoder>,
 ) {
     let (_entity, _camera, cam_global_trans, cam_proj) = *camera;
     let phase = **phase;
@@ -154,7 +154,7 @@ fn render_custom_mat(
         });
     }
 
-    cmd.record(move |ctx, world| {
+    enc.record(move |ctx, world| {
         let shader_index = bevy_opengl::shader_cached!(
             ctx,
             "../assets/shaders/custom_material.vert",

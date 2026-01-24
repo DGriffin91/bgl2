@@ -46,8 +46,8 @@ impl Plugin for OpenGLStandardMaterialPlugin {
     }
 }
 
-fn setup(mut cmd: ResMut<CommandEncoder>) {
-    cmd.record(|ctx, _world| {
+fn setup(mut enc: ResMut<CommandEncoder>) {
+    enc.record(|ctx, _world| {
         ctx.add_snippet("std::agx", include_str!("shaders/agx.glsl"));
         ctx.add_snippet("std::math", include_str!("shaders/math.glsl"));
         ctx.add_snippet("std::shadow_sampling", standard_shadow_sampling_glsl());
@@ -102,7 +102,7 @@ pub fn standard_material_prepare_view(
     shadow: Option<Res<DirectionalLightShadow>>,
     reflect: Option<Single<&ReflectionPlane>>,
     bevy_window: Single<&Window>,
-    mut cmd: ResMut<CommandEncoder>,
+    mut enc: ResMut<CommandEncoder>,
 ) {
     let (camera_entity, _camera, cam_global_trans, cam_proj, exposure) = *camera;
     let view_resolution = vec2(
@@ -149,7 +149,7 @@ pub fn standard_material_prepare_view(
             .unwrap_or_else(|| Exposure::default().exposure()),
     };
     commands.entity(camera_entity).insert(view_uniforms.clone());
-    cmd.record(move |_ctx, world| {
+    enc.record(move |_ctx, world| {
         world.insert_resource(view_uniforms.clone());
     });
 }
@@ -172,7 +172,7 @@ pub fn standard_material_render(
     mut transparent_draws: ResMut<DeferredAlphaBlendDraws>,
     reflect_uniforms: Option<Res<ReflectionUniforms>>,
     sorted: Res<DrawsSortedByMaterial>,
-    mut cmd: ResMut<CommandEncoder>,
+    mut enc: ResMut<CommandEncoder>,
     prefs: Res<OpenGLStandardMaterialSettings>,
     shadow: Option<Res<DirectionalLightShadow>>,
 ) {
@@ -258,7 +258,7 @@ pub fn standard_material_render(
     let reflect_uniforms = reflect_uniforms.as_deref().cloned();
     let prefs = prefs.clone();
     let shadow = shadow.as_deref().cloned();
-    cmd.record(move |ctx, world| {
+    enc.record(move |ctx, world| {
         let shadow_def;
         if phase.depth_only() {
             shadow_def = shadow

@@ -24,17 +24,17 @@ impl Plugin for CommandEncoderPlugin {
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-fn send(mut cmd: ResMut<CommandEncoder>, sender: Res<CommandEncoderSender>) {
+fn send(mut enc: ResMut<CommandEncoder>, sender: Res<CommandEncoderSender>) {
     let mut new_cmd_encoder = CommandEncoder::default();
-    std::mem::swap(&mut *cmd, &mut new_cmd_encoder);
+    std::mem::swap(&mut *enc, &mut new_cmd_encoder);
     sender.sender.send(new_cmd_encoder).unwrap();
 }
 
 #[cfg(target_arch = "wasm32")]
-fn send(mut cmd: ResMut<CommandEncoder>, mut sender: NonSendMut<CommandEncoderSender>) {
+fn send(mut enc: ResMut<CommandEncoder>, mut sender: NonSendMut<CommandEncoderSender>) {
     // Could just clear cmd.commands but want to match the multi-threaded version
-    cmd.commands.iter_mut().for_each(|cmd| cmd(&mut sender.ctx));
-    *cmd = CommandEncoder::default();
+    enc.commands.iter_mut().for_each(|cmd| cmd(&mut sender.ctx));
+    *enc = CommandEncoder::default();
 }
 
 #[cfg(not(target_arch = "wasm32"))]

@@ -51,7 +51,7 @@ fn setup(world: &mut World) {
 fn egui_render(
     window: Single<&Window>,
     mut contexts: Query<(&mut EguiContext, &mut EguiRenderOutput)>,
-    mut cmd: ResMut<CommandEncoder>,
+    mut enc: ResMut<CommandEncoder>,
 ) {
     let width = window.physical_width().max(1);
     let height = window.physical_height().max(1);
@@ -60,7 +60,7 @@ fn egui_render(
         let paint_jobs = render_output.paint_jobs.clone();
         let textures_delta = render_output.textures_delta.clone();
         let pixels_per_point = context.get_mut().pixels_per_point();
-        cmd.record(move |_ctx, world| {
+        enc.record(move |_ctx, world| {
             let painter = &mut world.resource_mut::<EguiPainter>().0;
             painter.paint_and_update_textures(
                 [width, height],

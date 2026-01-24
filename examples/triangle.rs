@@ -68,8 +68,8 @@ fn init(world: &mut World, params: &mut SystemState<Query<(Entity, &mut Window)>
     });
 }
 
-fn update(mut cmd: ResMut<CommandEncoder>) {
-    cmd.record(|ctx, _world| {
+fn update(mut enc: ResMut<CommandEncoder>) {
+    enc.record(|ctx, _world| {
         let shader_index = shader_cached!(
             ctx,
             "../assets/shaders/tri.vert",

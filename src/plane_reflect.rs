@@ -29,7 +29,7 @@ fn update_reflect_tex(
     bevy_window: Single<&Window>,
     mut plane_reflection: Option<Single<(&mut ReflectionPlane, &GlobalTransform)>>,
     plane_tex: Option<Res<PlaneReflectionTexture>>,
-    mut cmd: ResMut<CommandEncoder>,
+    mut enc: ResMut<CommandEncoder>,
 ) {
     // Keep reflection texture size up to date.
 
@@ -61,7 +61,7 @@ fn update_reflect_tex(
                     reflection_plane_normal: normal,
                     reflect_texture: texture_ref.clone(),
                 });
-                cmd.record(move |ctx, world| {
+                enc.record(move |ctx, world| {
                     unsafe {
                         if let Some((tex, _target)) = world
                             .resource_mut::<GpuImages>()
@@ -80,7 +80,7 @@ fn update_reflect_tex(
                 });
             }
         } else {
-            cmd.delete_texture_ref(shadow_tex.texture.clone());
+            enc.delete_texture_ref(shadow_tex.texture.clone());
             commands.remove_resource::<PlaneReflectionTexture>();
             commands.remove_resource::<ReflectionUniforms>();
         }
@@ -97,7 +97,7 @@ fn update_reflect_tex(
                 width,
                 height,
             });
-            cmd.record(move |ctx, world| {
+            enc.record(move |ctx, world| {
                 PlaneReflectionTexture::init(
                     ctx,
                     &mut world.resource_mut::<GpuImages>(),

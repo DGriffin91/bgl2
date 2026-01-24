@@ -102,7 +102,7 @@ impl Plugin for OpenGLMinimalRenderPlugin {
 }
 
 fn present(
-    mut cmd: ResMut<CommandEncoder>,
+    mut enc: ResMut<CommandEncoder>,
     resized: MessageReader<WindowResized>,
     mut bevy_window: Single<(Entity, &mut Window)>,
 ) {
@@ -113,7 +113,7 @@ fn present(
     let resized = resized.len() > 0;
     #[cfg(target_arch = "wasm32")]
     let bevy_window_entity = *bevy_window_entity;
-    cmd.record(move |ctx, _world| {
+    enc.record(move |ctx, _world| {
         ctx.swap();
         if resized {
             #[cfg(not(target_arch = "wasm32"))]

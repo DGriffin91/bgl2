@@ -36,8 +36,8 @@ impl Plugin for PrepareImagePlugin {
 
         app.add_systems(
             Startup,
-            (|mut cmd: ResMut<CommandEncoder>| {
-                cmd.record(|_ctx, world| {
+            (|mut enc: ResMut<CommandEncoder>| {
+                enc.record(|_ctx, world| {
                     world.init_resource::<GpuImages>();
                 });
             })
@@ -139,9 +139,9 @@ pub fn send_images_to_gpu(
     images: Res<Assets<Image>>,
     mut image_events: MessageReader<AssetEvent<Image>>,
     default_sampler: Res<DefaultSampler>,
-    mut cmd: ResMut<CommandEncoder>,
+    mut enc: ResMut<CommandEncoder>,
 ) {
-    cmd.record(|ctx, world| {
+    enc.record(|ctx, world| {
         let mut image = world.resource_mut::<GpuImages>();
         if image.placeholder.is_none() {
             unsafe {
@@ -170,7 +170,7 @@ pub fn send_images_to_gpu(
                 updated.insert(id.clone());
             }
             AssetEvent::Removed { id } => {
-                cmd.delete_image(*id);
+                enc.delete_image(*id);
                 continue;
             }
             _ => (),
@@ -189,7 +189,7 @@ pub fn send_images_to_gpu(
             }
 
             let default_sampler = default_sampler.clone();
-            cmd.record(move |ctx, world| {
+            enc.record(move |ctx, world| {
                 let mut image = world.resource_mut::<GpuImages>();
                 let Some((texture, target)) =
                     bevy_image_to_gl_texture(&ctx, Some(default_sampler), &bevy_image)
