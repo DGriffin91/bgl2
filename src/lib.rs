@@ -1119,8 +1119,8 @@ macro_rules! shader_cached {
 pub trait UniformSet {
     // TODO depth only variant? When the depth only variant uses an ifdef it should be that the locations return None
     // TODO could cache a names/location set for each combination of ShaderProgram+TypeId.
-    /// if bool is true uniform is texture
-    fn names() -> &'static [(&'static str, bool)];
+    fn names() -> &'static [&'static str];
+    fn glsl_types() -> &'static [&'static str];
     /// glsl binding code str
     fn bindings() -> &'static [&'static str];
     /// The index for load should correspond to the order returned from names()
@@ -1193,11 +1193,11 @@ pub fn load_tex_if_new(tex: &Tex, gl: &glow::Context, gpu_images: &GpuImages, sl
                 }
             }
             unsafe {
-                //if let Some(previous) = previous.as_ref() {
-                //    if previous == &texture {
-                //        return;
-                //    }
-                //}
+                if let Some(previous) = previous.as_ref() {
+                    if previous == &texture {
+                        return;
+                    }
+                }
                 // TODO needs to use info from the texture to actually setup correctly
                 gl.active_texture(glow::TEXTURE0 + *texture_slot);
                 gl.bind_texture(*target, Some(texture));
@@ -1205,7 +1205,7 @@ pub fn load_tex_if_new(tex: &Tex, gl: &glow::Context, gpu_images: &GpuImages, sl
                 *previous = Some(texture);
             }
         }
-        _ => panic!("Expected uniform"),
+        _ => panic!("Expected texture"),
     }
 }
 
@@ -1217,13 +1217,18 @@ impl BevyGlContext {
 
         let locations = T::names()
             .iter()
-            .map(|(name, is_texture)| unsafe {
+            .zip(T::glsl_types())
+            .map(|(name, glsl_type)| unsafe {
                 self.gl
                     .get_uniform_location(current_program, name)
                     .map(|location| {
-                        if *is_texture {
+                        if glsl_type.contains("sampler") {
                             let slot = SlotData::Texture {
-                                target: glow::TEXTURE_2D,
+                                target: if *glsl_type == "samplerCube" {
+                                    glow::TEXTURE_CUBE_MAP
+                                } else {
+                                    glow::TEXTURE_2D
+                                },
                                 texture_slot: self.current_texture_slot_count as u32,
                                 previous: None,
                                 location,

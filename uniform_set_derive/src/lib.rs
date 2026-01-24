@@ -45,6 +45,7 @@ pub fn derive_uniform_set(input: TokenStream) -> TokenStream {
     };
 
     let mut name_entries = Vec::with_capacity(fields.len());
+    let mut glsl_types = Vec::with_capacity(fields.len());
     let mut glsl_bindings = Vec::with_capacity(fields.len());
 
     let mut load_arms = Vec::with_capacity(fields.len());
@@ -64,10 +65,12 @@ pub fn derive_uniform_set(input: TokenStream) -> TokenStream {
             | is_texture_ref(&field.ty)
             | is_handle_image(&field.ty)
             | is_option_handle_image(&field.ty);
-        name_entries.push(quote! { (#field_name, #is_tex) });
+        name_entries.push(quote! { #field_name });
 
         let binding = get_glsl_binding(&field, &field_name, is_tex);
         glsl_bindings.push(quote! { #binding });
+        let field_gl_type = get_gl_type(field, is_tex);
+        glsl_types.push(quote! { #field_gl_type });
 
         let idx = i as u32;
 
@@ -86,7 +89,7 @@ pub fn derive_uniform_set(input: TokenStream) -> TokenStream {
 
     let expanded = quote! {
         impl #crate_path::UniformSet for #ident {
-            fn names() -> &'static [(&'static str, bool)] {
+            fn names() -> &'static [&'static str] {
                 &[
                     #(#name_entries,)*
                 ]
@@ -95,6 +98,12 @@ pub fn derive_uniform_set(input: TokenStream) -> TokenStream {
             fn bindings() -> &'static [&'static str] {
                 &[
                     #(#glsl_bindings,)*
+                ]
+            }
+
+            fn glsl_types() -> &'static [&'static str] {
+                &[
+                    #(#glsl_types,)*
                 ]
             }
 
@@ -146,6 +155,23 @@ fn is_texture_ref(ty: &Type) -> bool {
 
 fn get_glsl_binding(field: &Field, field_name: &str, texture: bool) -> String {
     let ty = &field.ty;
+
+    let gl_ty = get_gl_type(field, texture);
+
+    let arr_max = if vec_of(ty).is_some() {
+        let arr_max = parse_attr_str(&field.attrs, "array_max")
+            .expect(&format!("Vec field {field_name:?} is missing array_max()"))
+            .value();
+        format!("[{arr_max}]")
+    } else {
+        String::from("")
+    };
+
+    format!("uniform {gl_ty} {field_name}{arr_max};")
+}
+
+fn get_gl_type(field: &Field, texture: bool) -> String {
+    let ty = &field.ty;
     let Some(tp) = as_type_path(ty) else {
         panic!("unrecognized type {ty:?}")
     };
@@ -185,17 +211,7 @@ fn get_glsl_binding(field: &Field, field_name: &str, texture: bool) -> String {
             }
         }
     };
-
-    let arr_max = if array_type.is_some() {
-        let arr_max = parse_attr_str(&field.attrs, "array_max")
-            .expect(&format!("Vec field {field_name:?} is missing array_max()"))
-            .value();
-        format!("[{arr_max}]")
-    } else {
-        String::from("")
-    };
-
-    format!("uniform {gl_ty} {field_name}{arr_max};")
+    String::from(gl_ty)
 }
 
 fn is_handle_image(ty: &Type) -> bool {
