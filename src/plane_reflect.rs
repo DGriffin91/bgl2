@@ -189,25 +189,26 @@ pub fn copy_reflection_texture(world: &mut World) {
     else {
         return;
     };
-    let mut cmd = world.resource_mut::<CommandEncoder>();
-    cmd.record(move |ctx, world| {
-        unsafe {
-            if let Some((tex, _target)) = &mut world
-                .resource_mut::<GpuImages>()
-                .texture_from_ref(&plane_reflection_texture.texture)
-            {
-                ctx.gl.bind_texture(glow::TEXTURE_2D, Some(*tex));
-                ctx.gl.copy_tex_image_2d(
-                    glow::TEXTURE_2D,
-                    0,
-                    glow::RGBA,
-                    0,
-                    0,
-                    plane_reflection_texture.width as i32,
-                    plane_reflection_texture.height as i32,
-                    0,
-                );
-            }
-        };
-    });
+    world
+        .resource_mut::<CommandEncoder>()
+        .record(move |ctx, world| {
+            unsafe {
+                if let Some((tex, _target)) = &mut world
+                    .resource_mut::<GpuImages>()
+                    .texture_from_ref(&plane_reflection_texture.texture)
+                {
+                    ctx.gl.bind_texture(glow::TEXTURE_2D, Some(*tex));
+                    ctx.gl.copy_tex_image_2d(
+                        glow::TEXTURE_2D,
+                        0,
+                        glow::RGBA,
+                        0,
+                        0,
+                        plane_reflection_texture.width as i32,
+                        plane_reflection_texture.height as i32,
+                        0,
+                    );
+                }
+            };
+        });
 }

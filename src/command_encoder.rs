@@ -71,9 +71,9 @@ impl CommandEncoderSender {
             let mut world = World::new();
             loop {
                 if let Ok(mut msg) = receiver.recv() {
-                    msg.commands
-                        .iter_mut()
-                        .for_each(|cmd| cmd(&mut ctx, &mut world));
+                    for cmd in msg.commands.drain(..) {
+                        cmd(&mut ctx, &mut world)
+                    }
                 }
             }
         });
@@ -82,14 +82,14 @@ impl CommandEncoderSender {
 
 #[derive(Resource, Default)]
 pub struct CommandEncoder {
-    pub commands: Vec<Box<dyn FnMut(&mut BevyGlContext, &mut World) + Send + Sync>>,
+    pub commands: Vec<Box<dyn FnOnce(&mut BevyGlContext, &mut World) + Send + Sync>>,
     pub next_buffer_id: usize,
 }
 
 impl CommandEncoder {
     pub fn record<F>(&mut self, f: F)
     where
-        F: FnMut(&mut BevyGlContext, &mut World) + Send + Sync + 'static,
+        F: FnOnce(&mut BevyGlContext, &mut World) + Send + Sync + 'static,
     {
         self.commands.push(Box::new(f));
     }

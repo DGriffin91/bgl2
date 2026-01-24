@@ -184,7 +184,6 @@ pub fn send_standard_meshes_to_gpu(
         }
     }
 
-    let mut meshes_by_attr = meshes_by_attr;
     cmd.record(move |ctx, world| {
         // TODO reuse allocations
         let mut index_buffer_data_u16 = Vec::new();

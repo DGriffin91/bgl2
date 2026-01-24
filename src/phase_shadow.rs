@@ -121,27 +121,28 @@ fn render_shadow(world: &mut World) {
 
     world.insert_resource(runner);
 
-    let mut cmd = world.resource_mut::<CommandEncoder>();
-    cmd.record(move |ctx, world| {
-        if let Some((texture, target)) = world
-            .resource_mut::<GpuImages>()
-            .texture_from_ref(&shadow_texture.texture)
-        {
-            unsafe {
-                ctx.gl.bind_texture(target, Some(texture));
-                ctx.gl.copy_tex_image_2d(
-                    target,
-                    0,
-                    glow::RGBA,
-                    0,
-                    0,
-                    shadow_texture.width as i32,
-                    shadow_texture.height as i32,
-                    0,
-                );
-            };
-        }
-    });
+    world
+        .resource_mut::<CommandEncoder>()
+        .record(move |ctx, world| {
+            if let Some((texture, target)) = world
+                .resource_mut::<GpuImages>()
+                .texture_from_ref(&shadow_texture.texture)
+            {
+                unsafe {
+                    ctx.gl.bind_texture(target, Some(texture));
+                    ctx.gl.copy_tex_image_2d(
+                        target,
+                        0,
+                        glow::RGBA,
+                        0,
+                        0,
+                        shadow_texture.width as i32,
+                        shadow_texture.height as i32,
+                        0,
+                    );
+                };
+            }
+        });
 }
 
 #[derive(Resource, Clone)]

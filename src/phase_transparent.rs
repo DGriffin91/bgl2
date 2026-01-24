@@ -153,10 +153,11 @@ fn transparent(world: &mut World) {
         }
     }
 
-    let mut cmd = world.resource_mut::<CommandEncoder>();
-    cmd.record(move |ctx, _world| {
-        unsafe { ctx.gl.bind_vertex_array(None) };
-    });
+    world
+        .resource_mut::<CommandEncoder>()
+        .record(move |ctx, _world| {
+            unsafe { ctx.gl.bind_vertex_array(None) };
+        });
 
     world.insert_resource(runner);
 

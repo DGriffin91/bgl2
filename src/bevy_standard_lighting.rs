@@ -65,7 +65,7 @@ fn prepare_standard_lighting(
         DEFAULT_MAX_POINT_LIGHTS,
     );
     cmd.record(move |_ctx, world| {
-        world.insert_resource(lighting_uniform.clone());
+        world.insert_resource(lighting_uniform);
     });
 }
 

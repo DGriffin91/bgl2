@@ -182,18 +182,17 @@ pub fn send_images_to_gpu(
     }
 
     for asset_id in updated.iter() {
-        if let Some(bevy_image) = images.get(*asset_id) {
+        if let Some(bevy_image) = images.get(*asset_id).cloned() {
             let handle: AssetId<Image> = asset_id.clone();
             if bevy_image.data.is_none() {
                 continue;
             }
 
-            let bevy_image = bevy_image.clone();
             let default_sampler = default_sampler.clone();
             cmd.record(move |ctx, world| {
                 let mut image = world.resource_mut::<GpuImages>();
                 let Some((texture, target)) =
-                    bevy_image_to_gl_texture(&ctx, Some(default_sampler.clone()), &bevy_image)
+                    bevy_image_to_gl_texture(&ctx, Some(default_sampler), &bevy_image)
                 else {
                     return;
                 };

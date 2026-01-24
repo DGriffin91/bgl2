@@ -255,7 +255,6 @@ pub fn standard_material_render(
         });
     }
 
-    //let view_uniforms = view_uniforms.clone();
     let reflect_uniforms = reflect_uniforms.as_deref().cloned();
     let prefs = prefs.clone();
     let shadow = shadow.as_deref().cloned();
