@@ -48,11 +48,11 @@ impl Plugin for OpenGLStandardMaterialPlugin {
 
 fn setup(mut enc: ResMut<CommandEncoder>) {
     enc.record(|ctx, _world| {
-        ctx.add_snippet("std::agx", include_str!("shaders/agx.glsl"));
-        ctx.add_snippet("std::math", include_str!("shaders/math.glsl"));
-        ctx.add_snippet("std::shadow_sampling", standard_shadow_sampling_glsl());
-        ctx.add_snippet("std::pbr", standard_pbr_glsl());
-        ctx.add_snippet("std::pbr_lighting", standard_pbr_lighting_glsl());
+        ctx.add_shader_include("std::agx", include_str!("shaders/agx.glsl"));
+        ctx.add_shader_include("std::math", include_str!("shaders/math.glsl"));
+        ctx.add_shader_include("std::shadow_sampling", standard_shadow_sampling_glsl());
+        ctx.add_shader_include("std::pbr", standard_pbr_glsl());
+        ctx.add_shader_include("std::pbr_lighting", standard_pbr_lighting_glsl());
     });
 }
 

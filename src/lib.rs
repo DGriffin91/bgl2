@@ -62,7 +62,7 @@ pub struct BevyGlContext {
     pub gl_display: Option<glutin::display::Display>,
     pub shader_cache: Vec<glow::Program>,
     pub shader_cache_map: HashMap<u64, (ShaderIndex, Watchers)>,
-    pub shader_snippets: HashMap<String, String>,
+    pub shader_includes: HashMap<String, String>,
     pub has_glsl_cube_lod: bool, // TODO move
     pub has_cube_map_seamless: bool,
     pub last_cull_mode: Option<Face>,
@@ -263,7 +263,7 @@ impl BevyGlContext {
                 gl_display: Some(gl_display),
                 shader_cache: Default::default(),
                 shader_cache_map: Default::default(),
-                shader_snippets: Default::default(),
+                shader_includes: Default::default(),
                 has_glsl_cube_lod: true,
                 has_cube_map_seamless,
                 last_cull_mode: None,
@@ -301,7 +301,7 @@ impl BevyGlContext {
                 gl: Arc::new(gl),
                 shader_cache: Default::default(),
                 shader_cache_map: Default::default(),
-                shader_snippets: Default::default(),
+                shader_includes: Default::default(),
                 has_glsl_cube_lod,
                 has_cube_map_seamless: false,
                 last_cull_mode: None,
@@ -523,15 +523,15 @@ impl BevyGlContext {
                 let mut expanded_shader_source = String::with_capacity(shader_source.len() * 2);
 
                 {
-                    let mut already_included_snippets = HashSet::new();
+                    let mut already_included_includes = HashSet::new();
                     for (i, line) in shader_source.lines().enumerate() {
                         if let Some(rest) = line.strip_prefix("#include") {
-                            let snippet_name = rest.trim();
-                            if let Some(snippet) = self.shader_snippets.get(snippet_name) {
-                                if already_included_snippets.insert(snippet_name) {
-                                    // TODO index snippets and use source-string-number
+                            let include_name = rest.trim();
+                            if let Some(include) = self.shader_includes.get(include_name) {
+                                if already_included_includes.insert(include_name) {
+                                    // TODO index includes and use source-string-number
                                     expanded_shader_source.push_str(&format!("#line 0 1\n"));
-                                    expanded_shader_source.push_str(snippet);
+                                    expanded_shader_source.push_str(include);
                                     expanded_shader_source.push_str("\n");
                                     expanded_shader_source.push_str(&format!("#line {i} 0\n"));
                                 }
@@ -589,8 +589,8 @@ impl BevyGlContext {
         }
     }
 
-    pub fn add_snippet(&mut self, name: &str, src: &'static str) {
-        self.shader_snippets
+    pub fn add_shader_include(&mut self, name: &str, src: &'static str) {
+        self.shader_includes
             .insert(String::from(name), String::from(src));
     }
 
