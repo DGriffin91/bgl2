@@ -299,23 +299,25 @@ pub fn standard_material_render(
 
         ctx.map_uniform_set_locations::<ViewUniforms>();
         ctx.map_uniform_set_locations::<StandardMaterialUniforms>();
-        ctx.map_uniform_set_locations::<StandardLightingUniforms>();
         ctx.bind_uniforms_set(
             world.resource::<GpuImages>(),
             world.resource::<ViewUniforms>(),
         );
-        ctx.bind_uniforms_set(
-            world.resource::<GpuImages>(),
-            world.resource::<StandardLightingUniforms>(),
-        );
-        let mut reflect_bool_location = None;
 
+        let mut reflect_bool_location = None;
         if !phase.depth_only() {
+            ctx.map_uniform_set_locations::<StandardLightingUniforms>();
+            ctx.bind_uniforms_set(
+                world.resource::<GpuImages>(),
+                world.resource::<StandardLightingUniforms>(),
+            );
+
             reflect_bool_location = ctx.get_uniform_location("read_reflection");
-            if let Some(reflect_uniforms) = &reflect_uniforms {
-                ctx.map_uniform_set_locations::<ReflectionUniforms>();
-                ctx.bind_uniforms_set(world.resource::<GpuImages>(), reflect_uniforms);
-            }
+            ctx.map_uniform_set_locations::<ReflectionUniforms>();
+            ctx.bind_uniforms_set(
+                world.resource::<GpuImages>(),
+                reflect_uniforms.as_ref().unwrap_or(&Default::default()),
+            );
         }
 
         let mut last_material = None;
