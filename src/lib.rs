@@ -423,7 +423,8 @@ impl BevyGlContext {
                 let vertex_src = std::fs::read_to_string(vertex).unwrap();
                 let fragment_src = std::fs::read_to_string(fragment).unwrap();
                 let old_shader = self.shader_cache[*index as usize];
-                let new_shader = self.shader(&vertex_src, &fragment_src, shader_defs, bindings);
+                let new_shader =
+                    self.compile_shader(&vertex_src, &fragment_src, shader_defs, bindings);
                 match new_shader {
                     Ok(shader) => {
                         self.shader_cache[*index as usize] = shader;
@@ -436,7 +437,7 @@ impl BevyGlContext {
         } else {
             let vertex_src = std::fs::read_to_string(vertex).unwrap();
             let fragment_src = std::fs::read_to_string(fragment).unwrap();
-            let new_shader = self.shader(&vertex_src, &fragment_src, shader_defs, bindings);
+            let new_shader = self.compile_shader(&vertex_src, &fragment_src, shader_defs, bindings);
             match new_shader {
                 Ok(shader) => {
                     let index = self.shader_cache.len() as u32;
@@ -456,7 +457,7 @@ impl BevyGlContext {
     }
 
     #[must_use]
-    pub fn shader(
+    pub fn compile_shader(
         &self,
         vertex: &str,
         fragment: &str,
@@ -565,7 +566,7 @@ impl BevyGlContext {
 
                 if !self.gl.get_shader_compile_status(shader) {
                     return Err(anyhow!(
-                        "{stage_name} shader compilation error: {}\n\n{shader_source}",
+                        "{stage_name} shader compilation error: {}", //\n\n{shader_source}
                         self.gl.get_shader_info_log(shader)
                     ));
                 }
@@ -597,7 +598,7 @@ impl BevyGlContext {
     #[allow(dead_code)]
     fn test_for_glsl_lod(&mut self) {
         self.has_glsl_cube_lod = self
-            .shader("void main() { gl_Position = vec4(0.0); }",
+            .compile_shader("void main() { gl_Position = vec4(0.0); }",
                 "uniform samplerCube cube; void main() { gl_FragColor = textureCubeLod(cube, vec3(1.0), 0.0); }",
                 Default::default(),Default::default()
             )

@@ -62,7 +62,7 @@ void main() {
     }
 
     output_color += apply_pbr_lighting(V, diffuse_color, F0, vert_normal, normal, perceptual_roughness,
-                                       env_occ, ub_diffuse_transmission, screen_uv, view_resolution, ws_position);
+            env_occ, ub_diffuse_transmission, screen_uv, view_resolution, ws_position);
 
     gl_FragColor = vec4(view_exposure * output_color, base_color.a);
     if (write_reflection) {
