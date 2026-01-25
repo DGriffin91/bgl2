@@ -1,5 +1,5 @@
 vec3 apply_pbr_lighting(vec3 V, vec3 diffuse_color, vec3 F0, vec3 vert_normal, vec3 normal, float perceptual_roughness,
-    float diffuse_transmission, vec2 screen_uv, vec2 view_resolution, vec3 ws_position) {
+    float environment_occlusion, float diffuse_transmission, vec2 screen_uv, vec2 view_resolution, vec3 ws_position) {
     float roughness = perceptual_roughness * perceptual_roughness;
     vec3 output_color = vec3(0.0);
 
@@ -27,7 +27,7 @@ vec3 apply_pbr_lighting(vec3 V, vec3 diffuse_color, vec3 F0, vec3 vert_normal, v
         vec3 dir = reflect(-V, normal);
         vec3 env_diffuse = rgbe2rgb(textureCubeLod(ub_diffuse_map, vec3(normal.xy, -normal.z), 0.0)) * ub_env_intensity;
         vec3 env_specular = rgbe2rgb(textureCubeLod(ub_specular_map, vec3(dir.xy, -dir.z), perceptual_roughness * mip_levels)) * ub_env_intensity;
-        output_color += environment_light(NoV, F0, perceptual_roughness, diffuse_color, env_diffuse, env_specular);
+        output_color += environment_light(NoV, F0, perceptual_roughness, diffuse_color, env_diffuse, env_specular) * environment_occlusion;
     }
 
     #ifndef NO_POINT

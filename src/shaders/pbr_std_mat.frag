@@ -51,16 +51,20 @@ void main() {
         normal = apply_normal_mapping(ub_normal_map_texture, vert_normal, tangent, uv_0, ub_flip_normal_map_y, ub_double_sided);
     }
 
-    vec3 output_color = apply_pbr_lighting(V, diffuse_color, F0, vert_normal, normal, perceptual_roughness,
-            ub_diffuse_transmission, screen_uv, view_resolution, ws_position);
+    vec3 output_color = emissive.rgb;
+    float env_occ = 1.0;
 
     // TODO return struct from standard_lighting so the env map can be properly replaced by reflection?
     if (read_reflection && perceptual_roughness < 0.2) {
         vec3 sharp_reflection_color = reversible_tonemap_invert(texture2D(reflect_texture, screen_uv).rgb);
         output_color += sharp_reflection_color.rgb / view_exposure; // TODO integrate brdf properly
+        env_occ = 0.0;
     }
 
-    gl_FragColor = vec4(view_exposure * (output_color + emissive.rgb), base_color.a);
+    output_color += apply_pbr_lighting(V, diffuse_color, F0, vert_normal, normal, perceptual_roughness,
+                                       env_occ, ub_diffuse_transmission, screen_uv, view_resolution, ws_position);
+
+    gl_FragColor = vec4(view_exposure * output_color, base_color.a);
     if (write_reflection) {
         gl_FragColor.rgb = reversible_tonemap(gl_FragColor.rgb);
     } else {
