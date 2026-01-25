@@ -63,6 +63,7 @@ pub struct SkipReflection;
 pub struct ReadReflection;
 
 #[derive(UniformSet, Component, Resource, Clone)]
+#[uniform_set(prefix = "ub_")]
 pub struct ViewUniforms {
     pub world_from_view: Mat4,
     pub view_from_world: Mat4,

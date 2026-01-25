@@ -231,7 +231,7 @@ fn render_custom_mat(
         }
 
         for draw in &draws {
-            ctx.load("world_from_local", draw.world_from_local);
+            ctx.load("ub_world_from_local", draw.world_from_local);
             ctx.bind_uniforms_set(world.resource::<GpuImages>(), &draw.material);
             world
                 .resource_mut::<GpuMeshes>()

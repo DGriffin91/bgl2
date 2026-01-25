@@ -20,16 +20,16 @@ void main() {
 
     vec4 base_color = texture2D(ub_color_texture, clip_position.xy);
 
-    vec3 V = normalize(view_position - ws_position);
+    vec3 V = normalize(ub_view_position - ws_position);
 
     vec3 normal = vert_normal;
     vec3 F0 = calculate_F0(base_color.rgb, ub_metallic, vec3(0.5));
     vec3 diffuse_color = base_color.rgb * (1.0 - ub_metallic);
 
-    vec3 output_color = apply_pbr_lighting(V, diffuse_color, F0, vert_normal, normal, ub_perceptual_roughness,
-            1.0, 0.0, screen_uv, view_resolution, ws_position);
+    vec3 output_color = apply_pbr_lighting(V, diffuse_color, F0, vert_normal, normal,
+            ub_perceptual_roughness, 1.0, 0.0, screen_uv, ub_view_resolution, ws_position);
 
-    gl_FragColor = vec4(view_exposure * output_color, base_color.a);
+    gl_FragColor = vec4(ub_view_exposure * output_color, base_color.a);
     gl_FragColor.rgb = agx_tonemapping(gl_FragColor.rgb); // in: linear, out: srgb
     gl_FragColor = clamp(gl_FragColor, vec4(0.0), vec4(1.0));
 

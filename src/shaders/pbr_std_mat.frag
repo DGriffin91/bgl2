@@ -35,7 +35,7 @@ void main() {
     gl_FragColor = EncodeFloatRGBA(saturate(ndc_position.z * 0.5 + 0.5));
     #else // RENDER_DEPTH_ONLY
 
-    vec3 V = normalize(view_position - ws_position);
+    vec3 V = normalize(ub_view_position - ws_position);
 
     vec4 metallic_roughness = texture2D(ub_metallic_roughness_texture, uv_0);
     float perceptual_roughness = metallic_roughness.g * ub_perceptual_roughness;
@@ -57,14 +57,14 @@ void main() {
     // TODO return struct from standard_lighting so the env map can be properly replaced by reflection?
     if (read_reflection && perceptual_roughness < 0.2) {
         vec3 sharp_reflection_color = reversible_tonemap_invert(texture2D(reflect_texture, screen_uv).rgb);
-        output_color += sharp_reflection_color.rgb / view_exposure; // TODO integrate brdf properly
+        output_color += sharp_reflection_color.rgb / ub_view_exposure; // TODO integrate brdf properly
         env_occ = 0.0;
     }
 
     output_color += apply_pbr_lighting(V, diffuse_color, F0, vert_normal, normal, perceptual_roughness,
-            env_occ, ub_diffuse_transmission, screen_uv, view_resolution, ws_position);
+            env_occ, ub_diffuse_transmission, screen_uv, ub_view_resolution, ws_position);
 
-    gl_FragColor = vec4(view_exposure * output_color, base_color.a);
+    gl_FragColor = vec4(ub_view_exposure * output_color, base_color.a);
     if (write_reflection) {
         gl_FragColor.rgb = reversible_tonemap(gl_FragColor.rgb);
     } else {

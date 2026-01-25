@@ -27,7 +27,7 @@ void main() {
                 Vertex_JointWeight.w * joint_data[indices.w];
     }
 
-    clip_position = (clip_from_world * world_from_local) * vec4(Vertex_Position, 1.0);
+    clip_position = (ub_clip_from_world * world_from_local) * vec4(Vertex_Position, 1.0);
     gl_Position = clip_position;
     vert_normal = (world_from_local * vec4(Vertex_Normal, 0.0)).xyz;
     ws_position = (world_from_local * vec4(Vertex_Position, 1.0)).xyz;
