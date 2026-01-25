@@ -19,11 +19,13 @@ fn bevy_opengl_path() -> proc_macro2::TokenStream {
     }
 }
 
-#[proc_macro_derive(UniformSet, attributes(array_max, base_type, exclude))]
+#[proc_macro_derive(UniformSet, attributes(array_max, base_type, exclude, uniform_set))]
 pub fn derive_uniform_set(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
 
     let ident = &input.ident;
+
+    let prefix = parse_uniform_set_prefix(&input.attrs);
 
     let fields = match &input.data {
         Data::Struct(s) => match &s.fields {
@@ -60,14 +62,15 @@ pub fn derive_uniform_set(input: TokenStream) -> TokenStream {
             continue;
         }
         let field_name = field_ident.to_string();
+        let uniform_name = format!("{prefix}{field_name}");
 
         let is_tex = is_glow_texture(&field.ty)
             | is_texture_ref(&field.ty)
             | is_handle_image(&field.ty)
             | is_option_handle_image(&field.ty);
-        name_entries.push(quote! { #field_name });
+        name_entries.push(quote! { #uniform_name });
 
-        let binding = get_glsl_binding(&field, &field_name, is_tex);
+        let binding = get_glsl_binding(&field, &field_name, &prefix, is_tex);
         glsl_bindings.push(quote! { #binding });
         let field_gl_type = get_gl_type(field, is_tex);
         glsl_types.push(quote! { #field_gl_type });
@@ -153,7 +156,7 @@ fn is_texture_ref(ty: &Type) -> bool {
     last.ident == "TextureRef"
 }
 
-fn get_glsl_binding(field: &Field, field_name: &str, texture: bool) -> String {
+fn get_glsl_binding(field: &Field, field_name: &str, prefix: &str, texture: bool) -> String {
     let ty = &field.ty;
 
     let gl_ty = get_gl_type(field, texture);
@@ -167,7 +170,7 @@ fn get_glsl_binding(field: &Field, field_name: &str, texture: bool) -> String {
         String::from("")
     };
 
-    format!("uniform {gl_ty} {field_name}{arr_max};")
+    format!("uniform {gl_ty} {prefix}{field_name}{arr_max};")
 }
 
 fn get_gl_type(field: &Field, texture: bool) -> String {
@@ -306,4 +309,25 @@ fn has_attr(attrs: &[Attribute], ident: &str) -> bool {
         }
     }
     return false;
+}
+
+fn parse_uniform_set_prefix(attrs: &[Attribute]) -> String {
+    let mut prefix = String::new();
+    for attr in attrs {
+        if !attr.path().is_ident("uniform_set") {
+            continue;
+        }
+        attr.parse_nested_meta(|meta| {
+            if meta.path.is_ident("prefix") {
+                if let Ok(v) = meta.value() {
+                    if let Ok(lit) = v.parse::<LitStr>() {
+                        prefix = lit.value();
+                    }
+                }
+            }
+            Ok(())
+        })
+        .unwrap();
+    }
+    return prefix;
 }

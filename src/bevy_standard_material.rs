@@ -350,6 +350,7 @@ pub fn standard_material_render(
 }
 
 #[derive(UniformSet, Component, Clone)]
+#[uniform_set(prefix = "ub_")]
 struct StandardMaterialUniforms {
     base_color: Vec4,
     emissive: Vec4,

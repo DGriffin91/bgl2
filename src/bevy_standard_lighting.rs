@@ -19,23 +19,24 @@ pub const DEFAULT_MAX_JOINTS: usize = 32;
 pub const DEFAULT_MAX_JOINTS_DEF: (&str, &str) = ("MAX_JOINTS", "32");
 
 #[derive(UniformSet, Resource, Clone, Default)]
+#[uniform_set(prefix = "ub_")]
 pub struct StandardLightingUniforms {
     #[array_max("MAX_POINT_LIGHTS")]
-    pub ub_point_light_position_range: Vec<Vec4>,
+    pub point_light_position_range: Vec<Vec4>,
     #[array_max("MAX_POINT_LIGHTS")]
-    pub ub_point_light_color_radius: Vec<Vec4>,
+    pub point_light_color_radius: Vec<Vec4>,
     #[array_max("MAX_POINT_LIGHTS")]
-    pub ub_spot_light_dir_offset_scale: Vec<Vec4>,
-    pub ub_directional_light_dir: Vec3,
-    pub ub_directional_light_color: Vec3,
+    pub spot_light_dir_offset_scale: Vec<Vec4>,
+    pub directional_light_dir: Vec3,
+    pub directional_light_color: Vec3,
     #[base_type("samplerCube")]
-    pub ub_specular_map: Option<Handle<Image>>,
+    pub specular_map: Option<Handle<Image>>,
     #[base_type("samplerCube")]
-    pub ub_diffuse_map: Option<Handle<Image>>,
-    pub ub_shadow_texture: TextureRef,
-    pub ub_env_intensity: f32,
-    pub ub_shadow_clip_from_world: Mat4,
-    pub ub_light_count: i32,
+    pub diffuse_map: Option<Handle<Image>>,
+    pub shadow_texture: TextureRef,
+    pub env_intensity: f32,
+    pub shadow_clip_from_world: Mat4,
+    pub light_count: i32,
 }
 
 #[derive(Default)]
@@ -98,49 +99,49 @@ impl StandardLightingUniforms {
         let mut data = StandardLightingUniforms::default();
 
         for (light, trans) in point_lights {
-            if data.ub_point_light_position_range.len() >= max_point_spot {
+            if data.point_light_position_range.len() >= max_point_spot {
                 break;
             }
-            data.ub_point_light_position_range
+            data.point_light_position_range
                 .push(trans.translation().extend(light.range));
-            data.ub_point_light_color_radius.push(
+            data.point_light_color_radius.push(
                 (light.color.to_linear().to_vec3() * light.intensity * POWER_TO_INTENSITY)
                     .extend(light.radius),
             );
-            data.ub_spot_light_dir_offset_scale
+            data.spot_light_dir_offset_scale
                 .push(vec4(1.0, 0.0, 2.0, 1.0));
         }
 
         for (light, trans) in spot_lights {
-            if data.ub_point_light_position_range.len() >= max_point_spot {
+            if data.point_light_position_range.len() >= max_point_spot {
                 break;
             }
-            data.ub_point_light_position_range
+            data.point_light_position_range
                 .push(trans.translation().extend(light.range));
-            data.ub_point_light_color_radius.push(
+            data.point_light_color_radius.push(
                 (light.color.to_linear().to_vec3() * light.intensity * POWER_TO_INTENSITY)
                     .extend(light.radius),
             );
-            data.ub_spot_light_dir_offset_scale
+            data.spot_light_dir_offset_scale
                 .push(calc_spot_dir_offset_scale(light, trans));
         }
 
-        data.ub_light_count = data.ub_point_light_position_range.len() as i32;
+        data.light_count = data.point_light_position_range.len() as i32;
 
         if let Some((light, trans)) = directional_light {
-            data.ub_directional_light_dir = trans.forward().as_vec3();
-            data.ub_directional_light_color = light.color.to_linear().to_vec3() * light.illuminance;
+            data.directional_light_dir = trans.forward().as_vec3();
+            data.directional_light_color = light.color.to_linear().to_vec3() * light.illuminance;
         }
 
         if let Some(env_light) = env_light {
-            data.ub_specular_map = Some(env_light.specular_map.clone());
-            data.ub_diffuse_map = Some(env_light.diffuse_map.clone());
-            data.ub_env_intensity = env_light.intensity;
+            data.specular_map = Some(env_light.specular_map.clone());
+            data.diffuse_map = Some(env_light.diffuse_map.clone());
+            data.env_intensity = env_light.intensity;
         }
 
         if let Some(shadow) = &shadow {
-            data.ub_shadow_texture = shadow.texture.clone();
-            data.ub_shadow_clip_from_world = shadow.cascade.clip_from_world;
+            data.shadow_texture = shadow.texture.clone();
+            data.shadow_clip_from_world = shadow.cascade.clip_from_world;
         }
 
         data

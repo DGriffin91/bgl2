@@ -17,9 +17,9 @@ uniform vec3 reflection_plane_position;
 uniform vec3 reflection_plane_normal;
 
 void main() {
-    vec4 base_color = base_color * to_linear(texture2D(base_color_texture, uv_0));
+    vec4 base_color = ub_base_color * to_linear(texture2D(ub_base_color_texture, uv_0));
 
-    if (!alpha_blend && (base_color.a < 0.5)) {
+    if (!ub_alpha_blend && (base_color.a < 0.5)) {
         discard;
     }
     if (write_reflection) {
@@ -37,22 +37,22 @@ void main() {
 
     vec3 V = normalize(view_position - ws_position);
 
-    vec4 metallic_roughness = texture2D(metallic_roughness_texture, uv_0);
-    float perceptual_roughness = metallic_roughness.g * perceptual_roughness;
-    float metallic = metallic * metallic_roughness.b;
-    vec3 F0 = calculate_F0(base_color.rgb, metallic, reflectance);
+    vec4 metallic_roughness = texture2D(ub_metallic_roughness_texture, uv_0);
+    float perceptual_roughness = metallic_roughness.g * ub_perceptual_roughness;
+    float metallic = ub_metallic * metallic_roughness.b;
+    vec3 F0 = calculate_F0(base_color.rgb, metallic, ub_reflectance);
     vec3 diffuse_color = base_color.rgb * (1.0 - metallic);
 
     float emissive_exposure_factor = 1000.0; // TODO do something better
-    vec3 emissive = emissive_exposure_factor * emissive.rgb * to_linear(texture2D(emissive_texture, uv_0).rgb);
+    vec3 emissive = emissive_exposure_factor * ub_emissive.rgb * to_linear(texture2D(ub_emissive_texture, uv_0).rgb);
 
     vec3 normal = vert_normal;
-    if (has_normal_map) {
-        normal = apply_normal_mapping(normal_map_texture, vert_normal, tangent, uv_0, flip_normal_map_y, double_sided);
+    if (ub_has_normal_map) {
+        normal = apply_normal_mapping(ub_normal_map_texture, vert_normal, tangent, uv_0, ub_flip_normal_map_y, ub_double_sided);
     }
 
     vec3 output_color = apply_pbr_lighting(V, diffuse_color, F0, vert_normal, normal, perceptual_roughness,
-            diffuse_transmission, screen_uv, view_resolution, ws_position);
+            ub_diffuse_transmission, screen_uv, view_resolution, ws_position);
 
     // TODO return struct from standard_lighting so the env map can be properly replaced by reflection?
     if (read_reflection && perceptual_roughness < 0.2) {
