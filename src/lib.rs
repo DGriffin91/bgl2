@@ -651,6 +651,7 @@ impl BevyGlContext {
     pub fn clear_color_and_depth(&self, color: Option<Vec4>) {
         unsafe {
             self.gl.depth_mask(true);
+            self.gl.color_mask(true, true, true, true);
             if let Some(color) = color {
                 self.gl.clear_color(color.x, color.y, color.z, color.w);
             } else {
@@ -665,6 +666,7 @@ impl BevyGlContext {
     pub fn clear_color(&self, color: Option<Vec4>) {
         unsafe {
             self.gl.depth_mask(false);
+            self.gl.color_mask(true, true, true, true);
             if let Some(color) = color {
                 self.gl.clear_color(color.x, color.y, color.z, color.w);
             } else {
@@ -701,7 +703,7 @@ impl BevyGlContext {
             self.gl.disable(glow::BLEND);
             self.gl.depth_func(glow::GEQUAL);
             self.gl.depth_mask(write_depth);
-            self.gl.color_mask(true, true, true, true);
+            self.gl.color_mask(true, true, true, false);
             self.gl.blend_func(glow::ZERO, glow::ONE);
         }
     }
