@@ -141,7 +141,7 @@ impl StandardLightingUniforms {
 
         if let Some(shadow) = &shadow {
             data.shadow_texture = shadow.texture.clone();
-            data.shadow_clip_from_world = shadow.cascade.clip_from_world;
+            data.shadow_clip_from_world = shadow.clip_from_view * shadow.view_from_world;
         }
 
         data

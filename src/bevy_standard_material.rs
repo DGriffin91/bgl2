@@ -118,11 +118,10 @@ pub fn standard_material_prepare_view(
 
     if *phase == RenderPhase::Shadow {
         if let Some(shadow) = &shadow {
-            view_position = shadow.cascade.world_from_cascade.project_point3(Vec3::ZERO);
-            //clip_from_view = shadow.cascade.clip_from_cascade;
-            world_from_view = shadow.cascade.world_from_cascade;
-            view_from_world = world_from_view.inverse();
-            clip_from_world = shadow.cascade.clip_from_world;
+            view_position = shadow.light_position;
+            view_from_world = shadow.view_from_world;
+            world_from_view = shadow.view_from_world.inverse();
+            clip_from_world = shadow.clip_from_view * shadow.view_from_world;
         } else {
             return;
         }

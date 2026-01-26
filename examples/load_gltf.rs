@@ -3,7 +3,6 @@
 use argh::FromArgs;
 use bevy::{
     diagnostic::{FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin},
-    light::CascadeShadowConfigBuilder,
     prelude::*,
     render::{RenderPlugin, settings::WgpuSettings},
     window::PresentMode,
@@ -13,6 +12,7 @@ use bevy_mod_mipmap_generator::{MipmapGeneratorPlugin, generate_mipmaps};
 use bevy_opengl::{
     bevy_standard_lighting::OpenGLStandardLightingPlugin,
     bevy_standard_material::OpenGLStandardMaterialPlugin,
+    phase_shadow::ShadowBounds,
     render::{OpenGLRenderPlugins, RenderSet},
 };
 
@@ -86,19 +86,14 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
     ));
 
     commands.spawn((
-        Transform::default().looking_at(Vec3::new(0.5, -0.5, 0.3), Vec3::Y),
+        Transform::default().looking_at(Vec3::new(0.5, -0.6, 0.3), Vec3::Y),
         DirectionalLight {
             shadows_enabled: true,
             shadow_depth_bias: 0.3,
             shadow_normal_bias: 0.6,
             ..default()
         },
-        CascadeShadowConfigBuilder {
-            num_cascades: 1,
-            maximum_distance: 1.7,
-            ..default()
-        }
-        .build(),
+        ShadowBounds::cube(2.0),
     ));
     commands.spawn(SceneRoot(asset_server.load(
         GltfAssetLabel::Scene(0).from_asset("models/FlightHelmet/FlightHelmet.gltf"),

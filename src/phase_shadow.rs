@@ -1,7 +1,4 @@
-use bevy::{
-    light::{Cascades, cascade::Cascade},
-    prelude::*,
-};
+use bevy::prelude::*;
 use glow::{HasContext, PixelUnpackData};
 
 use crate::{
@@ -24,32 +21,49 @@ fn update_shadow_tex(
     mut commands: Commands,
     bevy_window: Single<&Window>,
     shadow_tex: Option<ResMut<DirectionalLightShadow>>,
-    directional_lights: Query<(&DirectionalLight, &Cascades)>,
+    directional_lights: Query<(&DirectionalLight, &GlobalTransform, Option<&ShadowBounds>)>,
     mut enc: ResMut<CommandEncoder>,
 ) {
     // Keep shadow texture size up to date.
-    let mut shadow_cascade = None;
-    if let Some((directional_light, cascades)) = directional_lights.iter().next() {
+    let mut view_from_world = Default::default();
+    let mut clip_from_view = Default::default();
+    let mut light_trans = Default::default();
+    let mut enabled = false;
+    if let Some((directional_light, trans, shadow_bounds)) = directional_lights.iter().next() {
+        let shadow_bounds = shadow_bounds.cloned().unwrap_or_default();
         if directional_light.shadows_enabled {
-            if let Some((_, cascades)) = cascades.cascades.iter().next() {
-                if let Some(cascade) = cascades.get(0) {
-                    shadow_cascade = Some(cascade.clone());
-                } else {
-                    commands.remove_resource::<DirectionalLightShadow>();
-                    return;
-                }
-            }
+            light_trans = *trans;
+            let dir = light_trans
+                .to_matrix()
+                .transform_vector3(vec3(0.0, 0.0, -1.0));
+            let position = light_trans.translation() - dir * shadow_bounds.depth * 0.5;
+            let z_far = shadow_bounds.depth * 0.5;
+            let shadow_view_from_world = Mat4::look_to_lh(position, dir, Vec3::Y);
+            let shadow_clip_from_view = Mat4::orthographic_lh(
+                -shadow_bounds.width * 0.5,
+                shadow_bounds.width * 0.5,
+                -shadow_bounds.height * 0.5,
+                shadow_bounds.height * 0.5,
+                z_far,
+                0.0,
+            );
+            view_from_world = shadow_view_from_world;
+            clip_from_view = shadow_clip_from_view;
+            enabled = true;
         }
     }
     let width = bevy_window.physical_width().max(1);
     let height = bevy_window.physical_height().max(1);
     if let Some(mut shadow_tex) = shadow_tex {
-        if let Some(shadow_cascade) = shadow_cascade {
+        if enabled {
+            shadow_tex.view_from_world = view_from_world;
+            shadow_tex.clip_from_view = clip_from_view;
+            shadow_tex.light_position = light_trans.translation();
             if shadow_tex.width != width || shadow_tex.height != height {
                 let texture_ref = shadow_tex.texture.clone();
                 shadow_tex.width = width;
                 shadow_tex.height = height;
-                shadow_tex.cascade = shadow_cascade;
+
                 enc.record(move |ctx, world| unsafe {
                     if let Some((tex, _target)) = world
                         .resource_mut::<GpuImages>()
@@ -71,14 +85,13 @@ fn update_shadow_tex(
             commands.remove_resource::<DirectionalLightShadow>();
         }
     } else {
-        if let Some(shadow_cascade) = shadow_cascade {
+        if enabled {
             let texture_ref = TextureRef::new();
             commands.insert_resource(DirectionalLightShadow {
                 texture: texture_ref.clone(),
-                cascade: shadow_cascade.clone(),
-                dir_to_light: shadow_cascade
-                    .world_from_cascade
-                    .project_point3(vec3(0.0, 0.0, 1.0)),
+                light_position: light_trans.translation(),
+                view_from_world,
+                clip_from_view,
                 width,
                 height,
             });
@@ -91,8 +104,33 @@ fn update_shadow_tex(
                     height,
                 )
             });
-        } else {
-            return;
+        }
+    }
+}
+
+#[derive(Component, Clone, Copy)]
+pub struct ShadowBounds {
+    pub width: f32,
+    pub height: f32,
+    pub depth: f32,
+}
+
+impl ShadowBounds {
+    pub fn cube(size: f32) -> Self {
+        Self {
+            width: size,
+            height: size,
+            depth: size,
+        }
+    }
+}
+
+impl Default for ShadowBounds {
+    fn default() -> Self {
+        Self {
+            width: 50.0,
+            height: 50.0,
+            depth: 50.0,
         }
     }
 }
@@ -148,10 +186,11 @@ fn render_shadow(world: &mut World) {
 #[derive(Resource, Clone)]
 pub struct DirectionalLightShadow {
     pub texture: TextureRef,
-    pub cascade: Cascade,
-    pub dir_to_light: Vec3,
-    width: u32,
-    height: u32,
+    pub view_from_world: Mat4,
+    pub clip_from_view: Mat4,
+    pub light_position: Vec3,
+    pub width: u32,
+    pub height: u32,
 }
 
 impl DirectionalLightShadow {

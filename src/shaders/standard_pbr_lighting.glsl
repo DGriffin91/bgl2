@@ -10,7 +10,7 @@ vec3 apply_pbr_lighting(vec3 V, vec3 diffuse_color, vec3 F0, vec3 vert_normal, v
     vec4 shadow_clip = ub_shadow_clip_from_world * vec4(ws_position + vert_normal * normal_bias, 1.0);
     vec3 shadow_uvz = (shadow_clip.xyz / shadow_clip.w) * 0.5 + 0.5;
 
-    if (shadow_uvz.x > 0.0 && shadow_uvz.x < 1.0 && shadow_uvz.y > 0.0 && shadow_uvz.y < 1.0) {
+    if (shadow_uvz.x > 0.0 && shadow_uvz.x < 1.0 && shadow_uvz.y > 0.0 && shadow_uvz.y < 1.0 && shadow_uvz.z > 0.0 && shadow_uvz.z < 1.0) {
         dir_shadow *= bilinear_shadow2(ub_shadow_texture, shadow_uvz.xy, shadow_uvz.z, bias, view_resolution);
         //dir_shadow *= sample_shadow_map_castano_thirteen(ub_shadow_texture, shadow_uvz.xy, shadow_uvz.z, bias, view_resolution);
         dir_shadow = hardenedKernel(dir_shadow);

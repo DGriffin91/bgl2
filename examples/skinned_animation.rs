@@ -4,7 +4,7 @@ use argh::FromArgs;
 use bevy::{
     camera_controller::free_camera::{FreeCamera, FreeCameraPlugin},
     diagnostic::{FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin},
-    light::{CascadeShadowConfigBuilder, light_consts::lux::DIRECT_SUNLIGHT},
+    light::light_consts::lux::DIRECT_SUNLIGHT,
     prelude::*,
     render::{RenderPlugin, settings::WgpuSettings},
     scene::SceneInstanceReady,
@@ -15,6 +15,7 @@ use bevy_mod_mipmap_generator::{MipmapGeneratorPlugin, generate_mipmaps};
 use bevy_opengl::{
     bevy_standard_lighting::OpenGLStandardLightingPlugin,
     bevy_standard_material::{OpenGLStandardMaterialPlugin, ReadReflection, SkipReflection},
+    phase_shadow::ShadowBounds,
     plane_reflect::ReflectionPlane,
     render::{OpenGLRenderPlugins, RenderSet},
 };
@@ -146,17 +147,10 @@ fn setup(
             illuminance: DIRECT_SUNLIGHT,
             shadows_enabled: true,
             shadow_depth_bias: 0.3,
-            shadow_normal_bias: 0.6,
+            shadow_normal_bias: 1.0,
             ..default()
         },
-        CascadeShadowConfigBuilder {
-            num_cascades: 1,
-            minimum_distance: 0.1,
-            maximum_distance: 22.0,
-            first_cascade_far_bound: 22.0,
-            overlap_proportion: 0.2,
-        }
-        .build(),
+        ShadowBounds::cube(1.0),
     ));
 }
 

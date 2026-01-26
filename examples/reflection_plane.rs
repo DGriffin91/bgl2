@@ -3,7 +3,7 @@ use std::f32::consts::PI;
 use bevy::{
     camera_controller::free_camera::{FreeCamera, FreeCameraPlugin},
     diagnostic::{FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin},
-    light::{CascadeShadowConfigBuilder, light_consts::lux::AMBIENT_DAYLIGHT},
+    light::light_consts::lux::AMBIENT_DAYLIGHT,
     prelude::*,
     render::{RenderPlugin, settings::WgpuSettings},
     window::PresentMode,
@@ -13,6 +13,7 @@ use bevy_mod_mipmap_generator::{MipmapGeneratorPlugin, generate_mipmaps};
 use bevy_opengl::{
     bevy_standard_lighting::OpenGLStandardLightingPlugin,
     bevy_standard_material::{OpenGLStandardMaterialPlugin, ReadReflection, SkipReflection},
+    phase_shadow::ShadowBounds,
     plane_reflect::ReflectionPlane,
     render::{OpenGLRenderPlugins, RenderSet},
 };
@@ -107,11 +108,6 @@ fn setup(
             shadows_enabled: true,
             ..default()
         },
-        CascadeShadowConfigBuilder {
-            num_cascades: 1,
-            maximum_distance: 10.0,
-            ..default()
-        }
-        .build(),
+        ShadowBounds::cube(10.0),
     ));
 }

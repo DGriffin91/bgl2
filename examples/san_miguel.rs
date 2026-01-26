@@ -5,9 +5,7 @@ use bevy::{
     camera_controller::free_camera::{FreeCamera, FreeCameraPlugin},
     core_pipeline::{prepass::DepthPrepass, tonemapping::Tonemapping},
     diagnostic::{FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin},
-    light::{
-        CascadeShadowConfigBuilder, TransmittedShadowReceiver, light_consts::lux::DIRECT_SUNLIGHT,
-    },
+    light::{TransmittedShadowReceiver, light_consts::lux::DIRECT_SUNLIGHT},
     prelude::*,
     render::{RenderPlugin, settings::WgpuSettings},
     scene::SceneInstanceReady,
@@ -18,6 +16,7 @@ use bevy_mod_mipmap_generator::{MipmapGeneratorPlugin, generate_mipmaps};
 use bevy_opengl::{
     bevy_standard_lighting::OpenGLStandardLightingPlugin,
     bevy_standard_material::{OpenGLStandardMaterialPlugin, OpenGLStandardMaterialSettings},
+    phase_shadow::ShadowBounds,
     render::{OpenGLRenderPlugins, RenderSet},
 };
 use wgpu_types::Face;
@@ -150,14 +149,7 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
             shadow_normal_bias: 0.6,
             ..default()
         },
-        CascadeShadowConfigBuilder {
-            num_cascades: 1,
-            minimum_distance: 0.1,
-            maximum_distance: 22.0,
-            first_cascade_far_bound: 22.0,
-            overlap_proportion: 0.2,
-        }
-        .build(),
+        ShadowBounds::cube(35.0),
     ));
 
     let point_spot_mult = 1000.0;

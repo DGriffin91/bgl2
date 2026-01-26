@@ -1,7 +1,6 @@
 use bevy::{
     asset::RenderAssetUsages,
     diagnostic::{FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin},
-    light::CascadeShadowConfigBuilder,
     prelude::*,
     render::{RenderPlugin, settings::WgpuSettings},
     window::PresentMode,
@@ -14,7 +13,7 @@ use bevy_opengl::{
     },
     bevy_standard_material::{OpenGLStandardMaterialPlugin, ViewUniforms},
     command_encoder::CommandEncoder,
-    phase_shadow::DirectionalLightShadow,
+    phase_shadow::{DirectionalLightShadow, ShadowBounds},
     prepare_image::{GpuImages, TextureRef},
     prepare_mesh::GpuMeshes,
     render::{OpenGLRenderPlugins, RenderPhase, RenderSet, register_render_system},
@@ -116,12 +115,7 @@ fn setup(
             shadow_normal_bias: 0.6,
             ..default()
         },
-        CascadeShadowConfigBuilder {
-            num_cascades: 1,
-            maximum_distance: 10.0,
-            ..default()
-        }
-        .build(),
+        ShadowBounds::cube(15.0),
     ));
 }
 
