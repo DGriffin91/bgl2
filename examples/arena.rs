@@ -142,7 +142,56 @@ fn setup(
         .spawn(SceneRoot(asset_server.load(
             GltfAssetLabel::Scene(0).from_asset("models/arena/haze_sun.gltf"),
         )))
-        .observe(proc_haze);
+        .observe(remove_std_mat)
+        .observe(
+            |ready: On<SceneInstanceReady>, mut commands: Commands, children: Query<&Children>| {
+                let m = HazeMaterial::spawn(&mut commands, vec4(1.0, 0.7, 0.5, 0.9));
+                decend_haze(ready.entity, &mut commands, children, m);
+            },
+        );
+
+    let red_haze1 = HazeMaterial::spawn(&mut commands, vec4(1.0, 0.0, 0.0, 0.6));
+    let red_haze1_ob =
+        move |ready: On<SceneInstanceReady>, mut commands: Commands, children: Query<&Children>| {
+            decend_haze(ready.entity, &mut commands, children, red_haze1);
+        };
+    commands
+        .spawn(SceneRoot(asset_server.load(
+            GltfAssetLabel::Scene(0).from_asset("models/arena/haze_nave.gltf"),
+        )))
+        .observe(remove_std_mat)
+        .observe(red_haze1_ob);
+
+    commands
+        .spawn(SceneRoot(asset_server.load(
+            GltfAssetLabel::Scene(0).from_asset("models/arena/haze_sanct_side.gltf"),
+        )))
+        .observe(remove_std_mat)
+        .observe(red_haze1_ob);
+
+    commands
+        .spawn(SceneRoot(asset_server.load(
+            GltfAssetLabel::Scene(0).from_asset("models/arena/haze_chan.gltf"),
+        )))
+        .observe(remove_std_mat)
+        .observe(
+            |ready: On<SceneInstanceReady>, mut commands: Commands, children: Query<&Children>| {
+                let m = HazeMaterial::spawn(&mut commands, vec4(0.3, 0.0, 0.0, 0.5));
+                decend_haze(ready.entity, &mut commands, children, m);
+            },
+        );
+
+    commands
+        .spawn(SceneRoot(asset_server.load(
+            GltfAssetLabel::Scene(0).from_asset("models/arena/haze_font.gltf"),
+        )))
+        .observe(remove_std_mat)
+        .observe(
+            |ready: On<SceneInstanceReady>, mut commands: Commands, children: Query<&Children>| {
+                let m = HazeMaterial::spawn(&mut commands, vec4(0.4, 0.05, 1.0, 0.5));
+                decend_haze(ready.entity, &mut commands, children, m);
+            },
+        );
 
     // Reflection plane
     commands.spawn((
@@ -230,23 +279,15 @@ pub fn proc_pools_entrance(
     }
 }
 
-pub fn proc_haze(
+pub fn remove_std_mat(
     scene_ready: On<SceneInstanceReady>,
     mut commands: Commands,
     children: Query<&Children>,
 ) {
-    let haze_material = commands
-        .spawn(HazeMaterial {
-            haze_color: vec4(1.0, 0.9, 0.8, 1.0),
-        })
-        .id();
     for entity in children.iter_descendants(scene_ready.entity) {
         commands
             .entity(entity)
             .remove::<MeshMaterial3d<StandardMaterial>>();
-        commands
-            .entity(entity)
-            .insert(HazeMaterialHandle(haze_material));
     }
 }
 
@@ -455,8 +496,25 @@ struct HazeMaterial {
     haze_color: Vec4,
 }
 
+impl HazeMaterial {
+    pub fn spawn(commands: &mut Commands, color: Vec4) -> Entity {
+        commands.spawn(HazeMaterial { haze_color: color }).id()
+    }
+}
+
+fn decend_haze(
+    scene_ready: Entity,
+    commands: &mut Commands,
+    children: Query<&Children>,
+    haze_material: Entity,
+) {
+    for entity in children.iter_descendants(scene_ready) {
+        commands.entity(entity).insert(HazeHandle(haze_material));
+    }
+}
+
 #[derive(Component, Deref, DerefMut)]
-struct HazeMaterialHandle(Entity);
+struct HazeHandle(Entity);
 
 fn render_haze_mat(
     mesh_entities: Query<(
@@ -465,7 +523,7 @@ fn render_haze_mat(
         &GlobalTransform,
         &Aabb,
         &Mesh3d,
-        &HazeMaterialHandle,
+        &HazeHandle,
     )>,
     materials: Query<&HazeMaterial>,
     phase: If<Res<RenderPhase>>,
