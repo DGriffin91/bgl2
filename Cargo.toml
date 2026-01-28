@@ -16,6 +16,7 @@ bevy = { version = "0.18.0", default-features = false, features = [
     "bevy_camera_controller",
     "free_camera",
     "gltf_animation",
+    "hdr",
 ] }
 console_error_panic_hook = "0.1"
 

@@ -41,12 +41,15 @@ impl Plugin for OpenGLStandardMaterialPlugin {
         app.init_resource::<OpenGLStandardMaterialSettings>();
         register_prepare_system(app.world_mut(), standard_material_prepare_view);
         register_render_system::<StandardMaterial, _>(app.world_mut(), standard_material_render);
-        app.add_systems(Startup, setup.in_set(RenderSet::Pipeline));
-        app.add_systems(Update, sort_by_material.in_set(RenderSet::Prepare));
+        app.add_systems(
+            Startup,
+            init_std_shader_includes.in_set(RenderSet::Pipeline),
+        );
+        app.add_systems(Update, sort_std_mat_by_material.in_set(RenderSet::Prepare));
     }
 }
 
-fn setup(mut enc: ResMut<CommandEncoder>) {
+pub fn init_std_shader_includes(mut enc: ResMut<CommandEncoder>) {
     enc.record(|ctx, _world| {
         ctx.add_shader_include("std::agx", include_str!("shaders/agx.glsl"));
         ctx.add_shader_include("std::math", include_str!("shaders/math.glsl"));
@@ -76,7 +79,7 @@ pub struct ViewUniforms {
 #[derive(Resource, Default, Deref, DerefMut)]
 pub struct DrawsSortedByMaterial(Vec<Entity>);
 
-pub fn sort_by_material(
+pub fn sort_std_mat_by_material(
     mesh_entities: Query<(Entity, &MeshMaterial3d<StandardMaterial>)>,
     mut sorted: ResMut<DrawsSortedByMaterial>,
 ) {
@@ -353,25 +356,26 @@ pub fn standard_material_render(
 
 #[derive(UniformSet, Component, Clone)]
 #[uniform_set(prefix = "ub_")]
-struct StandardMaterialUniforms {
-    base_color: Vec4,
-    emissive: Vec4,
-    perceptual_roughness: f32,
-    metallic: f32,
-    double_sided: bool,
-    diffuse_transmission: f32,
-    flip_normal_map_y: bool,
-    reflectance: Vec3,
-    alpha_blend: bool,
-    has_normal_map: bool,
-    base_color_texture: Option<Handle<Image>>,
-    normal_map_texture: Option<Handle<Image>>,
-    metallic_roughness_texture: Option<Handle<Image>>,
-    emissive_texture: Option<Handle<Image>>,
+pub struct StandardMaterialUniforms {
+    pub base_color: Vec4,
+    pub emissive: Vec4,
+    pub perceptual_roughness: f32,
+    pub metallic: f32,
+    pub double_sided: bool,
+    pub diffuse_transmission: f32,
+    pub lightmap_exposure: f32,
+    pub flip_normal_map_y: bool,
+    pub reflectance: Vec3,
+    pub alpha_blend: bool,
+    pub has_normal_map: bool,
+    pub base_color_texture: Option<Handle<Image>>,
+    pub normal_map_texture: Option<Handle<Image>>,
+    pub metallic_roughness_texture: Option<Handle<Image>>,
+    pub emissive_texture: Option<Handle<Image>>,
     #[exclude]
-    alpha_mode: AlphaMode,
+    pub alpha_mode: AlphaMode,
     #[exclude]
-    cull_mode: Option<Face>,
+    pub cull_mode: Option<Face>,
 }
 
 impl From<&StandardMaterial> for StandardMaterialUniforms {
@@ -383,6 +387,7 @@ impl From<&StandardMaterial> for StandardMaterialUniforms {
             metallic: mat.metallic,
             double_sided: mat.double_sided,
             diffuse_transmission: mat.diffuse_transmission,
+            lightmap_exposure: mat.lightmap_exposure,
             flip_normal_map_y: mat.flip_normal_map_y,
             reflectance: mat.specular_tint.to_linear().to_vec3() * mat.reflectance,
             alpha_blend: transparent_draw_from_alpha_mode(&mat.alpha_mode),

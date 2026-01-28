@@ -299,7 +299,7 @@ fn transfer_image_data(image: &bevy::prelude::Image, target: u32, ctx: &BevyGlCo
     let format = image.texture_descriptor.format;
     let mip_level_count = image.texture_descriptor.mip_level_count;
     let array_layer_count = image.texture_descriptor.array_layer_count();
-    let block_size = format.block_copy_size(None).unwrap_or(4);
+    let mut block_size = format.block_copy_size(None).unwrap_or(4);
     let (block_width, block_height) = format.block_dimensions();
 
     let mut binary_offset = 0;
@@ -329,6 +329,8 @@ fn transfer_image_data(image: &bevy::prelude::Image, target: u32, ctx: &BevyGlCo
         TextureFormat::Rgba8UnormSrgb => rgb_format,
         // rgb9e5 not supported by WebGL1 or some OpenGL2 drivers so we convert to RGBE
         TextureFormat::Rgb9e5Ufloat => rgb_format,
+        // Converted to rgbe
+        TextureFormat::Rgba32Float => rgb_format,
         _ => {
             warn!("unimplemented format {:?}", image.texture_descriptor.format);
             return;
@@ -340,6 +342,8 @@ fn transfer_image_data(image: &bevy::prelude::Image, target: u32, ctx: &BevyGlCo
         TextureFormat::Rgba8UnormSrgb => glow::RGBA,
         // rgb9e5 not supported by WebGL1 or some OpenGL2 drivers so we convert to RGBE
         TextureFormat::Rgb9e5Ufloat => glow::RGBA,
+        // Converted to rgbe
+        TextureFormat::Rgba32Float => glow::RGBA,
         _ => {
             warn!("unimplemented format {:?}", image.texture_descriptor.format);
             return;
@@ -351,6 +355,8 @@ fn transfer_image_data(image: &bevy::prelude::Image, target: u32, ctx: &BevyGlCo
         TextureFormat::Rgba8UnormSrgb => glow::UNSIGNED_BYTE,
         // rgb9e5 not supported by WebGL1 or some OpenGL2 drivers so we convert to RGBE
         TextureFormat::Rgb9e5Ufloat => glow::UNSIGNED_BYTE,
+        // Converted to rgbe
+        TextureFormat::Rgba32Float => glow::UNSIGNED_BYTE,
         _ => {
             warn!("unimplemented format {:?}", image.texture_descriptor.format);
             return;
@@ -367,6 +373,14 @@ fn transfer_image_data(image: &bevy::prelude::Image, target: u32, ctx: &BevyGlCo
             bytemuck::cast_slice::<u8, u32>(image_data)
                 .iter()
                 .map(|c| float2rgbe(rgb9e5_to_vec3(*c)))
+                .collect::<Vec<u32>>(),
+        )
+    } else if image.texture_descriptor.format == TextureFormat::Rgba32Float {
+        block_size = 1;
+        Some(
+            bytemuck::cast_slice::<u8, [f32; 4]>(image_data)
+                .iter()
+                .map(|c| float2rgbe([c[0], c[1], c[2]]))
                 .collect::<Vec<u32>>(),
         )
     } else {
