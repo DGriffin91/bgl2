@@ -115,10 +115,10 @@ fn transparent(world: &mut World) {
         draws.next.clear();
     }
 
-    let mut current_type_id = None;
     let mut last = false;
     // Draw deferred transparent
     loop {
+        let mut current_type_id = None;
         let mut draws = world.get_resource_mut::<DeferredAlphaBlendDraws>().unwrap();
         // collect draws off the end of draws.deferred on to draws.next until we hit a different id, then submit those
         // before collecting the next set
@@ -129,7 +129,6 @@ fn transparent(world: &mut World) {
                         draws.next.push(entity);
                     } else {
                         draws.deferred.push((dist, entity, type_id));
-                        current_type_id = None;
                         break;
                     }
                 } else {
