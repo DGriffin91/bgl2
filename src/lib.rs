@@ -911,7 +911,9 @@ impl UniformValue for f32 {
 
 impl UniformValue for &[f32] {
     fn load(&self, gl: &glow::Context, loc: &glow::UniformLocation) {
-        unsafe { gl.uniform_1_f32_slice(Some(&loc), &bytemuck::cast_slice(self)) };
+        if !self.is_empty() {
+            unsafe { gl.uniform_1_f32_slice(Some(&loc), &bytemuck::cast_slice(self)) };
+        }
     }
     fn read_raw(&self, _out: &mut StackStack<u32, 16>) -> bool {
         false
@@ -942,7 +944,9 @@ impl UniformValue for Vec2 {
 
 impl UniformValue for &[Vec2] {
     fn load(&self, gl: &glow::Context, loc: &glow::UniformLocation) {
-        unsafe { gl.uniform_2_f32_slice(Some(&loc), &bytemuck::cast_slice(self)) };
+        if !self.is_empty() {
+            unsafe { gl.uniform_2_f32_slice(Some(&loc), &bytemuck::cast_slice(self)) };
+        }
     }
     fn read_raw(&self, _out: &mut StackStack<u32, 16>) -> bool {
         false
@@ -951,7 +955,9 @@ impl UniformValue for &[Vec2] {
 
 impl UniformValue for Vec<Vec2> {
     fn load(&self, gl: &glow::Context, loc: &glow::UniformLocation) {
-        unsafe { gl.uniform_2_f32_slice(Some(&loc), &bytemuck::cast_slice(self.as_slice())) };
+        if !self.is_empty() {
+            unsafe { gl.uniform_2_f32_slice(Some(&loc), &bytemuck::cast_slice(self.as_slice())) };
+        }
     }
     fn read_raw(&self, _out: &mut StackStack<u32, 16>) -> bool {
         false
@@ -971,7 +977,9 @@ impl UniformValue for Vec3 {
 
 impl UniformValue for &[Vec3] {
     fn load(&self, gl: &glow::Context, loc: &glow::UniformLocation) {
-        unsafe { gl.uniform_3_f32_slice(Some(&loc), &bytemuck::cast_slice(self)) };
+        if !self.is_empty() {
+            unsafe { gl.uniform_3_f32_slice(Some(&loc), &bytemuck::cast_slice(self)) };
+        }
     }
     fn read_raw(&self, _out: &mut StackStack<u32, 16>) -> bool {
         false
@@ -980,7 +988,9 @@ impl UniformValue for &[Vec3] {
 
 impl UniformValue for Vec<Vec3> {
     fn load(&self, gl: &glow::Context, loc: &glow::UniformLocation) {
-        unsafe { gl.uniform_3_f32_slice(Some(&loc), &bytemuck::cast_slice(self.as_slice())) };
+        if !self.is_empty() {
+            unsafe { gl.uniform_3_f32_slice(Some(&loc), &bytemuck::cast_slice(self.as_slice())) };
+        }
     }
     fn read_raw(&self, _out: &mut StackStack<u32, 16>) -> bool {
         false
@@ -1000,7 +1010,9 @@ impl UniformValue for Vec4 {
 
 impl UniformValue for &[Vec4] {
     fn load(&self, gl: &glow::Context, loc: &glow::UniformLocation) {
-        unsafe { gl.uniform_4_f32_slice(Some(&loc), &bytemuck::cast_slice(self)) };
+        if !self.is_empty() {
+            unsafe { gl.uniform_4_f32_slice(Some(&loc), &bytemuck::cast_slice(self)) };
+        }
     }
     fn read_raw(&self, _out: &mut StackStack<u32, 16>) -> bool {
         false
@@ -1009,7 +1021,9 @@ impl UniformValue for &[Vec4] {
 
 impl UniformValue for Vec<Vec4> {
     fn load(&self, gl: &glow::Context, loc: &glow::UniformLocation) {
-        unsafe { gl.uniform_4_f32_slice(Some(&loc), &bytemuck::cast_slice(self.as_slice())) };
+        if !self.is_empty() {
+            unsafe { gl.uniform_4_f32_slice(Some(&loc), &bytemuck::cast_slice(self.as_slice())) };
+        }
     }
     fn read_raw(&self, _out: &mut StackStack<u32, 16>) -> bool {
         false
@@ -1037,7 +1051,11 @@ impl UniformValue for Mat4 {
 
 impl UniformValue for &[Mat4] {
     fn load(&self, gl: &glow::Context, loc: &glow::UniformLocation) {
-        unsafe { gl.uniform_matrix_4_f32_slice(Some(&loc), false, &bytemuck::cast_slice(self)) };
+        if !self.is_empty() {
+            unsafe {
+                gl.uniform_matrix_4_f32_slice(Some(&loc), false, &bytemuck::cast_slice(self))
+            };
+        }
     }
     fn read_raw(&self, _out: &mut StackStack<u32, 16>) -> bool {
         false
@@ -1046,9 +1064,15 @@ impl UniformValue for &[Mat4] {
 
 impl UniformValue for Vec<Mat4> {
     fn load(&self, gl: &glow::Context, loc: &glow::UniformLocation) {
-        unsafe {
-            gl.uniform_matrix_4_f32_slice(Some(&loc), false, &bytemuck::cast_slice(self.as_slice()))
-        };
+        if !self.is_empty() {
+            unsafe {
+                gl.uniform_matrix_4_f32_slice(
+                    Some(&loc),
+                    false,
+                    &bytemuck::cast_slice(self.as_slice()),
+                )
+            };
+        }
     }
     fn read_raw(&self, _out: &mut StackStack<u32, 16>) -> bool {
         false
