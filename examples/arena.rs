@@ -1,3 +1,5 @@
+use std::f32::consts::PI;
+
 use bevy::{
     camera::primitives::Aabb,
     camera_controller::free_camera::{FreeCamera, FreeCameraPlugin},
@@ -92,7 +94,7 @@ fn setup(
     // Camera
     commands.spawn((
         Camera3d::default(),
-        //Transform::from_xyz(16.0, 1.2, 12.0).looking_at(Vec3::new(0.0, 1.2, 0.0), Vec3::Y),
+        Transform::from_xyz(-45.0, 4.0, 0.0).looking_at(Vec3::new(0.0, 18.0, 0.0), Vec3::Y),
         EnvironmentMapLight {
             diffuse_map: asset_server.load("environment_maps/pisa_diffuse_rgb9e5_zstd.ktx2"),
             specular_map: asset_server.load("environment_maps/pisa_specular_rgb9e5_zstd.ktx2"),
@@ -104,6 +106,10 @@ fn setup(
             run_speed: 30.0,
             ..default()
         },
+        Projection::Perspective(PerspectiveProjection {
+            fov: PI / 3.0,
+            ..default()
+        }),
     ));
 
     commands.spawn(SceneRoot(
