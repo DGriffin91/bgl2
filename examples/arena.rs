@@ -95,12 +95,6 @@ fn setup(
     commands.spawn((
         Camera3d::default(),
         Transform::from_xyz(-45.0, 4.0, 0.0).looking_at(Vec3::new(0.0, 18.0, 0.0), Vec3::Y),
-        EnvironmentMapLight {
-            diffuse_map: asset_server.load("environment_maps/pisa_diffuse_rgb9e5_zstd.ktx2"),
-            specular_map: asset_server.load("environment_maps/pisa_specular_rgb9e5_zstd.ktx2"),
-            intensity: 10.0,
-            ..default()
-        },
         FreeCamera {
             walk_speed: 10.0,
             run_speed: 30.0,
