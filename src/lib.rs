@@ -1096,7 +1096,7 @@ macro_rules! shader_cached {
             if let Some((index, _)) = $bevy_gl_context.shader_cache_map.get(&key) {
                 Some(*index)
             } else {
-                if let Ok(shader) = $bevy_gl_context.shader(
+                if let Ok(shader) = $bevy_gl_context.compile_shader(
                     &include_str!($vertex),
                     &include_str!($fragment),
                     $shader_defs,
