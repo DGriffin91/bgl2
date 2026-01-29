@@ -402,20 +402,19 @@ pub fn standard_material_render(
     let shadow = shadow.as_deref().cloned();
     let light_map = light_map.clone();
     enc.record(move |ctx, world| {
-        let shadow_def;
-        if phase.depth_only() {
-            shadow_def = shadow
-                .as_ref()
-                .map_or(("", ""), |_| ("RENDER_DEPTH_ONLY", ""));
-        } else {
-            shadow_def = shadow.as_ref().map_or(("", ""), |_| ("SAMPLE_SHADOW", ""));
-        }
-
         let shader_index = shader_cached!(
             ctx,
             "../assets/shaders/arena_mat.vert",
             "../assets/shaders/arena_mat.frag",
-            &[shadow_def, DEFAULT_MAX_LIGHTS_DEF, DEFAULT_MAX_JOINTS_DEF],
+            [DEFAULT_MAX_LIGHTS_DEF, DEFAULT_MAX_JOINTS_DEF]
+                .iter()
+                .chain(
+                    world
+                        .resource::<StandardLightingUniforms>()
+                        .shader_defs(true, shadow.is_some(), &phase)
+                        .iter()
+                )
+                .chain(phase.shader_defs().iter()),
             &[
                 ViewUniforms::bindings(),
                 StandardMaterialUniforms::bindings(),
@@ -427,8 +426,6 @@ pub fn standard_material_render(
 
         world.resource_mut::<GpuMeshes>().reset_mesh_bind_cache();
         ctx.use_cached_program(shader_index);
-
-        ctx.load("write_reflection", phase.reflection());
 
         ctx.map_uniform_set_locations::<ViewUniforms>();
         ctx.map_uniform_set_locations::<LightMap>();
@@ -594,7 +591,8 @@ fn render_haze_mat(
                         .resource::<StandardLightingUniforms>()
                         .shader_defs(true, shadow.is_some(), &phase)
                         .iter()
-                ),
+                )
+                .chain(phase.shader_defs().iter()),
             &[
                 ViewUniforms::bindings(),
                 StandardLightingUniforms::bindings(),

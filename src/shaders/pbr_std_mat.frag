@@ -12,7 +12,6 @@ varying vec2 uv_0;
 
 uniform sampler2D reflect_texture;
 uniform bool read_reflection;
-uniform bool write_reflection;
 uniform vec3 reflection_plane_position;
 uniform vec3 reflection_plane_normal;
 
@@ -22,11 +21,11 @@ void main() {
     if (!ub_alpha_blend && (base_color.a < 0.5)) {
         discard;
     }
-    if (write_reflection) {
-        if (dot(ws_position - reflection_plane_position, reflection_plane_normal) < 0.0) {
-            discard;
-        }
+    #ifdef WRITE_REFLECTION
+    if (dot(ws_position - reflection_plane_position, reflection_plane_normal) < 0.0) {
+        discard;
     }
+    #endif // WRITE_REFLECTION
 
     vec3 ndc_position = clip_position.xyz / clip_position.w;
     vec2 screen_uv = ndc_position.xy * 0.5 + 0.5;
@@ -65,12 +64,12 @@ void main() {
             env_occ, ub_diffuse_transmission, screen_uv, ub_view_resolution, ws_position);
 
     gl_FragColor = vec4(ub_view_exposure * output_color, base_color.a);
-    if (write_reflection) {
+    #ifdef WRITE_REFLECTION
         gl_FragColor.rgb = reversible_tonemap(gl_FragColor.rgb);
-    } else {
+    #else
         gl_FragColor.rgb = agx_tonemapping(gl_FragColor.rgb); // in: linear, out: srgb
         //gl_FragColor.rgb = from_linear(gl_FragColor.rgb); // in: linear, out: srgb
-    }
+    #endif // WRITE_REFLECTION
     gl_FragColor = clamp(gl_FragColor, vec4(0.0), vec4(1.0));
 
     #endif // NOT RENDER_DEPTH_ONLY

@@ -273,7 +273,8 @@ pub fn standard_material_render(
                         .resource::<StandardLightingUniforms>()
                         .shader_defs(!prefs.no_point, shadow.is_some(), &phase)
                         .iter()
-                ),
+                )
+                .chain(phase.shader_defs().iter()),
             &[
                 ViewUniforms::bindings(),
                 StandardMaterialUniforms::bindings(),
@@ -284,8 +285,6 @@ pub fn standard_material_render(
 
         world.resource_mut::<GpuMeshes>().reset_mesh_bind_cache();
         ctx.use_cached_program(shader_index);
-
-        ctx.load("write_reflection", phase.reflection());
 
         ctx.map_uniform_set_locations::<ViewUniforms>();
         ctx.map_uniform_set_locations::<StandardMaterialUniforms>();
