@@ -271,12 +271,12 @@ pub fn standard_material_render(
             shadow_def = shadow.as_ref().map_or(("", ""), |_| ("SAMPLE_SHADOW", ""));
         }
 
-        let no_point_def = if prefs.no_point {
-            ("NO_POINT", "")
-        } else {
-            ("", "")
-        };
-
+        let no_point_def =
+            if prefs.no_point || world.resource::<StandardLightingUniforms>().light_count == 0 {
+                ("NO_POINT", "")
+            } else {
+                ("", "")
+            };
         let shader_index = shader_cached!(
             ctx,
             "shaders/std_mat.vert",
