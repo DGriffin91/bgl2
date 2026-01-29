@@ -376,7 +376,7 @@ fn transfer_image_data(image: &bevy::prelude::Image, target: u32, ctx: &BevyGlCo
                 .collect::<Vec<u32>>(),
         )
     } else if image.texture_descriptor.format == TextureFormat::Rgba32Float {
-        block_size = 1;
+        block_size = 4;
         Some(
             bytemuck::cast_slice::<u8, [f32; 4]>(image_data)
                 .iter()
