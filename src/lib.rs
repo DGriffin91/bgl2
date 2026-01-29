@@ -410,14 +410,23 @@ impl BevyGlContext {
 
     // Binding locations are optional. If they are not used get_uniform_location or UniformSlotBuilder must be used to
     // correlate binding names to numbers.
-    pub fn shader_cached<P: AsRef<Path> + ?Sized>(
+    pub fn shader_cached<'a, P, I>(
         &mut self,
         vertex: &P,
         fragment: &P,
-        shader_defs: &[(&str, &str)],
+        shader_defs: I,
         bindings: &[&'static [&'static str]],
-    ) -> Option<ShaderIndex> {
-        let key = shader_key(vertex.as_ref(), fragment.as_ref(), shader_defs, bindings);
+    ) -> Option<ShaderIndex>
+    where
+        I: IntoIterator<Item = &'a (&'a str, &'a str)> + Clone,
+        P: AsRef<Path> + ?Sized,
+    {
+        let key = shader_key(
+            vertex.as_ref(),
+            fragment.as_ref(),
+            shader_defs.clone(),
+            bindings,
+        );
         if let Some((index, watcher)) = self.shader_cache_map.get(&key) {
             if watcher.check() {
                 let vertex_src = std::fs::read_to_string(vertex).unwrap();
@@ -457,13 +466,16 @@ impl BevyGlContext {
     }
 
     #[must_use]
-    pub fn compile_shader(
+    pub fn compile_shader<'a, I>(
         &self,
         vertex: &str,
         fragment: &str,
-        shader_defs: &[(&str, &str)],
+        shader_defs: I,
         bindings: &[&'static [&'static str]],
-    ) -> Result<glow::Program, anyhow::Error> {
+    ) -> Result<glow::Program, anyhow::Error>
+    where
+        I: IntoIterator<Item = &'a (&'a str, &'a str)> + Clone,
+    {
         unsafe {
             let program = self.gl.create_program().expect("Cannot create program");
 
@@ -481,7 +493,7 @@ impl BevyGlContext {
                 #[cfg(target_os = "macos")]
                 let mut preamble = "#version 330\n".to_string();
 
-                shader_defs.into_iter().for_each(|shader_def| {
+                shader_defs.clone().into_iter().for_each(|shader_def| {
                     if !(shader_def.0.is_empty() && shader_def.1.is_empty()) {
                         preamble.push_str(&format!("#define {} {}\n", shader_def.0, shader_def.1));
                     }
@@ -600,7 +612,7 @@ impl BevyGlContext {
         self.has_glsl_cube_lod = self
             .compile_shader("void main() { gl_Position = vec4(0.0); }",
                 "uniform samplerCube cube; void main() { gl_FragColor = textureCubeLod(cube, vec3(1.0), 0.0); }",
-                Default::default(),Default::default()
+                &[],Default::default()
             )
             .is_ok();
     }
@@ -852,16 +864,19 @@ impl AttribType {
     }
 }
 
-pub fn shader_key(
+pub fn shader_key<'a, I>(
     vertex: &Path,
     fragment: &Path,
-    shader_defs: &[(&str, &str)],
+    shader_defs: I,
     bindings: &[&'static [&'static str]],
-) -> u64 {
+) -> u64
+where
+    I: IntoIterator<Item = &'a (&'a str, &'a str)> + Clone,
+{
     let mut hasher = std::hash::DefaultHasher::new();
     vertex.hash(&mut hasher);
     fragment.hash(&mut hasher);
-    shader_defs.hash(&mut hasher);
+    shader_defs.into_iter().for_each(|v| v.hash(&mut hasher));
     bindings.hash(&mut hasher);
     hasher.finish()
 }

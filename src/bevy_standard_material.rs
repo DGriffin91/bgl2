@@ -262,31 +262,18 @@ pub fn standard_material_render(
     let prefs = prefs.clone();
     let shadow = shadow.as_deref().cloned();
     enc.record(move |ctx, world| {
-        let shadow_def;
-        if phase.depth_only() {
-            shadow_def = shadow
-                .as_ref()
-                .map_or(("", ""), |_| ("RENDER_DEPTH_ONLY", ""));
-        } else {
-            shadow_def = shadow.as_ref().map_or(("", ""), |_| ("SAMPLE_SHADOW", ""));
-        }
-
-        let no_point_def =
-            if prefs.no_point || world.resource::<StandardLightingUniforms>().light_count == 0 {
-                ("NO_POINT", "")
-            } else {
-                ("", "")
-            };
         let shader_index = shader_cached!(
             ctx,
             "shaders/std_mat.vert",
             "shaders/pbr_std_mat.frag",
-            &[
-                no_point_def,
-                shadow_def,
-                DEFAULT_MAX_LIGHTS_DEF,
-                DEFAULT_MAX_JOINTS_DEF
-            ],
+            [DEFAULT_MAX_LIGHTS_DEF, DEFAULT_MAX_JOINTS_DEF]
+                .iter()
+                .chain(
+                    world
+                        .resource::<StandardLightingUniforms>()
+                        .shader_defs(!prefs.no_point, shadow.is_some(), &phase)
+                        .iter()
+                ),
             &[
                 ViewUniforms::bindings(),
                 StandardMaterialUniforms::bindings(),

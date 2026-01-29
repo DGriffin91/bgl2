@@ -4,8 +4,12 @@ use bevy::prelude::*;
 use uniform_set_derive::UniformSet;
 
 use crate::{
-    clone2, command_encoder::CommandEncoder, mesh_util::octahedral_encode,
-    phase_shadow::DirectionalLightShadow, prepare_image::TextureRef, render::RenderSet,
+    clone2,
+    command_encoder::CommandEncoder,
+    mesh_util::octahedral_encode,
+    phase_shadow::DirectionalLightShadow,
+    prepare_image::TextureRef,
+    render::{RenderPhase, RenderSet},
 };
 
 // It seems like some drivers are limited by code length.
@@ -37,6 +41,37 @@ pub struct StandardLightingUniforms {
     pub env_intensity: f32,
     pub shadow_clip_from_world: Mat4,
     pub light_count: i32,
+}
+
+impl StandardLightingUniforms {
+    pub fn shader_defs(
+        &self,
+        point: bool,
+        shadow: bool,
+        phase: &RenderPhase,
+    ) -> [(&'static str, &'static str); 3] {
+        [
+            if !point || self.light_count == 0 {
+                ("NO_POINT", "")
+            } else {
+                ("", "")
+            },
+            if self.specular_map.is_some() && self.diffuse_map.is_some() {
+                ("", "")
+            } else {
+                ("NO_ENV", "")
+            },
+            if phase.depth_only() && shadow {
+                ("RENDER_DEPTH_ONLY", "")
+            } else {
+                if shadow {
+                    ("SAMPLE_SHADOW", "")
+                } else {
+                    ("", "")
+                }
+            },
+        ]
+    }
 }
 
 #[derive(Default)]

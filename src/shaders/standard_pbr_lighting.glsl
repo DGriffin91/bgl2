@@ -21,14 +21,14 @@ vec3 apply_pbr_lighting(vec3 V, vec3 diffuse_color, vec3 F0, vec3 vert_normal, v
 
     float NoV = abs(dot(normal, V)) + 1e-5;
 
-    {
+    #ifndef NO_ENV
         // Environment map
         float mip_levels = 8.0; // TODO put in uniform
         vec3 dir = reflect(-V, normal);
         vec3 env_diffuse = rgbe2rgb(textureCubeLod(ub_diffuse_map, vec3(normal.xy, -normal.z), 0.0)) * ub_env_intensity;
         vec3 env_specular = rgbe2rgb(textureCubeLod(ub_specular_map, vec3(dir.xy, -dir.z), perceptual_roughness * mip_levels)) * ub_env_intensity;
         output_color += environment_light(NoV, F0, perceptual_roughness, diffuse_color, env_diffuse, env_specular) * environment_occlusion;
-    }
+    #endif // NO_ENV
 
     #ifndef NO_POINT
     // Point Lights
@@ -45,7 +45,7 @@ vec3 apply_pbr_lighting(vec3 V, vec3 diffuse_color, vec3 F0, vec3 vert_normal, v
             }
         }
     }
-    #endif
+    #endif // NO_POINT
 
     return output_color;
 }

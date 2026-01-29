@@ -185,19 +185,16 @@ fn render_custom_mat(
     let shadow = shadow.as_deref().cloned();
 
     enc.record(move |ctx, world| {
-        let shadow_def = if phase.depth_only() {
-            shadow
-                .as_ref()
-                .map_or(("", ""), |_| ("RENDER_DEPTH_ONLY", ""))
-        } else {
-            shadow.as_ref().map_or(("", ""), |_| ("SAMPLE_SHADOW", ""))
-        };
-
         let shader_index = bevy_opengl::shader_cached!(
             ctx,
             "../assets/shaders/custom_pbr_material.vert",
             "../assets/shaders/custom_pbr_material.frag",
-            &[shadow_def, DEFAULT_MAX_LIGHTS_DEF],
+            [DEFAULT_MAX_LIGHTS_DEF].iter().chain(
+                world
+                    .resource::<StandardLightingUniforms>()
+                    .shader_defs(true, shadow.is_some(), &phase)
+                    .iter()
+            ),
             &[
                 ViewUniforms::bindings(),
                 StandardLightingUniforms::bindings(),
