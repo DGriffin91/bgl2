@@ -3,7 +3,7 @@ use bevy::{
     render::{RenderPlugin, settings::WgpuSettings},
 };
 use bevy_egui::{EguiContexts, EguiPrimaryContextPass, egui};
-use bevy_opengl::{egui_plugin::GlowEguiPlugin, render::OpenGLRenderPlugins};
+use bgl2::{egui_plugin::GlowEguiPlugin, render::OpenGLRenderPlugins};
 
 fn main() {
     App::new()

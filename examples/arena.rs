@@ -11,7 +11,7 @@ use bevy::{
     winit::WinitSettings,
 };
 use bevy_mod_mipmap_generator::{MipmapGeneratorPlugin, generate_mipmaps};
-use bevy_opengl::{
+use bgl2::{
     UniformSet, UniformValue,
     bevy_standard_lighting::{OpenGLStandardLightingPlugin, StandardLightingUniforms},
     bevy_standard_material::{
@@ -33,7 +33,7 @@ use bevy_opengl::{
     },
     shader_cached,
 };
-use bevy_opengl::{
+use bgl2::{
     bevy_standard_lighting::{DEFAULT_MAX_JOINTS_DEF, DEFAULT_MAX_LIGHTS_DEF},
     render::register_render_system,
 };
@@ -584,7 +584,7 @@ fn render_haze_mat(
     let shadow = shadow.as_deref().cloned();
 
     enc.record(move |ctx, world| {
-        let shader_index = bevy_opengl::shader_cached!(
+        let shader_index = bgl2::shader_cached!(
             ctx,
             "../assets/shaders/haze_material.vert",
             "../assets/shaders/haze_material.frag",

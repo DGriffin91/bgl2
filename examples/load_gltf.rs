@@ -9,7 +9,7 @@ use bevy::{
     winit::WinitSettings,
 };
 use bevy_mod_mipmap_generator::{MipmapGeneratorPlugin, generate_mipmaps};
-use bevy_opengl::{
+use bgl2::{
     bevy_standard_lighting::OpenGLStandardLightingPlugin,
     bevy_standard_material::OpenGLStandardMaterialPlugin,
     phase_shadow::ShadowBounds,

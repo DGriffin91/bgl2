@@ -1,6 +1,6 @@
 use bevy::{ecs::system::SystemState, prelude::*, winit::WINIT_WINDOWS};
-use bevy_opengl::command_encoder::{CommandEncoder, CommandEncoderPlugin, CommandEncoderSender};
-use bevy_opengl::{BevyGlContext, WindowInitData, shader_cached};
+use bgl2::command_encoder::{CommandEncoder, CommandEncoderPlugin, CommandEncoderSender};
+use bgl2::{BevyGlContext, WindowInitData, shader_cached};
 use bytemuck::cast_slice;
 use glow::HasContext;
 use raw_window_handle::{HasDisplayHandle, HasWindowHandle};

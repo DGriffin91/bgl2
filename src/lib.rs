@@ -15,7 +15,7 @@ pub mod prepare_mesh;
 pub mod render;
 pub mod watchers;
 
-extern crate self as bevy_opengl;
+extern crate self as bgl2;
 
 use anyhow::Error;
 use anyhow::anyhow;

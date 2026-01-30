@@ -6,7 +6,7 @@ use bevy::{
     window::PresentMode,
     winit::WinitSettings,
 };
-use bevy_opengl::{
+use bgl2::{
     UniformSet,
     command_encoder::CommandEncoder,
     prepare_image::{GpuImages, TextureRef},
@@ -155,7 +155,7 @@ fn render_custom_mat(
     }
 
     enc.record(move |ctx, world| {
-        let shader_index = bevy_opengl::shader_cached!(
+        let shader_index = bgl2::shader_cached!(
             ctx,
             "../assets/shaders/custom_material.vert",
             "../assets/shaders/custom_material.frag",

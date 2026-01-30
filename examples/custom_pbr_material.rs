@@ -6,7 +6,7 @@ use bevy::{
     window::PresentMode,
     winit::WinitSettings,
 };
-use bevy_opengl::{
+use bgl2::{
     UniformSet,
     bevy_standard_lighting::{
         DEFAULT_MAX_LIGHTS_DEF, OpenGLStandardLightingPlugin, StandardLightingUniforms,
@@ -185,7 +185,7 @@ fn render_custom_mat(
     let shadow = shadow.as_deref().cloned();
 
     enc.record(move |ctx, world| {
-        let shader_index = bevy_opengl::shader_cached!(
+        let shader_index = bgl2::shader_cached!(
             ctx,
             "../assets/shaders/custom_pbr_material.vert",
             "../assets/shaders/custom_pbr_material.frag",

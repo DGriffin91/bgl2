@@ -9,13 +9,13 @@ use proc_macro_crate::{FoundCrate, crate_name};
 use proc_macro2::Span;
 use syn::Ident;
 
-fn bevy_opengl_path() -> proc_macro2::TokenStream {
-    match crate_name("bevy_opengl") {
+fn bgl2_path() -> proc_macro2::TokenStream {
+    match crate_name("bgl2") {
         Ok(FoundCrate::Name(name)) => {
             let ident = Ident::new(&name, Span::call_site());
             quote!(::#ident)
         }
-        Ok(FoundCrate::Itself) | Err(_) => quote!(::bevy_opengl),
+        Ok(FoundCrate::Itself) | Err(_) => quote!(::bgl2),
     }
 }
 
@@ -52,7 +52,7 @@ pub fn derive_uniform_set(input: TokenStream) -> TokenStream {
 
     let mut load_arms = Vec::with_capacity(fields.len());
 
-    let crate_path = bevy_opengl_path();
+    let crate_path = bgl2_path();
 
     for (i, field) in fields.iter().enumerate() {
         let Some(field_ident) = &field.ident else {
