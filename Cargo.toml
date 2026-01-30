@@ -24,7 +24,7 @@ console_error_panic_hook = "0.1"
 wgpu-types = "27" #Needed for bevy interop types since bevy doesn't re-export everything
 
 egui_glow = "0.33"
-bevy_egui = { git = "https://github.com/ptsd/bevy_egui", branch = "bevy-0.18", default-features = false, features = [
+bevy_egui = { version = "0.39", default-features = false, features = [
     "manage_clipboard",
     "open_url",
     "default_fonts",
