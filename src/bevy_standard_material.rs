@@ -337,12 +337,12 @@ pub fn standard_material_render(
             }
             ctx.load("has_joint_data", draw.joint_data.is_some());
 
-            if draw.read_reflect && phase.read_reflect() && reflect_uniforms.is_some() {
+            if phase.read_reflect() && reflect_uniforms.is_some() {
                 let reflect_bool_location = reflect_bool_location
                     .get_or_insert_with(|| ctx.get_uniform_location("read_reflection"))
                     .as_ref()
                     .unwrap();
-                true.load(&ctx.gl, &reflect_bool_location);
+                draw.read_reflect.load(&ctx.gl, &reflect_bool_location);
             }
 
             // Only re-bind if the material has changed.
