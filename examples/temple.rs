@@ -107,27 +107,27 @@ fn setup(
         }),
     ));
 
-    commands.spawn(SceneRoot(
-        asset_server.load(GltfAssetLabel::Scene(0).from_asset("models/arena/arena.gltf")),
-    ));
+    commands.spawn(SceneRoot(asset_server.load(
+        GltfAssetLabel::Scene(0).from_asset("models/temple/temple.gltf"),
+    )));
 
-    commands.spawn(SceneRoot(
-        asset_server.load(GltfAssetLabel::Scene(0).from_asset("models/arena/lights.gltf")),
-    ));
+    commands.spawn(SceneRoot(asset_server.load(
+        GltfAssetLabel::Scene(0).from_asset("models/temple/lights.gltf"),
+    )));
 
     commands
         .spawn(SceneRoot(asset_server.load(
-            GltfAssetLabel::Scene(0).from_asset("models/arena/red_pools_upper.gltf"),
+            GltfAssetLabel::Scene(0).from_asset("models/temple/red_pools_upper.gltf"),
         )))
         .observe(proc_pools_upper);
     commands
         .spawn(SceneRoot(asset_server.load(
-            GltfAssetLabel::Scene(0).from_asset("models/arena/red_pools_lower.gltf"),
+            GltfAssetLabel::Scene(0).from_asset("models/temple/red_pools_lower.gltf"),
         )))
         .observe(proc_pools_lower);
     commands
         .spawn(SceneRoot(asset_server.load(
-            GltfAssetLabel::Scene(0).from_asset("models/arena/red_pools_entrance.gltf"),
+            GltfAssetLabel::Scene(0).from_asset("models/temple/red_pools_entrance.gltf"),
         )))
         .observe(proc_pools_entrance);
     commands.spawn((
@@ -140,13 +140,13 @@ fn setup(
     ));
 
     commands.insert_resource(LightMap {
-        light_map: asset_server.load("models/arena/bake4ke.hdr"),
+        light_map: asset_server.load("models/temple/bake4ke.hdr"),
         light_map_res: 4096.0,
     });
 
     commands
         .spawn(SceneRoot(asset_server.load(
-            GltfAssetLabel::Scene(0).from_asset("models/arena/haze_sun.gltf"),
+            GltfAssetLabel::Scene(0).from_asset("models/temple/haze_sun.gltf"),
         )))
         .observe(remove_std_mat)
         .observe(
@@ -163,21 +163,21 @@ fn setup(
         };
     commands
         .spawn(SceneRoot(asset_server.load(
-            GltfAssetLabel::Scene(0).from_asset("models/arena/haze_nave.gltf"),
+            GltfAssetLabel::Scene(0).from_asset("models/temple/haze_nave.gltf"),
         )))
         .observe(remove_std_mat)
         .observe(red_haze1_ob);
 
     commands
         .spawn(SceneRoot(asset_server.load(
-            GltfAssetLabel::Scene(0).from_asset("models/arena/haze_sanct_side.gltf"),
+            GltfAssetLabel::Scene(0).from_asset("models/temple/haze_sanct_side.gltf"),
         )))
         .observe(remove_std_mat)
         .observe(red_haze1_ob);
 
     commands
         .spawn(SceneRoot(asset_server.load(
-            GltfAssetLabel::Scene(0).from_asset("models/arena/haze_chan.gltf"),
+            GltfAssetLabel::Scene(0).from_asset("models/temple/haze_chan.gltf"),
         )))
         .observe(remove_std_mat)
         .observe(
@@ -189,7 +189,7 @@ fn setup(
 
     commands
         .spawn(SceneRoot(asset_server.load(
-            GltfAssetLabel::Scene(0).from_asset("models/arena/haze_font.gltf"),
+            GltfAssetLabel::Scene(0).from_asset("models/temple/haze_font.gltf"),
         )))
         .observe(remove_std_mat)
         .observe(
@@ -412,8 +412,8 @@ pub fn standard_material_render(
         let lighting_uniforms = world.resource::<StandardLightingUniforms>().clone();
         let shader_index = shader_cached!(
             ctx,
-            "../assets/shaders/arena_mat.vert",
-            "../assets/shaders/arena_mat.frag",
+            "../assets/shaders/temple_mat.vert",
+            "../assets/shaders/temple_mat.frag",
             [DEFAULT_MAX_LIGHTS_DEF]
                 .iter()
                 .chain(
