@@ -96,8 +96,8 @@ fn setup(
         Camera3d::default(),
         Transform::from_xyz(-45.0, 4.0, 0.0).looking_at(Vec3::new(0.0, 18.0, 0.0), Vec3::Y),
         FreeCamera {
-            walk_speed: 10.0,
-            run_speed: 30.0,
+            walk_speed: 7.0,
+            run_speed: 32.0,
             ..default()
         },
         Projection::Perspective(PerspectiveProjection {
@@ -108,6 +108,10 @@ fn setup(
 
     commands.spawn(SceneRoot(
         asset_server.load(GltfAssetLabel::Scene(0).from_asset("models/arena/arena.gltf")),
+    ));
+
+    commands.spawn(SceneRoot(
+        asset_server.load(GltfAssetLabel::Scene(0).from_asset("models/arena/lights.gltf")),
     ));
 
     commands
@@ -409,7 +413,7 @@ pub fn standard_material_render(
             ctx,
             "../assets/shaders/arena_mat.vert",
             "../assets/shaders/arena_mat.frag",
-            [DEFAULT_MAX_LIGHTS_DEF, DEFAULT_MAX_JOINTS_DEF]
+            [DEFAULT_MAX_LIGHTS_DEF]
                 .iter()
                 .chain(
                     lighting_uniforms
