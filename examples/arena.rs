@@ -136,6 +136,7 @@ fn setup(
 
     commands.insert_resource(LightMap {
         light_map: asset_server.load("models/arena/bake4ke.hdr"),
+        light_map_res: 4096.0,
     });
 
     commands
@@ -295,6 +296,7 @@ pub fn remove_std_mat(
 #[uniform_set(prefix = "ub_")]
 pub struct LightMap {
     pub light_map: Handle<Image>,
+    pub light_map_res: f32,
 }
 
 pub fn standard_material_render(

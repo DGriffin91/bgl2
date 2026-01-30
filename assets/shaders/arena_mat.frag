@@ -20,7 +20,7 @@ uniform vec3 reflection_plane_normal;
 
 void main() {
     vec4 base_color = ub_base_color * to_linear(texture2D(ub_base_color_texture, uv_0));
-    vec3 light_map = rgbe2rgb(textureBicubic(ub_light_map, uv_1, vec2(4096.0, 4096.0)));
+    vec3 light_map = rgbe2rgb(textureBicubic(ub_light_map, uv_1, vec2(ub_light_map_res, ub_light_map_res)));
 
     // Slight artistic contrast/saturation adjustment
     light_map = pow(light_map, vec3(1.2));
