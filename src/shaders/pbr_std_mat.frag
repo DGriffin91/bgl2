@@ -55,12 +55,13 @@ void main() {
     vec3 output_color = emissive.rgb;
     float env_occ = 1.0;
 
-    // TODO return struct from standard_lighting so the env map can be properly replaced by reflection?
+    #ifdef READ_REFLECTION
     if (read_reflection && perceptual_roughness < 0.2) {
         vec3 sharp_reflection_color = reversible_tonemap_invert(texture2D(reflect_texture, screen_uv).rgb);
         output_color += sharp_reflection_color.rgb / ub_view_exposure; // TODO integrate brdf properly
         env_occ = 0.0;
     }
+    #endif
 
     output_color += apply_pbr_lighting(V, diffuse_color, F0, vert_normal, normal, perceptual_roughness,
             env_occ, ub_diffuse_transmission, screen_uv, ub_view_resolution, ws_position);

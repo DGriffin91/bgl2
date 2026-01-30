@@ -3,6 +3,7 @@ vec3 apply_pbr_lighting(vec3 V, vec3 diffuse_color, vec3 F0, vec3 vert_normal, v
     float roughness = perceptual_roughness * perceptual_roughness;
     vec3 output_color = vec3(0.0);
 
+    #ifndef NO_DIRECTIONAL
     float dir_shadow = 1.0;
     #ifdef SAMPLE_SHADOW
     float bias = 0.002;
@@ -18,11 +19,12 @@ vec3 apply_pbr_lighting(vec3 V, vec3 diffuse_color, vec3 F0, vec3 vert_normal, v
     #endif // SAMPLE_SHADOW
 
     output_color += directional_light(V, F0, diffuse_color, normal, roughness, diffuse_transmission, dir_shadow, ub_directional_light_dir, ub_directional_light_color);
+    #endif // NO_DIRECTIONAL
 
-    float NoV = abs(dot(normal, V)) + 1e-5;
 
     #ifndef NO_ENV
         // Environment map
+        float NoV = abs(dot(normal, V)) + 1e-5;
         float mip_levels = 8.0; // TODO put in uniform
         vec3 dir = reflect(-V, normal);
         vec3 env_diffuse = rgbe2rgb(textureCubeLod(ub_diffuse_map, vec3(normal.xy, -normal.z), 0.0)) * ub_env_intensity;

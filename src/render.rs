@@ -221,12 +221,19 @@ impl RenderPhase {
             RenderPhase::Opaque | RenderPhase::Transparent => true,
         }
     }
-    pub fn shader_defs(&self) -> [(&'static str, &'static str); 1] {
-        [if self.reflection() {
-            ("WRITE_REFLECTION", "")
-        } else {
-            ("", "")
-        }]
+    pub fn shader_defs(&self) -> [(&'static str, &'static str); 2] {
+        [
+            if self.reflection() {
+                ("WRITE_REFLECTION", "")
+            } else {
+                ("", "")
+            },
+            if self.read_reflect() {
+                ("READ_REFLECTION", "")
+            } else {
+                ("", "")
+            },
+        ]
     }
 }
 
