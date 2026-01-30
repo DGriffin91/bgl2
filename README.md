@@ -1,15 +1,18 @@
-# BGL2 - An OpenGL2 render backend for bevy.
+# BGL2 - An OpenGL 2.1 render backend for bevy.
+
+![temple_xp](temple_xp.jpg)
 
 BGL2 supports:
 - OpenGL 2.1
 - WebGL 1.0
-- GLES 2.0 (theoretically)
+- GLES 2.0 (theoretically, needs integration & testing)
 - Polyfill for OpenGL on MacOS (Currently very cursed, needs work)
 
 This project is mostly just a silly experiment for fun. I don't currently plan on actively maintaining this, and when I do work on it I will probably make erratic API breaking changes. Use at your own risk.  
 
 ## WebGL 1:
 Run locally with [bevy web cli](https://github.com/TheBevyFlock/bevy_cli)
+
 `bevy run --release --example load_gltf web --open`
 
 ## Windows XP:
