@@ -7,7 +7,7 @@ use uniform_set_derive::UniformSet;
 use wgpu_types::Face;
 
 use crate::{
-    UniformSet, UniformValue,
+    BevyGlContext, UniformSet, UniformValue,
     bevy_standard_lighting::{
         DEFAULT_MAX_JOINTS_DEF, DEFAULT_MAX_LIGHTS_DEF, StandardLightingUniforms,
         standard_pbr_glsl, standard_pbr_lighting_glsl, standard_shadow_sampling_glsl,
@@ -262,56 +262,72 @@ pub fn standard_material_render(
     let prefs = prefs.clone();
     let shadow = shadow.as_deref().cloned();
     enc.record(move |ctx, world| {
-        let shader_index = shader_cached!(
-            ctx,
-            "shaders/std_mat.vert",
-            "shaders/pbr_std_mat.frag",
-            [DEFAULT_MAX_LIGHTS_DEF, DEFAULT_MAX_JOINTS_DEF]
+        let lighting_uniforms = world.resource::<StandardLightingUniforms>().clone();
+        let mut reflect_bool_location = None;
+
+        let change_shader_program = |ctx: &mut BevyGlContext, world: &mut World, alpha_mask| {
+            let shader_index = shader_cached!(
+                ctx,
+                "shaders/std_mat.vert",
+                "shaders/pbr_std_mat.frag",
+                [
+                    DEFAULT_MAX_LIGHTS_DEF,
+                    DEFAULT_MAX_JOINTS_DEF,
+                    if alpha_mask {
+                        ("ALPHA_MASK", "")
+                    } else {
+                        ("", "")
+                    }
+                ]
                 .iter()
                 .chain(
-                    world
-                        .resource::<StandardLightingUniforms>()
+                    lighting_uniforms
                         .shader_defs(!prefs.no_point, shadow.is_some(), &phase)
                         .iter()
                 )
                 .chain(phase.shader_defs().iter()),
-            &[
-                ViewUniforms::bindings(),
-                StandardMaterialUniforms::bindings(),
-                StandardLightingUniforms::bindings()
-            ]
-        )
-        .unwrap();
+                &[
+                    ViewUniforms::bindings(),
+                    StandardMaterialUniforms::bindings(),
+                    StandardLightingUniforms::bindings()
+                ]
+            )
+            .unwrap();
 
-        world.resource_mut::<GpuMeshes>().reset_mesh_bind_cache();
-        ctx.use_cached_program(shader_index);
+            world.resource_mut::<GpuMeshes>().reset_mesh_bind_cache();
+            ctx.use_cached_program(shader_index);
 
-        ctx.map_uniform_set_locations::<ViewUniforms>();
-        ctx.map_uniform_set_locations::<StandardMaterialUniforms>();
-        ctx.bind_uniforms_set(
-            world.resource::<GpuImages>(),
-            world.resource::<ViewUniforms>(),
-        );
-
-        let mut reflect_bool_location = None;
-        if !phase.depth_only() {
-            ctx.map_uniform_set_locations::<StandardLightingUniforms>();
+            ctx.map_uniform_set_locations::<ViewUniforms>();
+            ctx.map_uniform_set_locations::<StandardMaterialUniforms>();
             ctx.bind_uniforms_set(
                 world.resource::<GpuImages>(),
-                world.resource::<StandardLightingUniforms>(),
+                world.resource::<ViewUniforms>(),
             );
 
-            reflect_bool_location = ctx.get_uniform_location("read_reflection");
-            ctx.map_uniform_set_locations::<ReflectionUniforms>();
-            ctx.bind_uniforms_set(
-                world.resource::<GpuImages>(),
-                reflect_uniforms.as_ref().unwrap_or(&Default::default()),
-            );
-        }
+            if !phase.depth_only() {
+                ctx.map_uniform_set_locations::<StandardLightingUniforms>();
+                ctx.bind_uniforms_set(world.resource::<GpuImages>(), &lighting_uniforms);
 
+                ctx.map_uniform_set_locations::<ReflectionUniforms>();
+                ctx.bind_uniforms_set(
+                    world.resource::<GpuImages>(),
+                    reflect_uniforms.as_ref().unwrap_or(&Default::default()),
+                );
+            }
+            shader_index
+        };
+
+        let mut current_mask_mode = false;
+        let mut shader_index = change_shader_program(ctx, world, current_mask_mode);
         let mut last_material = None;
         for draw in &draws {
             let material = &render_materials[draw.material_idx as usize];
+            // Alpha mask is the only per-material thing the our std mat currently specializes on. Since we sort by
+            // material this shader program change shouldn't happen often.
+            if is_alpha_mask(material.alpha_mode) != current_mask_mode {
+                current_mask_mode = !current_mask_mode;
+                shader_index = change_shader_program(ctx, world, current_mask_mode);
+            }
             set_blend_func_from_alpha_mode(&ctx.gl, &material.alpha_mode);
 
             ctx.load("world_from_local", draw.world_from_local);
@@ -321,10 +337,13 @@ pub fn standard_material_render(
             }
             ctx.load("has_joint_data", draw.joint_data.is_some());
 
-            reflect_bool_location.clone().map(|loc| {
-                (draw.read_reflect && phase.read_reflect() && reflect_uniforms.is_some())
-                    .load(&ctx.gl, &loc)
-            });
+            if draw.read_reflect && phase.read_reflect() && reflect_uniforms.is_some() {
+                let reflect_bool_location = reflect_bool_location
+                    .get_or_insert_with(|| ctx.get_uniform_location("read_reflection"))
+                    .as_ref()
+                    .unwrap();
+                true.load(&ctx.gl, &reflect_bool_location);
+            }
 
             // Only re-bind if the material has changed.
             if last_material != Some(draw.material_h) {
@@ -385,5 +404,12 @@ impl From<&StandardMaterial> for StandardMaterialUniforms {
             alpha_mode: mat.alpha_mode,
             cull_mode: mat.cull_mode,
         }
+    }
+}
+
+pub fn is_alpha_mask(alpha_mode: AlphaMode) -> bool {
+    match alpha_mode {
+        AlphaMode::Mask(_) => true,
+        _ => false,
     }
 }

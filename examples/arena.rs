@@ -402,6 +402,7 @@ pub fn standard_material_render(
     let shadow = shadow.as_deref().cloned();
     let light_map = light_map.clone();
     enc.record(move |ctx, world| {
+        let lighting_uniforms = world.resource::<StandardLightingUniforms>().clone();
         let shader_index = shader_cached!(
             ctx,
             "../assets/shaders/arena_mat.vert",
@@ -409,8 +410,7 @@ pub fn standard_material_render(
             [DEFAULT_MAX_LIGHTS_DEF, DEFAULT_MAX_JOINTS_DEF]
                 .iter()
                 .chain(
-                    world
-                        .resource::<StandardLightingUniforms>()
+                    lighting_uniforms
                         .shader_defs(true, shadow.is_some(), &phase)
                         .iter()
                 )
@@ -439,10 +439,7 @@ pub fn standard_material_render(
         let mut reflect_bool_location = None;
         if !phase.depth_only() {
             ctx.map_uniform_set_locations::<StandardLightingUniforms>();
-            ctx.bind_uniforms_set(
-                world.resource::<GpuImages>(),
-                world.resource::<StandardLightingUniforms>(),
-            );
+            ctx.bind_uniforms_set(world.resource::<GpuImages>(), &lighting_uniforms);
 
             reflect_bool_location = ctx.get_uniform_location("read_reflection");
             ctx.map_uniform_set_locations::<ReflectionUniforms>();

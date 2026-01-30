@@ -18,9 +18,11 @@ uniform vec3 reflection_plane_normal;
 void main() {
     vec4 base_color = ub_base_color * to_linear(texture2D(ub_base_color_texture, uv_0));
 
+    #ifdef ALPHA_MASK
     if (!ub_alpha_blend && (base_color.a < 0.5)) {
         discard;
     }
+    #endif //ALPHA_MASK
     #ifdef WRITE_REFLECTION
     if (dot(ws_position - reflection_plane_position, reflection_plane_normal) < 0.0) {
         discard;
