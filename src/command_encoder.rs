@@ -83,6 +83,9 @@ impl CommandEncoderSender {
 }
 
 #[derive(Resource, Default)]
+/// Used to record commands, deferring rendering to be executed on the render thread.
+/// The ECS world here is very minimal. It has no entities, systems or components. Just a few resources. This is to
+/// avoid a inflexible singleton or similar.
 pub struct CommandEncoder {
     pub commands: Vec<Box<dyn FnOnce(&mut BevyGlContext, &mut World) + Send + Sync>>,
     pub next_buffer_id: usize,

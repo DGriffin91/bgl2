@@ -1,3 +1,6 @@
+//! A very basic example that doesn't use most of the render backend (OpenGLRenderPlugins), but instead more directly
+//! interacts with the GL API.
+
 use bevy::{ecs::system::SystemState, prelude::*, winit::WINIT_WINDOWS};
 use bgl2::command_encoder::{CommandEncoder, CommandEncoderPlugin, CommandEncoderSender};
 use bgl2::{BevyGlContext, WindowInitData, shader_cached};

@@ -5,7 +5,6 @@ pub fn translate_shader_to_330(vertex: &mut String, fragment: &mut String) {
     let mut map: HashMap<String, usize> = HashMap::new();
     let mut next_location: usize = 0;
 
-    // Usually attributes are only in vertex, but keeping fragment here is harmless if present.
     extract_attributes(&vertex, &mut map, &mut next_location);
     extract_attributes(&fragment, &mut map, &mut next_location);
 

@@ -289,6 +289,9 @@ pub fn init_gl(world: &mut World, params: &mut SystemState<Query<(Entity, &mut W
     });
 }
 
+/// Register a render system. It will be run repeatedly in each RenderPhase. In the opaque phase transparent (alpha
+/// blend) draws should be recorded in DeferredAlphaBlendDraws so that they can be subsequently sorted. Then the render
+/// system will be repeatedly called with consecutive groups of sorted alpha blend draws. See bevy_standard_material.rs
 pub fn register_render_system<T: 'static, M>(
     world: &mut World,
     system: impl IntoSystem<(), (), M> + 'static,
@@ -300,7 +303,7 @@ pub fn register_render_system<T: 'static, M>(
         .register_render::<T>(system_id);
 }
 
-/// Systems registered here are run at the start of each phase
+/// Systems registered here are run at the start of each RenderPhase.
 pub fn register_prepare_system<M>(world: &mut World, system: impl IntoSystem<(), (), M> + 'static) {
     let system_id = world.register_system(system);
     world

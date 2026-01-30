@@ -80,8 +80,6 @@ impl Drop for BevyGlContext {
                 self.gl.delete_program(*program)
             }
 
-            // TODO keep buffers in BevyGlContext and drop those too?
-
             #[cfg(not(target_arch = "wasm32"))]
             {
                 drop(self.gl_surface.take());

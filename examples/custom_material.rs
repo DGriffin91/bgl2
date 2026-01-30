@@ -67,6 +67,8 @@ fn setup(
                         emissive: enc.bevy_image(create_test_image(linear_rgb.to_u8_array())),
                     })
                     .id();
+                // Note: it would be more efficient to share materials/textures/meshes where possible, but this is being
+                // used as somewhat of a stress test.
                 commands.spawn((
                     Mesh3d(meshes.add(Cuboid::default())),
                     Transform::from_translation(p),

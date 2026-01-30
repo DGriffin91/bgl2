@@ -27,6 +27,7 @@ pub struct DefaultSampler(ImageSamplerDescriptor);
 
 impl Plugin for PrepareImagePlugin {
     fn build(&self, app: &mut App) {
+        // TODO figure out when best to delete GL textures on render thread on app quit.
         if let Some(image_plugin) = app.get_added_plugins::<ImagePlugin>().first() {
             let default_sampler = image_plugin.default_sampler.clone();
             app.insert_resource(DefaultSampler(default_sampler));
@@ -329,7 +330,7 @@ fn transfer_image_data(image: &bevy::prelude::Image, target: u32, ctx: &BevyGlCo
         TextureFormat::Rgba8UnormSrgb => rgb_format,
         // rgb9e5 not supported by WebGL1 or some OpenGL2 drivers so we convert to RGBE
         TextureFormat::Rgb9e5Ufloat => rgb_format,
-        // Converted to rgbe
+        // Rgba32Float not supported by WebGL1 or some OpenGL2 drivers so we convert to RGBE
         TextureFormat::Rgba32Float => rgb_format,
         _ => {
             warn!("unimplemented format {:?}", image.texture_descriptor.format);
@@ -342,7 +343,7 @@ fn transfer_image_data(image: &bevy::prelude::Image, target: u32, ctx: &BevyGlCo
         TextureFormat::Rgba8UnormSrgb => glow::RGBA,
         // rgb9e5 not supported by WebGL1 or some OpenGL2 drivers so we convert to RGBE
         TextureFormat::Rgb9e5Ufloat => glow::RGBA,
-        // Converted to rgbe
+        // Rgba32Float not supported by WebGL1 or some OpenGL2 drivers so we convert to RGBE
         TextureFormat::Rgba32Float => glow::RGBA,
         _ => {
             warn!("unimplemented format {:?}", image.texture_descriptor.format);
@@ -355,7 +356,7 @@ fn transfer_image_data(image: &bevy::prelude::Image, target: u32, ctx: &BevyGlCo
         TextureFormat::Rgba8UnormSrgb => glow::UNSIGNED_BYTE,
         // rgb9e5 not supported by WebGL1 or some OpenGL2 drivers so we convert to RGBE
         TextureFormat::Rgb9e5Ufloat => glow::UNSIGNED_BYTE,
-        // Converted to rgbe
+        // Rgba32Float not supported by WebGL1 or some OpenGL2 drivers so we convert to RGBE
         TextureFormat::Rgba32Float => glow::UNSIGNED_BYTE,
         _ => {
             warn!("unimplemented format {:?}", image.texture_descriptor.format);
@@ -376,6 +377,7 @@ fn transfer_image_data(image: &bevy::prelude::Image, target: u32, ctx: &BevyGlCo
                 .collect::<Vec<u32>>(),
         )
     } else if image.texture_descriptor.format == TextureFormat::Rgba32Float {
+        // Rgba32Float not supported by WebGL1 or some OpenGL2 drivers so we convert to RGBE
         block_size = 4;
         Some(
             bytemuck::cast_slice::<u8, [f32; 4]>(image_data)
