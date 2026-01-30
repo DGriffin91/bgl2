@@ -2,7 +2,7 @@
 float hardenedKernel(float x) {
     // this is basically a stronger smoothstep()
     x = 2.0 * x - 1.0;
-    float s = sign(x);
+    float s = x < 0.0 ? -x : x;
     x = 1.0 - s * x;
     x = x * x * x;
     x = s - x * s;
