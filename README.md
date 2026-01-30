@@ -1,4 +1,12 @@
-# Bevy OpenGL
+# BGL2 - An OpenGL2 render backend for bevy.
+
+BGL2 supports:
+- OpenGL 2.1
+- WebGL 1.0
+- GLES 2.0 (theoretically)
+- Polyfill for OpenGL on MacOS (Currently very cursed, needs work)
+
+This project is mostly just a silly experiment for fun. I don't currently plan on actively maintaining this, and when I do work on it I will probably make erratic API breaking changes. Use at your own risk.  
 
 ## WebGL 1:
 Run locally with [bevy web cli](https://github.com/TheBevyFlock/bevy_cli)
@@ -19,8 +27,8 @@ GL_RENDERER : Gallium 0.4 on llvmpipe (LLVM 3.7, 128 bits)
 GL_VERSION  : 3.0 Mesa 17.0.0
 ```
 
-Use [thunk](https://github.com/felixmaker/thunk/)
-cargo install thunk-cli 
+To compile for Windows XP, use [thunk](https://github.com/felixmaker/thunk/).
+`cargo install thunk-cli`
 
 Environment Variables:
 `VC_LTL` [VC-LTL-Binary](https://github.com/Chuyu-Team/VC-LTL5/releases/tag/v5.3.1)
