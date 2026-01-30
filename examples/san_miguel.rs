@@ -9,7 +9,7 @@ use bevy::{
     prelude::*,
     render::{RenderPlugin, settings::WgpuSettings},
     scene::SceneInstanceReady,
-    window::PresentMode,
+    window::{PresentMode, WindowMode},
     winit::WinitSettings,
 };
 use bevy_mod_mipmap_generator::{MipmapGeneratorPlugin, generate_mipmaps};
@@ -81,9 +81,23 @@ fn main() {
         ));
     }
 
-    app.add_systems(Update, generate_mipmaps::<StandardMaterial>)
+    app.add_systems(Update, input)
+        .add_systems(Update, generate_mipmaps::<StandardMaterial>)
         .add_systems(Startup, setup.in_set(RenderSet::Pipeline))
         .run();
+}
+
+fn input(keyboard_input: Res<ButtonInput<KeyCode>>, mut window: Single<&mut Window>) {
+    if keyboard_input.just_pressed(KeyCode::F11) || keyboard_input.just_pressed(KeyCode::KeyF) {
+        if window.mode == WindowMode::Windowed {
+            window.mode = WindowMode::BorderlessFullscreen(MonitorSelection::Current);
+        } else {
+            window.mode = WindowMode::Windowed;
+        }
+    }
+    if keyboard_input.just_pressed(KeyCode::Escape) {
+        window.mode = WindowMode::Windowed;
+    }
 }
 
 fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {

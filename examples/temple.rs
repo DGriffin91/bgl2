@@ -7,7 +7,7 @@ use bevy::{
     prelude::*,
     render::{RenderPlugin, settings::WgpuSettings},
     scene::SceneInstanceReady,
-    window::PresentMode,
+    window::{PresentMode, WindowMode},
     winit::WinitSettings,
 };
 use bevy_mod_mipmap_generator::{MipmapGeneratorPlugin, generate_mipmaps};
@@ -81,7 +81,7 @@ fn main() {
     register_render_system::<HazeMaterial, _>(app.world_mut(), render_haze_mat);
 
     app.add_systems(Update, generate_mipmaps::<StandardMaterial>)
-        .add_systems(Update, position_camera)
+        .add_systems(Update, (input, position_camera))
         .add_systems(Startup, setup.in_set(RenderSet::Pipeline))
         .run();
 }
@@ -632,6 +632,19 @@ fn render_haze_mat(
                 .draw_mesh(ctx, draw.mesh, shader_index);
         }
     });
+}
+
+fn input(keyboard_input: Res<ButtonInput<KeyCode>>, mut window: Single<&mut Window>) {
+    if keyboard_input.just_pressed(KeyCode::F11) || keyboard_input.just_pressed(KeyCode::KeyF) {
+        if window.mode == WindowMode::Windowed {
+            window.mode = WindowMode::BorderlessFullscreen(MonitorSelection::Current);
+        } else {
+            window.mode = WindowMode::Windowed;
+        }
+    }
+    if keyboard_input.just_pressed(KeyCode::Escape) {
+        window.mode = WindowMode::Windowed;
+    }
 }
 
 fn position_camera(
