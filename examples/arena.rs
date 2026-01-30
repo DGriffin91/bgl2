@@ -81,6 +81,7 @@ fn main() {
     register_render_system::<HazeMaterial, _>(app.world_mut(), render_haze_mat);
 
     app.add_systems(Update, generate_mipmaps::<StandardMaterial>)
+        .add_systems(Update, position_camera)
         .add_systems(Startup, setup.in_set(RenderSet::Pipeline))
         .run();
 }
@@ -96,8 +97,8 @@ fn setup(
         Camera3d::default(),
         Transform::from_xyz(-45.0, 4.0, 0.0).looking_at(Vec3::new(0.0, 18.0, 0.0), Vec3::Y),
         FreeCamera {
-            walk_speed: 7.0,
-            run_speed: 32.0,
+            walk_speed: 5.0,
+            run_speed: 30.0,
             ..default()
         },
         Projection::Perspective(PerspectiveProjection {
@@ -631,4 +632,106 @@ fn render_haze_mat(
                 .draw_mesh(ctx, draw.mesh, shader_index);
         }
     });
+}
+
+fn position_camera(
+    mut camera: Query<(&mut Transform, &mut Projection), With<Camera>>,
+    input: Res<ButtonInput<KeyCode>>,
+) {
+    if !input.any_just_pressed([
+        KeyCode::Digit1,
+        KeyCode::Digit2,
+        KeyCode::Digit3,
+        KeyCode::Digit4,
+        KeyCode::Digit5,
+        KeyCode::Digit6,
+        KeyCode::Digit7,
+        KeyCode::Digit8,
+        KeyCode::Digit9,
+        KeyCode::Digit0,
+        KeyCode::KeyI,
+    ]) {
+        return;
+    }
+    let Ok((mut transform, mut projection)) = camera.single_mut() else {
+        return;
+    };
+    if input.just_pressed(KeyCode::KeyI) {
+        info!("{:?}", transform);
+    }
+    let mut fov = PI / 3.0;
+    if input.just_pressed(KeyCode::Digit1) {
+        *transform = Transform {
+            translation: vec3(-45.0, 4.0, 0.0),
+            rotation: quat(-0.10623466, 0.69908094, -0.10623467, -0.69908094),
+            ..default()
+        };
+        fov = PI / 3.0;
+    }
+    if input.just_pressed(KeyCode::Digit2) {
+        *transform = Transform {
+            translation: vec3(46.126793, 3.7979555, -0.023848712),
+            rotation: quat(-0.15564586, -0.6881048, 0.15486024, -0.6915956),
+            ..default()
+        };
+        fov = PI / 3.0;
+    }
+    if input.just_pressed(KeyCode::Digit3) {
+        *transform = Transform {
+            translation: vec3(14.787674, 4.9011054, 25.00974),
+            rotation: quat(-0.42247245, 0.24206309, -0.118167475, -0.86542416),
+            ..default()
+        };
+        fov = PI / 3.0;
+    }
+    if input.just_pressed(KeyCode::Digit4) {
+        *transform = Transform {
+            translation: vec3(-19.490158, 4.4857564, -0.07628646),
+            rotation: quat(0.09811675, 0.70063376, 0.09822183, -0.6998842),
+            ..default()
+        };
+        fov = PI / 3.0;
+    }
+    if input.just_pressed(KeyCode::Digit5) {
+        *transform = Transform {
+            translation: vec3(21.216904, 46.028538, -0.0025147635),
+            rotation: quat(-0.0576852, 0.7080464, 0.05823243, 0.70139265),
+            ..default()
+        };
+        fov = PI / 3.0;
+    }
+    if input.just_pressed(KeyCode::Digit6) {
+        *transform = Transform {
+            translation: vec3(58.270485, 4.328805, -26.561262),
+            rotation: quat(-0.0042746193, 0.8688455, 0.0075028786, 0.49500784),
+            scale: vec3(1.0, 1.0, 1.0),
+        };
+        fov = PI / 6.0;
+    }
+    if input.just_pressed(KeyCode::Digit7) {
+        *transform = Transform {
+            translation: vec3(44.07141, 5.9615326, 10.88161),
+            rotation: quat(0.013734059, 0.80249447, -0.01848579, 0.59621507),
+            scale: vec3(1.0, 1.0, 1.0),
+        };
+        fov = PI / 6.0;
+    }
+    if input.just_pressed(KeyCode::Digit8) {
+        *transform = Transform {
+            translation: vec3(-26.983503, 18.70987, -24.167065),
+            rotation: quat(-0.019525655, 0.98047435, 0.13847288, 0.13825381),
+            scale: vec3(1.0, 1.0, 1.0),
+        };
+        fov = PI / 6.0;
+    }
+    if input.just_pressed(KeyCode::Digit9) {
+        *transform = Transform {
+            translation: vec3(15.00957, 16.175512, -26.252596),
+            rotation: quat(0.07119755, -0.9186817, 0.19445427, 0.3363664),
+            scale: vec3(1.0, 1.0, 1.0),
+        };
+        fov = PI / 6.0;
+    }
+
+    *projection = Projection::Perspective(PerspectiveProjection { fov, ..default() })
 }
