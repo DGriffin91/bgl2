@@ -17,7 +17,7 @@ use bgl2::{
     bevy_standard_material::{OpenGLStandardMaterialPlugin, ReadReflection, SkipReflection},
     phase_shadow::ShadowBounds,
     plane_reflect::ReflectionPlane,
-    render::{OpenGLRenderPlugins, RenderSet},
+    render::OpenGLRenderPlugins,
 };
 
 #[derive(FromArgs, Resource, Clone, Default)]
@@ -74,8 +74,8 @@ fn main() {
         ));
     }
 
-    app.add_systems(Update, generate_mipmaps::<StandardMaterial>)
-        .add_systems(Startup, setup.in_set(RenderSet::Pipeline))
+    app.add_systems(Startup, setup)
+        .add_systems(Update, generate_mipmaps::<StandardMaterial>)
         .run();
 }
 

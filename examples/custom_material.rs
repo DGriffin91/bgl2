@@ -11,7 +11,7 @@ use bgl2::{
     command_encoder::CommandEncoder,
     prepare_image::{GpuImages, TextureRef},
     prepare_mesh::GpuMeshes,
-    render::{OpenGLRenderPlugins, RenderPhase, RenderSet, register_render_system},
+    render::{OpenGLRenderPlugins, RenderPhase, register_render_system},
 };
 use uniform_set_derive::UniformSet;
 use wgpu_types::{Extent3d, TextureDimension, TextureFormat};
@@ -34,8 +34,7 @@ fn main() {
 
     register_render_system::<StandardMaterial, _>(app.world_mut(), render_custom_mat);
 
-    app.add_systems(Startup, setup.in_set(RenderSet::Pipeline))
-        .run();
+    app.add_systems(Startup, setup).run();
 }
 
 fn default_plugins_no_render_backend() -> bevy::app::PluginGroupBuilder {

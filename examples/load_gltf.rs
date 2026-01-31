@@ -11,9 +11,8 @@ use bevy::{
 use bevy_mod_mipmap_generator::{MipmapGeneratorPlugin, generate_mipmaps};
 use bgl2::{
     bevy_standard_lighting::OpenGLStandardLightingPlugin,
-    bevy_standard_material::OpenGLStandardMaterialPlugin,
-    phase_shadow::ShadowBounds,
-    render::{OpenGLRenderPlugins, RenderSet},
+    bevy_standard_material::OpenGLStandardMaterialPlugin, phase_shadow::ShadowBounds,
+    render::OpenGLRenderPlugins,
 };
 
 #[derive(FromArgs, Resource, Clone, Default)]
@@ -68,8 +67,8 @@ fn main() {
         ));
     }
 
-    app.add_systems(Update, generate_mipmaps::<StandardMaterial>)
-        .add_systems(Startup, setup.in_set(RenderSet::Pipeline))
+    app.add_systems(Startup, setup)
+        .add_systems(Update, generate_mipmaps::<StandardMaterial>)
         .run();
 }
 

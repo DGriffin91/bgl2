@@ -17,7 +17,7 @@ use bgl2::{
     bevy_standard_lighting::OpenGLStandardLightingPlugin,
     bevy_standard_material::{OpenGLStandardMaterialPlugin, OpenGLStandardMaterialSettings},
     phase_shadow::ShadowBounds,
-    render::{OpenGLRenderPlugins, RenderSet},
+    render::OpenGLRenderPlugins,
 };
 use wgpu_types::Face;
 
@@ -81,9 +81,9 @@ fn main() {
         ));
     }
 
-    app.add_systems(Update, input)
+    app.add_systems(Startup, setup)
+        .add_systems(Update, input)
         .add_systems(Update, generate_mipmaps::<StandardMaterial>)
-        .add_systems(Startup, setup.in_set(RenderSet::Pipeline))
         .run();
 }
 

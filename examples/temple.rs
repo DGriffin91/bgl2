@@ -80,9 +80,9 @@ fn main() {
     register_render_system::<StandardMaterial, _>(app.world_mut(), standard_material_render);
     register_render_system::<HazeMaterial, _>(app.world_mut(), render_haze_mat);
 
-    app.add_systems(Update, generate_mipmaps::<StandardMaterial>)
+    app.add_systems(Startup, setup)
+        .add_systems(Update, generate_mipmaps::<StandardMaterial>)
         .add_systems(Update, (input, position_camera))
-        .add_systems(Startup, setup.in_set(RenderSet::Pipeline))
         .run();
 }
 
