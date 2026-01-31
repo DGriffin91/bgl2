@@ -107,9 +107,24 @@ fn setup(
         }),
     ));
 
-    commands.spawn(SceneRoot(asset_server.load(
-        GltfAssetLabel::Scene(0).from_asset("models/temple/temple.gltf"),
-    )));
+    commands
+        .spawn(SceneRoot(asset_server.load(
+            GltfAssetLabel::Scene(0).from_asset("models/temple/temple.gltf"),
+        )))
+        .observe(
+            |scene_ready: On<SceneInstanceReady>,
+             children: Query<&Children>,
+             mat_h: Query<&MeshMaterial3d<StandardMaterial>>,
+             mut materials: ResMut<Assets<StandardMaterial>>| {
+                for entity in children.iter_descendants(scene_ready.entity) {
+                    if let Ok(mat_h) = mat_h.get(entity) {
+                        if let Some(mat) = materials.get_mut(mat_h) {
+                            mat.cull_mode = Some(wgpu_types::Face::Back);
+                        }
+                    }
+                }
+            },
+        );
 
     commands.spawn(SceneRoot(asset_server.load(
         GltfAssetLabel::Scene(0).from_asset("models/temple/lights.gltf"),

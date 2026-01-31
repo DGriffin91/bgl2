@@ -770,7 +770,7 @@ pub fn flip_cull_mode(cull_mode: Option<Face>, flip: bool) -> Option<Face> {
             Face::Back => Face::Front,
         })
     } else {
-        None
+        cull_mode
     }
 }
 
