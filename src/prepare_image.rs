@@ -7,7 +7,7 @@ use std::{
 };
 
 use bevy::{
-    image::{ImageFilterMode, ImageSampler, ImageSamplerDescriptor},
+    image::{ImageAddressMode, ImageFilterMode, ImageSampler, ImageSamplerDescriptor},
     platform::collections::{HashMap, HashSet},
     prelude::*,
     render::render_resource::TextureFormat,
@@ -253,7 +253,20 @@ pub fn bevy_image_to_gl_texture(
             let c2e = glow::CLAMP_TO_EDGE as i32;
             ctx.gl.tex_parameter_i32(target, glow::TEXTURE_WRAP_S, c2e);
             ctx.gl.tex_parameter_i32(target, glow::TEXTURE_WRAP_T, c2e);
-            ctx.gl.tex_parameter_i32(target, glow::TEXTURE_WRAP_R, c2e);
+            //ctx.gl.tex_parameter_i32(target, glow::TEXTURE_WRAP_R, c2e); // only applies to TEXTURE_3D and TEXTURE_2D_ARRAY
+        } else {
+            let set_mode = |dir, address_mode| {
+                let mode = match address_mode {
+                    ImageAddressMode::ClampToEdge => glow::CLAMP_TO_EDGE,
+                    ImageAddressMode::Repeat => glow::REPEAT,
+                    ImageAddressMode::MirrorRepeat => glow::MIRRORED_REPEAT,
+                    ImageAddressMode::ClampToBorder => glow::CLAMP_TO_EDGE, // glow::CLAMP_TO_BORDER not supported
+                };
+                ctx.gl.tex_parameter_i32(target, dir, mode as i32);
+            };
+            set_mode(glow::TEXTURE_WRAP_S, sampler.address_mode_u);
+            set_mode(glow::TEXTURE_WRAP_T, sampler.address_mode_v);
+            //set_mode(glow::TEXTURE_WRAP_R, sampler.address_mode_w); // only applies to TEXTURE_3D and TEXTURE_2D_ARRAY
         }
 
         #[cfg(not(target_arch = "wasm32"))]
