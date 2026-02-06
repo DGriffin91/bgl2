@@ -268,8 +268,13 @@ pub fn bevy_image_to_gl_texture(
         }
 
         transfer_image_data(bevy_image, target, ctx);
+
         // TODO make configurable
-        set_anisotropy(&ctx.gl, target, 16);
+        if sampler.mag_filter == ImageFilterMode::Nearest || mip_level_count == 1 {
+            set_anisotropy(&ctx.gl, target, 1);
+        } else {
+            set_anisotropy(&ctx.gl, target, 16);
+        }
         Some((texture, target))
     }
 }
