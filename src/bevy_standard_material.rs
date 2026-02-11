@@ -1,5 +1,6 @@
 use bevy::{
     camera::{Exposure, primitives::Aabb},
+    diagnostic::FrameCount,
     prelude::*,
 };
 use itertools::{Either, Itertools};
@@ -74,6 +75,7 @@ pub struct ViewUniforms {
     pub view_position: Vec3,
     pub view_resolution: Vec2,
     pub view_exposure: f32,
+    pub frame: f32,
 }
 
 #[derive(Resource, Default, Deref, DerefMut)]
@@ -107,6 +109,7 @@ pub fn standard_material_prepare_view(
     reflect: Option<Single<&ReflectionPlane>>,
     bevy_window: Single<&Window>,
     mut enc: ResMut<CommandEncoder>,
+    frame: Res<FrameCount>,
 ) {
     let (camera_entity, _camera, cam_global_trans, cam_proj, exposure) = *camera;
     let view_resolution = vec2(
@@ -150,6 +153,7 @@ pub fn standard_material_prepare_view(
         view_exposure: exposure
             .map(|e| e.exposure())
             .unwrap_or_else(|| Exposure::default().exposure()),
+        frame: frame.0 as f32,
     };
     commands.entity(camera_entity).insert(view_uniforms.clone());
     enc.record(move |_ctx, world| {
