@@ -32,10 +32,10 @@ fn render_reflect_opaque(world: &mut World) {
     let depth_prepass_enabled = query.iter(world).len() > 0;
     if depth_prepass_enabled {
         *world.get_resource_mut::<RenderPhase>().unwrap() = RenderPhase::ReflectDepthPrepass;
-        opaque(world, true, true)
+        opaque(world, true, true, false)
     }
     *world.get_resource_mut::<RenderPhase>().unwrap() = RenderPhase::ReflectOpaque;
-    opaque(world, false, !depth_prepass_enabled);
+    opaque(world, false, !depth_prepass_enabled, depth_prepass_enabled);
 }
 
 fn render_opaque(world: &mut World) {
@@ -44,20 +44,20 @@ fn render_opaque(world: &mut World) {
     let depth_prepass_enabled = query.iter(world).len() > 0;
     if depth_prepass_enabled {
         *world.get_resource_mut::<RenderPhase>().unwrap() = RenderPhase::DepthPrepass;
-        opaque(world, true, true)
+        opaque(world, true, true, false)
     }
     *world.get_resource_mut::<RenderPhase>().unwrap() = RenderPhase::Opaque;
-    opaque(world, false, !depth_prepass_enabled);
+    opaque(world, false, !depth_prepass_enabled, depth_prepass_enabled);
 }
 
 // During the opaque pass the registered systems also write any transparent items to the DeferredAlphaBlendDraws.
-fn opaque(world: &mut World, depth_prepass: bool, write_depth: bool) {
+fn opaque(world: &mut World, depth_prepass: bool, write_depth: bool, depth_equal: bool) {
     let mut cmd = world.resource_mut::<CommandEncoder>();
 
     if depth_prepass {
         cmd.start_depth_only();
     } else {
-        cmd.start_opaque(write_depth);
+        cmd.start_opaque(write_depth, depth_equal);
     }
 
     let Some(runner) = world.remove_resource::<RenderRunner>() else {

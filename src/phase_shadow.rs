@@ -140,7 +140,7 @@ fn render_shadow(world: &mut World) {
         return;
     };
     let mut cmd = world.resource_mut::<CommandEncoder>();
-    cmd.start_opaque(true); // Reading from depth not supported so we need to write depth to color
+    cmd.start_opaque(true, false); // Reading from depth not supported so we need to write depth to color
     cmd.clear_color_and_depth(None);
 
     *world.get_resource_mut::<RenderPhase>().unwrap() = RenderPhase::Shadow;

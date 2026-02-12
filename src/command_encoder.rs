@@ -138,9 +138,9 @@ impl CommandEncoder {
     }
 
     /// It's not necessary to write depth after a prepass if everything is also included in opaque.
-    pub fn start_opaque(&mut self, write_depth: bool) {
+    pub fn start_opaque(&mut self, write_depth: bool, depth_equal: bool) {
         self.record(move |ctx, _world| {
-            ctx.start_opaque(write_depth);
+            ctx.start_opaque(write_depth, depth_equal);
         });
     }
 

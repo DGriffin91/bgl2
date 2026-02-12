@@ -707,11 +707,15 @@ impl BevyGlContext {
     }
 
     /// It's not necessary to write depth after a prepass if everything is also included in opaque.
-    pub fn start_opaque(&self, write_depth: bool) {
+    pub fn start_opaque(&self, write_depth: bool, depth_equal: bool) {
         unsafe {
             self.gl.enable(glow::DEPTH_TEST);
             self.gl.disable(glow::BLEND);
-            self.gl.depth_func(glow::GEQUAL);
+            self.gl.depth_func(if depth_equal {
+                glow::EQUAL
+            } else {
+                glow::GEQUAL
+            });
             self.gl.depth_mask(write_depth);
             self.gl.color_mask(true, true, true, false);
             self.gl.blend_func(glow::ZERO, glow::ONE);
