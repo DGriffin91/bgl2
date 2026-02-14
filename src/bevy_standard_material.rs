@@ -76,6 +76,7 @@ pub struct ViewUniforms {
     pub view_resolution: Vec2,
     pub view_exposure: f32,
     pub frame: f32,
+    pub time: f32,
 }
 
 #[derive(Resource, Default, Deref, DerefMut)]
@@ -110,6 +111,7 @@ pub fn standard_material_prepare_view(
     bevy_window: Single<&Window>,
     mut enc: ResMut<CommandEncoder>,
     frame: Res<FrameCount>,
+    time: Res<Time>,
 ) {
     let (camera_entity, _camera, cam_global_trans, cam_proj, exposure) = *camera;
     let view_resolution = vec2(
@@ -154,6 +156,7 @@ pub fn standard_material_prepare_view(
             .map(|e| e.exposure())
             .unwrap_or_else(|| Exposure::default().exposure()),
         frame: frame.0 as f32,
+        time: time.elapsed_secs(),
     };
     commands.entity(camera_entity).insert(view_uniforms.clone());
     enc.record(move |_ctx, world| {
