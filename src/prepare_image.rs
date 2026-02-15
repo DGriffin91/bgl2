@@ -280,7 +280,7 @@ pub fn bevy_image_to_gl_texture(
             );
         }
 
-        transfer_image_data(bevy_image, target, ctx);
+        transfer_image_data(bevy_image, target, ctx, sampler.clone());
 
         // TODO make configurable
         if sampler.mag_filter == ImageFilterMode::Nearest || mip_level_count == 1 {
@@ -306,7 +306,12 @@ fn get_dimension_target(image: &Image) -> Option<u32> {
     Some(target)
 }
 
-fn transfer_image_data(image: &bevy::prelude::Image, target: u32, ctx: &BevyGlContext) {
+fn transfer_image_data(
+    image: &bevy::prelude::Image,
+    target: u32,
+    ctx: &BevyGlContext,
+    sampler: ImageSamplerDescriptor,
+) {
     let dim = match image.texture_descriptor.dimension {
         wgpu_types::TextureDimension::D1 => 1,
         wgpu_types::TextureDimension::D2 => 2,
@@ -412,7 +417,15 @@ fn transfer_image_data(image: &bevy::prelude::Image, target: u32, ctx: &BevyGlCo
 
     // https://github.com/gfx-rs/wgpu/blob/17fcb194258b05205d21001e8473762141ebda26/wgpu/src/util/device.rs#L15
     for mip_level in 0..mip_level_count as usize {
-        if mip_level > 0 {
+        if mip_level > 0
+            || (sampler.address_mode_u == ImageAddressMode::Repeat
+                && sampler.address_mode_v == ImageAddressMode::Repeat
+                && sampler.mipmap_filter == ImageFilterMode::Linear
+                && sampler.mag_filter == ImageFilterMode::Linear
+                && sampler.min_filter == ImageFilterMode::Linear
+                && image.width() == image.height()
+                && image.width().is_power_of_two())
+        {
             #[cfg(target_arch = "wasm32")]
             unsafe {
                 // TODO wasm seems to have issues when the mips are manually set.
