@@ -103,7 +103,7 @@ impl Plugin for OpenGLMinimalRenderPlugin {
     }
 }
 
-fn present(
+pub fn present(
     mut enc: ResMut<CommandEncoder>,
     resized: MessageReader<WindowResized>,
     mut bevy_window: Single<(Entity, &mut Window)>,
