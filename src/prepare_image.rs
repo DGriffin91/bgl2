@@ -417,15 +417,7 @@ fn transfer_image_data(
 
     // https://github.com/gfx-rs/wgpu/blob/17fcb194258b05205d21001e8473762141ebda26/wgpu/src/util/device.rs#L15
     for mip_level in 0..mip_level_count as usize {
-        if mip_level > 0
-            || (sampler.address_mode_u == ImageAddressMode::Repeat
-                && sampler.address_mode_v == ImageAddressMode::Repeat
-                && sampler.mipmap_filter == ImageFilterMode::Linear
-                && sampler.mag_filter == ImageFilterMode::Linear
-                && sampler.min_filter == ImageFilterMode::Linear
-                && image.width() == image.height()
-                && image.width().is_power_of_two())
-        {
+        if mip_level > 0 {
             #[cfg(target_arch = "wasm32")]
             unsafe {
                 // TODO wasm seems to have issues when the mips are manually set.
@@ -487,6 +479,24 @@ fn transfer_image_data(
             };
 
             binary_offset = end_offset;
+        }
+    }
+    if mip_level_count == 1
+        && sampler.address_mode_u == ImageAddressMode::Repeat
+        && sampler.address_mode_v == ImageAddressMode::Repeat
+        && sampler.mipmap_filter == ImageFilterMode::Linear
+        && sampler.mag_filter == ImageFilterMode::Linear
+        && sampler.min_filter == ImageFilterMode::Linear
+        && image.width() == image.height()
+        && image.width().is_power_of_two()
+    {
+        #[cfg(target_arch = "wasm32")]
+        unsafe {
+            // TODO wasm seems to have issues when the mips are manually set.
+            // Here we just do the first and let the driver generate the rest.
+            // This may have unexpected results if the user was putting different data in each mip.
+            ctx.gl.generate_mipmap(target);
+            return;
         }
     }
 }
