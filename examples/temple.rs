@@ -76,7 +76,7 @@ fn main() {
             init_std_shader_includes.in_set(RenderSet::Pipeline),
         );
 
-    app.add_systems(Startup, |world: &mut World| {
+    app.add_systems(PreStartup, |world: &mut World| {
         register_prepare_system(world, standard_material_prepare_view);
         register_render_system::<StandardMaterial, _>(world, standard_material_render);
         register_render_system::<HazeMaterial, _>(world, render_haze_mat);

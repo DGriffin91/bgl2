@@ -35,7 +35,7 @@ impl Plugin for PrepareImagePlugin {
             warn!("No ImagePlugin found. Try adding PrepareImagePlugin after DefaultPlugins");
         }
 
-        app.add_systems(Startup, |world: &mut World| {
+        app.add_systems(PreStartup, |world: &mut World| {
             world
                 .resource_mut::<CommandEncoder>()
                 .record(|_ctx, world| {

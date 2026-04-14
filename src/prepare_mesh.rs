@@ -21,7 +21,7 @@ pub struct PrepareMeshPlugin;
 impl Plugin for PrepareMeshPlugin {
     fn build(&self, app: &mut App) {
         // TODO figure out when best to delete GL buffers on render thread on app quit.
-        app.add_systems(Startup, |world: &mut World| {
+        app.add_systems(PreStartup, |world: &mut World| {
             world
                 .resource_mut::<CommandEncoder>()
                 .record(|_ctx, world| {

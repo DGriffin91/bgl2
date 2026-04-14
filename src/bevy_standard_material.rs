@@ -41,7 +41,7 @@ impl Plugin for OpenGLStandardMaterialPlugin {
         app.init_resource::<DrawsSortedByMaterial>();
         app.init_resource::<OpenGLStandardMaterialSettings>();
         app.add_systems(
-            Startup,
+            PreStartup,
             (
                 |world: &mut World| {
                     register_prepare_system(world, standard_material_prepare_view);
