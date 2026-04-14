@@ -40,11 +40,15 @@ impl Plugin for OpenGLStandardMaterialPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<DrawsSortedByMaterial>();
         app.init_resource::<OpenGLStandardMaterialSettings>();
-        register_prepare_system(app.world_mut(), standard_material_prepare_view);
-        register_render_system::<StandardMaterial, _>(app.world_mut(), standard_material_render);
         app.add_systems(
             Startup,
-            init_std_shader_includes.in_set(RenderSet::Pipeline),
+            (
+                |world: &mut World| {
+                    register_prepare_system(world, standard_material_prepare_view);
+                    register_render_system::<StandardMaterial, _>(world, standard_material_render);
+                },
+                init_std_shader_includes.in_set(RenderSet::Pipeline),
+            ),
         );
         app.add_systems(Update, sort_std_mat_by_material.in_set(RenderSet::Prepare));
     }

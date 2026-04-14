@@ -39,7 +39,9 @@ fn main() {
             OpenGLStandardMaterialPlugin,
         ));
 
-    register_render_system::<StandardMaterial, _>(app.world_mut(), render_custom_mat);
+    app.add_systems(Startup, |world: &mut World| {
+        register_render_system::<StandardMaterial, _>(world, render_custom_mat);
+    });
 
     app.add_systems(Startup, setup).run();
 }
