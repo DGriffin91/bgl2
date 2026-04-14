@@ -35,11 +35,13 @@ impl Plugin for PrepareImagePlugin {
             warn!("No ImagePlugin found. Try adding PrepareImagePlugin after DefaultPlugins");
         }
 
-        app.world_mut()
-            .resource_mut::<CommandEncoder>()
-            .record(|_ctx, world| {
-                world.init_resource::<GpuImages>();
-            });
+        app.add_systems(Startup, |world: &mut World| {
+            world
+                .resource_mut::<CommandEncoder>()
+                .record(|_ctx, world| {
+                    world.init_resource::<GpuImages>();
+                });
+        });
 
         app.add_systems(PostUpdate, send_images_to_gpu.in_set(RenderSet::Prepare));
     }

@@ -76,9 +76,11 @@ fn main() {
             init_std_shader_includes.in_set(RenderSet::Pipeline),
         );
 
-    register_prepare_system(app.world_mut(), standard_material_prepare_view);
-    register_render_system::<StandardMaterial, _>(app.world_mut(), standard_material_render);
-    register_render_system::<HazeMaterial, _>(app.world_mut(), render_haze_mat);
+    app.add_systems(Startup, |world: &mut World| {
+        register_prepare_system(world, standard_material_prepare_view);
+        register_render_system::<StandardMaterial, _>(world, standard_material_render);
+        register_render_system::<HazeMaterial, _>(world, render_haze_mat);
+    });
 
     app.add_systems(Startup, setup)
         .add_systems(Update, generate_mipmaps::<StandardMaterial>)
