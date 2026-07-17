@@ -6,7 +6,8 @@ use bevy::{
     core_pipeline::prepass::DepthPrepass,
     diagnostic::{FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin},
     light::{
-        CascadeShadowConfigBuilder, TransmittedShadowReceiver, light_consts::lux::DIRECT_SUNLIGHT,
+        CascadeShadowConfigBuilder, TransmittedShadowReceiver,
+        light_consts::lux::{self},
     },
     prelude::*,
     render::{RenderPlugin, settings::WgpuSettings},
@@ -103,95 +104,66 @@ fn input(keyboard_input: Res<ButtonInput<KeyCode>>, mut window: Single<&mut Wind
 }
 
 fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
-    // Camera
-    commands.spawn((
-        Camera3d::default(),
-        Transform::from_xyz(-10.5, 1.7, -1.0).looking_at(Vec3::new(0.0, 2.5, 0.0), Vec3::Y),
-        Projection::Perspective(PerspectiveProjection {
-            fov: std::f32::consts::PI / 2.8,
-            ..default()
-        }),
-        EnvironmentMapLight {
-            diffuse_map: asset_server.load("environment_maps/pisa_diffuse_rgb9e5_zstd.ktx2"),
-            specular_map: asset_server.load("environment_maps/pisa_specular_rgb9e5_zstd.ktx2"),
-            intensity: 500.0,
-            ..default()
-        },
-        DepthPrepass,
-        FreeCamera::default(),
-    ));
-
+    let bistro_exterior =
+        asset_server.load("models/bistro/bistro_exterior/BistroExterior.gltf#Scene0");
     commands
-        .spawn((
-            SceneRoot(asset_server.load("models/san-miguel/san-miguel.gltf#Scene0")),
-            Transform::from_xyz(-18.0, 0.0, 0.0),
-        ))
+        .spawn(SceneRoot(bistro_exterior.clone()))
         .observe(proc_scene);
+
+    let bistro_interior =
+        asset_server.load("models/bistro/bistro_interior_wine/BistroInterior_Wine.gltf#Scene0");
+    commands
+        .spawn(SceneRoot(bistro_interior.clone()))
+        .observe(proc_scene);
+
+    commands.spawn(SceneRoot(
+        asset_server.load("models/bistro/BistroExteriorFakeGI.gltf#Scene0"),
+    ));
 
     // Sun
     commands.spawn((
-        Transform::from_rotation(Quat::from_euler(EulerRot::XYZ, PI * -0.43, PI * -0.08, 0.0)),
+        Transform::from_rotation(Quat::from_euler(EulerRot::XYZ, PI * -0.35, PI * -0.13, 0.0)),
         DirectionalLight {
-            color: Color::srgb(1.0, 0.9, 0.8),
-            illuminance: DIRECT_SUNLIGHT,
+            color: Color::srgb(1.0, 0.87, 0.78),
+            illuminance: lux::FULL_DAYLIGHT,
             shadows_enabled: true,
-            shadow_depth_bias: 0.3,
-            shadow_normal_bias: 0.6,
+            shadow_depth_bias: 0.1,
+            shadow_normal_bias: 0.2,
             ..default()
         },
-        ShadowBounds::cube(35.0),
+        ShadowBounds::cube(70.0),
         CascadeShadowConfigBuilder {
             num_cascades: 1,
             minimum_distance: 0.05,
-            maximum_distance: 35.0,
+            maximum_distance: 70.0,
             first_cascade_far_bound: 10.0,
             overlap_proportion: 0.2,
         }
         .build(),
     ));
 
-    let point_spot_mult = 1000.0;
-
-    // Sun Ground Refl
-    for t in [
-        Transform::from_xyz(2.0, 0.5, 1.5),
-        Transform::from_xyz(-1.5, 0.5, 1.5),
-        Transform::from_xyz(-5.0, 0.5, 1.5),
-    ] {
-        commands.spawn((
-            t.looking_at(Vec3::new(0.0, 999.0, 0.0), Vec3::X),
-            SpotLight {
-                range: 15.0,
-                radius: 4.0,
-                intensity: 1000.0 * point_spot_mult,
-                color: Color::srgb(1.0, 0.8, 0.7),
-                shadows_enabled: false,
-                inner_angle: PI * 0.4,
-                outer_angle: PI * 0.5,
-                ..default()
-            },
-        ));
-    }
-
-    // Sun Table Refl
-    for t in [
-        Transform::from_xyz(2.95, 0.5, 3.15),
-        Transform::from_xyz(-6.2, 0.5, 2.3),
-    ] {
-        commands.spawn((
-            t.looking_at(Vec3::new(0.0, 999.0, 0.0), Vec3::X),
-            SpotLight {
-                range: 3.0,
-                radius: 1.5,
-                intensity: 150.0 * point_spot_mult,
-                color: Color::srgb(1.0, 0.9, 0.8),
-                shadows_enabled: false,
-                inner_angle: PI * 0.4,
-                outer_angle: PI * 0.5,
-                ..default()
-            },
-        ));
-    }
+    // Camera
+    commands.spawn((
+        Camera3d::default(),
+        Transform::from_xyz(-10.5, 1.7, -1.0).looking_at(Vec3::new(0.0, 3.5, 0.0), Vec3::Y),
+        Projection::Perspective(PerspectiveProjection {
+            fov: std::f32::consts::PI / 3.0,
+            near: 0.1,
+            far: 1000.0,
+            aspect_ratio: 1.0,
+            ..Default::default()
+        }),
+        EnvironmentMapLight {
+            diffuse_map: asset_server
+                .load("models/bistro/bistro_env_map/san_giuseppe_bridge_4k_diffuse.ktx2"),
+            specular_map: asset_server
+                .load("models/bistro/bistro_env_map/san_giuseppe_bridge_4k_specular.ktx2"),
+            intensity: 600.0,
+            ..default()
+        },
+        FreeCamera::default(),
+        DepthPrepass,
+    ));
 }
 
 #[allow(clippy::type_complexity)]
@@ -223,7 +195,7 @@ pub fn proc_scene(
             }
         }
 
-        // Remove any lights or camera in the gltf scene
+        // Remove any cameras in the gltf scene
         if lights.get(entity).is_ok() || cameras.get(entity).is_ok() {
             commands.entity(entity).despawn();
         }
